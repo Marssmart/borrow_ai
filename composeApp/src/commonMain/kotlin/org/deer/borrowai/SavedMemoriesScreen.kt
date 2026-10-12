@@ -25,129 +25,143 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-private enum class MockAudioTrack {
-    Original,
-    Summary,
-}
-
-private data class ActiveMockPlayback(
-    val memoryId: String,
-    val track: MockAudioTrack,
-)
+import org.deer.borrowai.data.app.AppServices
+import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.PlaybackContent
+import org.deer.borrowai.data.service.PlaybackTarget
+import borrowai.composeapp.generated.resources.Res
+import borrowai.composeapp.generated.resources.memory_audio_not_playing
+import borrowai.composeapp.generated.resources.memory_audio_playing
+import borrowai.composeapp.generated.resources.memory_back_to_memories
+import borrowai.composeapp.generated.resources.memory_capture
+import borrowai.composeapp.generated.resources.memory_dismiss
+import borrowai.composeapp.generated.resources.memory_open_details
+import borrowai.composeapp.generated.resources.memory_original_transcription
+import borrowai.composeapp.generated.resources.memory_play_original
+import borrowai.composeapp.generated.resources.memory_play_summary
+import borrowai.composeapp.generated.resources.memory_playback_confirmation_cancel
+import borrowai.composeapp.generated.resources.memory_playback_confirmation_confirm
+import borrowai.composeapp.generated.resources.memory_playback_confirmation_message
+import borrowai.composeapp.generated.resources.memory_playback_confirmation_title
+import borrowai.composeapp.generated.resources.memory_playback_error_title
+import borrowai.composeapp.generated.resources.memory_playback_memory_missing_message
+import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
+import borrowai.composeapp.generated.resources.memory_return_to_recording
+import borrowai.composeapp.generated.resources.memory_saved_memories_title
+import borrowai.composeapp.generated.resources.memory_stop_original
+import borrowai.composeapp.generated.resources.memory_stop_summary
+import borrowai.composeapp.generated.resources.memory_summary
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SavedMemoriesScreen(
+    services: AppServices,
     onReturnToCapture: () -> Unit,
     onDetailVisibilityChanged: (Boolean) -> Unit,
 ) {
-    var selectedMemoryId by remember { mutableStateOf<String?>(null) }
-    var activePlayback by remember { mutableStateOf<ActiveMockPlayback?>(null) }
-    var detailSwipeEnabled by remember { mutableStateOf(false) }
     val memoryPagerState = rememberPagerState(
-        pageCount = { MEMORY_PAGE_COUNT },
+        pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
     )
     val memoriesScrollState = rememberScrollState()
+    val detailScrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
-    val selectedMemory = MockMemories.firstOrNull { it.id == selectedMemoryId }
-
-    fun togglePlayback(memoryId: String, track: MockAudioTrack) {
-        activePlayback = if (activePlayback == ActiveMockPlayback(memoryId, track)) {
-            null
-        } else {
-            ActiveMockPlayback(memoryId, track)
-        }
+    val stateHolder = remember(
+        services,
+        memoryPagerState,
+        memoriesScrollState,
+        detailScrollState,
+        scope,
+    ) {
+        SavedMemoriesStateHolder(
+            memoryService = services.memories,
+            mediaSessionService = services.mediaSession,
+            pagerState = memoryPagerState,
+            memoriesScrollState = memoriesScrollState,
+            detailScrollState = detailScrollState,
+            scope = scope,
+        )
     }
+    val uiState by stateHolder.uiState.collectAsState()
+    val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
+    val currentOnReturnToCapture by rememberUpdatedState(onReturnToCapture)
+    val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
 
-    LaunchedEffect(selectedMemoryId, detailSwipeEnabled) {
-        if (selectedMemoryId != null && detailSwipeEnabled) {
-            memoryPagerState.animateScrollToPage(MEMORY_DETAIL_PAGE)
-        }
+    androidx.compose.runtime.LaunchedEffect(stateHolder.pagerState) {
+        snapshotFlow { stateHolder.pagerState.settledPage }.collect(stateHolder::onPagerPageSettled)
     }
-
-    LaunchedEffect(memoryPagerState) {
-        var hasOpenedDetail = false
-        snapshotFlow { memoryPagerState.settledPage }.collect { page ->
-            if (page == MEMORY_DETAIL_PAGE) {
-                hasOpenedDetail = true
-                onDetailVisibilityChanged(true)
-            } else if (hasOpenedDetail) {
-                hasOpenedDetail = false
-                detailSwipeEnabled = false
-                onDetailVisibilityChanged(false)
+    androidx.compose.runtime.LaunchedEffect(stateHolder) {
+        var hasReportedDetailVisible = false
+        stateHolder.uiState.map { it.hasOpenedDetail }.distinctUntilChanged().collect { isVisible ->
+            if (isVisible || hasReportedDetailVisible) {
+                currentOnDetailVisibilityChanged(isVisible)
+                hasReportedDetailVisible = isVisible
             }
         }
     }
 
     HorizontalPager(
-        state = memoryPagerState,
+        state = stateHolder.pagerState,
         modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = detailSwipeEnabled,
+        userScrollEnabled = uiState.detailSwipeEnabled,
     ) { page ->
         when (page) {
-            MEMORY_LIST_PAGE -> MemoryListScreen(
-                scrollState = memoriesScrollState,
-                playingMemoryId = activePlayback?.memoryId,
-                playingTrack = activePlayback?.track,
-                onOpenMemory = {
-                    selectedMemoryId = it
-                    detailSwipeEnabled = true
-                    onDetailVisibilityChanged(true)
-                },
-                onPlayOriginal = { togglePlayback(it, MockAudioTrack.Original) },
-                onPlaySummary = { togglePlayback(it, MockAudioTrack.Summary) },
+            SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
+                memories = uiState.memories,
+                scrollState = stateHolder.memoriesScrollState,
+                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
+                onOpenMemory = stateHolder::openMemory,
+                onPlayOriginal = { stateHolder.togglePlayback(it, PlaybackContent.TRANSCRIPTION) },
+                onPlaySummary = { stateHolder.togglePlayback(it, PlaybackContent.SUMMARY) },
             )
 
-            MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
+            SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
                 MemoryDetailScreen(
                     memory = memory,
-                    playingTrack = activePlayback?.takeIf { it.memoryId == memory.id }?.track,
-                    onBack = {
-                        scope.launch {
-                            memoryPagerState.animateScrollToPage(MEMORY_LIST_PAGE)
-                            selectedMemoryId = null
-                            detailSwipeEnabled = false
-                            onDetailVisibilityChanged(false)
-                        }
+                    scrollState = stateHolder.detailScrollState,
+                    playingContent = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                        ?.takeIf { it.target.memoryId == memory.id }
+                        ?.target
+                        ?.content,
+                    onBack = stateHolder::backToList,
+                    onPlayOriginal = {
+                        stateHolder.togglePlayback(memory.id, PlaybackContent.TRANSCRIPTION)
                     },
-                    onPlayOriginal = { togglePlayback(memory.id, MockAudioTrack.Original) },
-                    onPlaySummary = { togglePlayback(memory.id, MockAudioTrack.Summary) },
+                    onPlaySummary = {
+                        stateHolder.togglePlayback(memory.id, PlaybackContent.SUMMARY)
+                    },
                     onReturnToCapture = {
-                        scope.launch {
-                            memoryPagerState.animateScrollToPage(MEMORY_LIST_PAGE)
-                            selectedMemoryId = null
-                            detailSwipeEnabled = false
-                            onDetailVisibilityChanged(false)
-                            onReturnToCapture()
-                        }
+                        stateHolder.returnToCapture(currentOnReturnToCapture)
                     },
                 )
             }
@@ -155,13 +169,58 @@ internal fun SavedMemoriesScreen(
             else -> Unit
         }
     }
+
+    val pendingPlayback = (uiState.mediaSessionState as? MediaSessionState.Recording)
+        ?.pendingPlayback
+    if (pendingPlayback != null) {
+        AlertDialog(
+            onDismissRequest = stateHolder::cancelPendingPlayback,
+            title = { Text(stringResource(Res.string.memory_playback_confirmation_title)) },
+            text = { Text(stringResource(Res.string.memory_playback_confirmation_message)) },
+            confirmButton = {
+                TextButton(onClick = stateHolder::confirmPendingPlayback) {
+                    Text(stringResource(Res.string.memory_playback_confirmation_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = stateHolder::cancelPendingPlayback) {
+                    Text(stringResource(Res.string.memory_playback_confirmation_cancel))
+                }
+            },
+        )
+    }
+
+    uiState.playbackError?.takeIf { pendingPlayback == null }?.let { error ->
+        AlertDialog(
+            onDismissRequest = stateHolder::dismissPlaybackError,
+            title = { Text(stringResource(Res.string.memory_playback_error_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        when (error) {
+                            SavedMemoriesPlaybackError.MEMORY_NOT_FOUND ->
+                                Res.string.memory_playback_memory_missing_message
+
+                            SavedMemoriesPlaybackError.REQUEST_REJECTED ->
+                                Res.string.memory_playback_request_failed_message
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = stateHolder::dismissPlaybackError) {
+                    Text(stringResource(Res.string.memory_dismiss))
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun MemoryListScreen(
+    memories: List<Memory>,
     scrollState: ScrollState,
-    playingMemoryId: String?,
-    playingTrack: MockAudioTrack?,
+    playingTarget: PlaybackTarget?,
     onOpenMemory: (String) -> Unit,
     onPlayOriginal: (String) -> Unit,
     onPlaySummary: (String) -> Unit,
@@ -171,22 +230,21 @@ private fun MemoryListScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Text(
-            "Saved memories",
-            modifier = Modifier.padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 18.dp),
+            stringResource(Res.string.memory_saved_memories_title),
+            modifier = Modifier.padding(SavedMemoriesStateHolder.MEMORY_LIST_TITLE_PADDING),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
 
         Column(
             modifier = Modifier.weight(1f).verticalScroll(scrollState)
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(SavedMemoriesStateHolder.MEMORY_LIST_CONTENT_PADDING),
+            verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_LIST_ITEM_SPACING),
         ) {
-            MockMemories.forEach { memory ->
+            memories.forEach { memory ->
                 MemoryCard(
                     memory = memory,
-                    playingTrack = playingTrack.takeIf { playingMemoryId == memory.id },
+                    playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
                     onOpen = { onOpenMemory(memory.id) },
                     onPlayOriginal = { onPlayOriginal(memory.id) },
                     onPlaySummary = { onPlaySummary(memory.id) },
@@ -195,41 +253,50 @@ private fun MemoryListScreen(
         }
 
         Text(
-            "Swipe right to return to recording",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+            stringResource(Res.string.memory_return_to_recording),
+            modifier = Modifier.fillMaxWidth()
+                .padding(SavedMemoriesStateHolder.MEMORY_LIST_FOOTER_PADDING),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
         )
     }
 }
 
 @Composable
 private fun MemoryCard(
-    memory: MockMemory,
-    playingTrack: MockAudioTrack?,
+    memory: Memory,
+    playingContent: PlaybackContent?,
     onOpen: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .animateContentSize(tween(220)),
-        shape = RoundedCornerShape(23.dp),
+            .clickable(
+                onClickLabel = stringResource(Res.string.memory_open_details),
+                onClick = onOpen,
+            )
+            .animateContentSize(tween(SavedMemoriesStateHolder.MEMORY_CONTENT_SIZE_ANIMATION_MILLIS)),
+        shape = SavedMemoriesStateHolder.MEMORY_CARD_SHAPE,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            containerColor = MaterialTheme.colorScheme.surface.copy(
+                alpha = SavedMemoriesStateHolder.MEMORY_CARD_SURFACE_ALPHA,
+            ),
         ),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(
+            SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_WIDTH,
+            Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_ALPHA),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_PADDING),
+            verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_SPACING),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AudioGlyph(playing = playingTrack == MockAudioTrack.Original)
-                Spacer(Modifier.width(10.dp))
+                AudioGlyph(playing = playingContent == PlaybackContent.TRANSCRIPTION)
+                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_CARD_GLYPH_SPACING))
                 Column(Modifier.weight(1f)) {
                     Text(
                         memory.title,
@@ -240,7 +307,7 @@ private fun MemoryCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        memory.dateLabel,
+                        formatMemoryTimestamp(memory.createdAtEpochMillis),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
@@ -248,19 +315,20 @@ private fun MemoryCard(
             }
 
             MemoryTextSection(
-                label = "SUMMARY",
+                label = stringResource(Res.string.memory_summary),
                 text = memory.summary.preview(),
                 color = MaterialTheme.colorScheme.onSurface,
                 showIcon = true,
             )
             MemoryTextSection(
-                label = "ORIGINAL TRANSCRIPTION",
-                text = memory.originalText.preview(),
+                label = stringResource(Res.string.memory_original_transcription),
+                text = memory.transcription.preview(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 showIcon = true,
+                isOriginal = true,
             )
             AudioPlaybackButtons(
-                playingTrack = playingTrack,
+                playingContent = playingContent,
                 onPlayOriginal = onPlayOriginal,
                 onPlaySummary = onPlaySummary,
             )
@@ -270,8 +338,9 @@ private fun MemoryCard(
 
 @Composable
 private fun MemoryDetailScreen(
-    memory: MockMemory,
-    playingTrack: MockAudioTrack?,
+    memory: Memory,
+    scrollState: ScrollState,
+    playingContent: PlaybackContent?,
     onBack: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
@@ -282,36 +351,33 @@ private fun MemoryDetailScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth()
+                .padding(SavedMemoriesStateHolder.MEMORY_DETAIL_NAVIGATION_PADDING),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onBack) {
-                Text("← Memories")
+                Text(stringResource(Res.string.memory_back_to_memories))
             }
             TextButton(onClick = onReturnToCapture) {
-                Text("Capture")
+                Text(stringResource(Res.string.memory_capture))
             }
         }
 
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.weight(1f).verticalScroll(scrollState)
+                .padding(SavedMemoriesStateHolder.MEMORY_DETAIL_CONTENT_PADDING),
+            verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_DETAIL_CONTENT_SPACING),
         ) {
             AuroraPanel(
-                shape = RoundedCornerShape(
-                    topStart = 25.dp,
-                    topEnd = 15.dp,
-                    bottomEnd = 24.dp,
-                    bottomStart = 15.dp,
+                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SHAPE,
+                containerColor = Color.White.copy(
+                    alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SURFACE_ALPHA,
                 ),
-                containerColor = Color.White.copy(alpha = 0.62f),
-                elevation = 0.dp,
+                elevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION,
             ) {
                 Text(
-                    memory.dateLabel,
+                    formatMemoryTimestamp(memory.createdAtEpochMillis),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -323,44 +389,39 @@ private fun MemoryDetailScreen(
                 )
             }
             AuroraPanel(
-                shape = RoundedCornerShape(18.dp),
-                containerColor = Color.White.copy(alpha = 0.62f),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 7.dp),
-                elevation = 0.dp,
+                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_SHAPE,
+                containerColor = Color.White.copy(
+                    alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SURFACE_ALPHA,
+                ),
+                contentPadding = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_PADDING,
+                elevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION,
             ) {
                 AudioPlaybackButtons(
-                    playingTrack = playingTrack,
+                    playingContent = playingContent,
                     onPlayOriginal = onPlayOriginal,
                     onPlaySummary = onPlaySummary,
                 )
             }
             AuroraPanel(
-                shape = RoundedCornerShape(
-                    topStart = 27.dp,
-                    topEnd = 16.dp,
-                    bottomEnd = 25.dp,
-                    bottomStart = 14.dp,
+                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SHAPE,
+                containerColor = Color.White.copy(
+                    alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SURFACE_ALPHA,
                 ),
-                containerColor = Color.White.copy(alpha = 0.84f),
             ) {
                 MemoryTextSection(
-                    label = "SUMMARY",
+                    label = stringResource(Res.string.memory_summary),
                     text = memory.summary,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
             AuroraPanel(
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 27.dp,
-                    bottomEnd = 15.dp,
-                    bottomStart = 26.dp,
-                ),
+                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_TRANSCRIPTION_SHAPE,
             ) {
                 MemoryTextSection(
-                    label = "ORIGINAL TRANSCRIPTION",
-                    text = memory.originalText,
+                    label = stringResource(Res.string.memory_original_transcription),
+                    text = memory.transcription,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    isOriginal = true,
                 )
             }
         }
@@ -373,19 +434,20 @@ private fun MemoryTextSection(
     text: String,
     color: Color,
     showIcon: Boolean = false,
+    isOriginal: Boolean = false,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_TEXT_SECTION_SPACING)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_TEXT_LABEL_SPACING),
         ) {
-            if (showIcon) MemorySectionIcon(original = label == "ORIGINAL TRANSCRIPTION")
+            if (showIcon) MemorySectionIcon(original = isOriginal)
             Text(
                 label,
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.7.sp,
+                letterSpacing = SavedMemoriesStateHolder.MEMORY_TEXT_LABEL_LETTER_SPACING,
             )
         }
         Text(
@@ -399,8 +461,10 @@ private fun MemoryTextSection(
 @Composable
 private fun MemorySectionIcon(original: Boolean) {
     Box(
-        modifier = Modifier.size(22.dp).clip(RoundedCornerShape(7.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.size(SavedMemoriesStateHolder.MEMORY_SECTION_ICON_SIZE)
+            .clip(SavedMemoriesStateHolder.MEMORY_SECTION_ICON_SHAPE)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -414,10 +478,10 @@ private fun MemorySectionIcon(original: Boolean) {
 
 @Composable
 private fun AuroraPanel(
-    shape: Shape = RoundedCornerShape(23.dp),
+    shape: Shape = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_SHAPE,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    contentPadding: PaddingValues = PaddingValues(14.dp),
-    elevation: Dp = 6.dp,
+    contentPadding: PaddingValues = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_CONTENT_PADDING,
+    elevation: Dp = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_ELEVATION,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
@@ -426,12 +490,15 @@ private fun AuroraPanel(
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
         ),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+        border = BorderStroke(
+            SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_WIDTH,
+            Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_ALPHA),
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = elevation),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(contentPadding),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_SPACING),
             content = content,
         )
     }
@@ -439,7 +506,7 @@ private fun AuroraPanel(
 
 @Composable
 private fun AudioPlaybackButtons(
-    playingTrack: MockAudioTrack?,
+    playingContent: PlaybackContent?,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
 ) {
@@ -452,35 +519,77 @@ private fun AudioPlaybackButtons(
             colors = ButtonDefaults.textButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+            border = BorderStroke(
+                SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH,
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_ALPHA,
+                ),
+            ),
+            contentPadding = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING,
         ) {
-            Text(
-                if (playingTrack == MockAudioTrack.Original) "Ⅱ  Pause original" else "▶  Play original",
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (playingContent == PlaybackContent.TRANSCRIPTION) "■" else "▶",
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
+                Text(
+                    stringResource(
+                        if (playingContent == PlaybackContent.TRANSCRIPTION) {
+                            Res.string.memory_stop_original
+                        } else {
+                            Res.string.memory_play_original
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
         TextButton(
             onClick = onPlaySummary,
             colors = ButtonDefaults.textButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+            border = BorderStroke(
+                SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH,
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_ALPHA,
+                ),
+            ),
+            contentPadding = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING,
         ) {
-            Text(
-                if (playingTrack == MockAudioTrack.Summary) "Ⅱ  Pause summary" else "▶  Play summary",
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (playingContent == PlaybackContent.SUMMARY) "■" else "▶",
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
+                Text(
+                    stringResource(
+                        if (playingContent == PlaybackContent.SUMMARY) {
+                            Res.string.memory_stop_summary
+                        } else {
+                            Res.string.memory_play_summary
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun AudioGlyph(playing: Boolean) {
+    val description = stringResource(
+        if (playing) Res.string.memory_audio_playing else Res.string.memory_audio_not_playing,
+    )
     Box(
-        modifier = Modifier.size(34.dp).clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.size(SavedMemoriesStateHolder.MEMORY_AUDIO_GLYPH_SIZE).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clearAndSetSemantics {
+                contentDescription = description
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -493,9 +602,8 @@ private fun AudioGlyph(playing: Boolean) {
 }
 
 private fun String.preview(): String =
-    if (length > MEMORY_PREVIEW_CHAR_LIMIT) take(MEMORY_PREVIEW_CHAR_LIMIT).trimEnd() + "..." else this
-
-private const val MEMORY_PREVIEW_CHAR_LIMIT = 240
-private const val MEMORY_PAGE_COUNT = 2
-private const val MEMORY_LIST_PAGE = 0
-private const val MEMORY_DETAIL_PAGE = 1
+    if (length > SavedMemoriesStateHolder.MEMORY_PREVIEW_CHAR_LIMIT) {
+        take(SavedMemoriesStateHolder.MEMORY_PREVIEW_CHAR_LIMIT).trimEnd() + "..."
+    } else {
+        this
+    }
