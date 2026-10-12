@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,10 +29,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,8 +45,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collect
@@ -120,7 +124,6 @@ internal fun SavedMemoriesScreen(
                 },
                 onPlayOriginal = { togglePlayback(it, MockAudioTrack.Original) },
                 onPlaySummary = { togglePlayback(it, MockAudioTrack.Summary) },
-                onReturnToCapture = onReturnToCapture,
             )
 
             MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
@@ -162,24 +165,14 @@ private fun MemoryListScreen(
     onOpenMemory: (String) -> Unit,
     onPlayOriginal: (String) -> Unit,
     onPlaySummary: (String) -> Unit,
-    onReturnToCapture: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 8.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(onClick = onReturnToCapture) {
-                Text("Capture")
-            }
-        }
-
         Text(
             "Saved memories",
-            modifier = Modifier.padding(horizontal = 24.dp).padding(top = 14.dp, bottom = 18.dp),
+            modifier = Modifier.padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 18.dp),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -223,9 +216,12 @@ private fun MemoryCard(
         modifier = Modifier.fillMaxWidth()
             .clickable(onClick = onOpen)
             .animateContentSize(tween(220)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shape = RoundedCornerShape(23.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -255,28 +251,19 @@ private fun MemoryCard(
                 label = "SUMMARY",
                 text = memory.summary.preview(),
                 color = MaterialTheme.colorScheme.onSurface,
+                showIcon = true,
             )
             MemoryTextSection(
                 label = "ORIGINAL TRANSCRIPTION",
                 text = memory.originalText.preview(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                showIcon = true,
             )
             AudioPlaybackButtons(
                 playingTrack = playingTrack,
                 onPlayOriginal = onPlayOriginal,
                 onPlaySummary = onPlaySummary,
             )
-            if (playingTrack != null) {
-                Text(
-                    if (playingTrack == MockAudioTrack.Original) {
-                        "Playing original audio · demo"
-                    } else {
-                        "Playing summary audio · demo"
-                    },
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
         }
     }
 }
@@ -313,45 +300,69 @@ private fun MemoryDetailScreen(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                memory.dateLabel,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(
-                memory.title,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            AudioPlaybackButtons(
-                playingTrack = playingTrack,
-                onPlayOriginal = onPlayOriginal,
-                onPlaySummary = onPlaySummary,
-            )
-            if (playingTrack != null) {
+            AuroraPanel(
+                shape = RoundedCornerShape(
+                    topStart = 25.dp,
+                    topEnd = 15.dp,
+                    bottomEnd = 24.dp,
+                    bottomStart = 15.dp,
+                ),
+                containerColor = Color.White.copy(alpha = 0.62f),
+                elevation = 0.dp,
+            ) {
                 Text(
-                    if (playingTrack == MockAudioTrack.Original) {
-                        "Playing original audio · demo"
-                    } else {
-                        "Playing summary audio · demo"
-                    },
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelSmall,
+                    memory.dateLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    memory.title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                 )
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            MemoryTextSection(
-                label = "SUMMARY",
-                text = memory.summary,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-            MemoryTextSection(
-                label = "ORIGINAL TRANSCRIPTION",
-                text = memory.originalText,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            AuroraPanel(
+                shape = RoundedCornerShape(18.dp),
+                containerColor = Color.White.copy(alpha = 0.62f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 7.dp),
+                elevation = 0.dp,
+            ) {
+                AudioPlaybackButtons(
+                    playingTrack = playingTrack,
+                    onPlayOriginal = onPlayOriginal,
+                    onPlaySummary = onPlaySummary,
+                )
+            }
+            AuroraPanel(
+                shape = RoundedCornerShape(
+                    topStart = 27.dp,
+                    topEnd = 16.dp,
+                    bottomEnd = 25.dp,
+                    bottomStart = 14.dp,
+                ),
+                containerColor = Color.White.copy(alpha = 0.84f),
+            ) {
+                MemoryTextSection(
+                    label = "SUMMARY",
+                    text = memory.summary,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            AuroraPanel(
+                shape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 27.dp,
+                    bottomEnd = 15.dp,
+                    bottomStart = 26.dp,
+                ),
+            ) {
+                MemoryTextSection(
+                    label = "ORIGINAL TRANSCRIPTION",
+                    text = memory.originalText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -361,19 +372,67 @@ private fun MemoryTextSection(
     label: String,
     text: String,
     color: Color,
+    showIcon: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            label,
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.7.sp,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            if (showIcon) MemorySectionIcon(original = label == "ORIGINAL TRANSCRIPTION")
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.7.sp,
+            )
+        }
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
             color = color,
+        )
+    }
+}
+
+@Composable
+private fun MemorySectionIcon(original: Boolean) {
+    Box(
+        modifier = Modifier.size(22.dp).clip(RoundedCornerShape(7.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (original) "≋" else "▤",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun AuroraPanel(
+    shape: Shape = RoundedCornerShape(23.dp),
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    contentPadding: PaddingValues = PaddingValues(14.dp),
+    elevation: Dp = 6.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
         )
     }
 }
@@ -388,11 +447,31 @@ private fun AudioPlaybackButtons(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        TextButton(onClick = onPlayOriginal) {
-            Text(if (playingTrack == MockAudioTrack.Original) "Ⅱ  Pause original" else "▶  Play original")
+        TextButton(
+            onClick = onPlayOriginal,
+            colors = ButtonDefaults.textButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+        ) {
+            Text(
+                if (playingTrack == MockAudioTrack.Original) "Ⅱ  Pause original" else "▶  Play original",
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
-        TextButton(onClick = onPlaySummary) {
-            Text(if (playingTrack == MockAudioTrack.Summary) "Ⅱ  Pause summary" else "▶  Play summary")
+        TextButton(
+            onClick = onPlaySummary,
+            colors = ButtonDefaults.textButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+        ) {
+            Text(
+                if (playingTrack == MockAudioTrack.Summary) "Ⅱ  Pause summary" else "▶  Play summary",
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }

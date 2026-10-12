@@ -2,10 +2,20 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.2]
+
+- Smoothed model-loading progress and microphone pulse transitions; the mic retains a circular outline without elevation artifacts.
+- Removed memory-card elevation artifacts and detail-card shadows from the title and playback panels; summary and transcription panels retain their glass shadows.
+- Removed redundant playback captions; the play/pause controls alone indicate playback state.
+- Verified the pulse on Pixel 10. Android's global Animator duration scale must be nonzero for Compose animations; it was set to 1× on the test device.
+- Model setup, recording, transcription, and playback remain simulated.
+
 ## [1.0.1]
 
 - Replaced model selection with simulated download/load steps for voice-to-text and summarization, connected by a vertical progress timeline.
-- Refined capture with an 80%-width tap/hold mic, pulsing white/red recording state, live-typing transcript, slide transitions, and the off-white/green palette.
+- Applied Aurora Glass gradients, a frosted loading timeline, aligned memory/detail panels, and high-contrast text while preserving the pulsing 80%-width tap/hold recorder and live transcript.
+- Smoothed loading-step transitions and strengthened the recording pulse; removed Android elevation artifacts from memory and detail title/playback cards, with playback state shown on controls.
+- Removed the recording button's elevated shadow on Android to preserve its circular outline.
 - Added newest-first memories with 240-character previews; tapping a card opens scrollable full-text detail with mock audio controls.
 - Added nested detail → list → capture swiping; the memory list is unbranded, and loading shows a centered BorrowAI title.
 - Added the Compose-required iOS frame-duration plist setting; model setup, recording, transcription, and playback remain simulated.

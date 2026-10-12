@@ -7,11 +7,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,25 +29,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val BorrowColors = lightColorScheme(
-    primary = Color(0xFF286B53),
+    primary = Color(0xFF14757B),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCEFE4),
-    onPrimaryContainer = Color(0xFF173E30),
-    secondary = Color(0xFF55756A),
+    primaryContainer = Color(0xFFC9E5E7),
+    onPrimaryContainer = Color(0xFF123B43),
+    secondary = Color(0xFF47636A),
     onSecondary = Color.White,
-    background = Color(0xFFF5F7F3),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFECF1ED),
-    onSurface = Color(0xFF19241E),
-    onSurfaceVariant = Color(0xFF637169),
-    outline = Color(0xFFD9E2DC),
-    error = Color(0xFFD84949),
+    background = Color(0xFFDCECEF),
+    surface = Color.White.copy(alpha = 0.92f),
+    surfaceVariant = Color(0xFFE7F3F4),
+    onSurface = Color(0xFF123B43),
+    onSurfaceVariant = Color(0xFF47636A),
+    outline = Color(0xFFA9CBD0),
+    error = Color(0xFFC93458),
 )
 
 private val TranscriptSamples = listOf(
@@ -132,46 +138,75 @@ fun App() {
     MaterialTheme(colorScheme = BorrowColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
+            color = Color.Transparent,
         ) {
-            AnimatedContent(
-                targetState = showLoading,
-                transitionSpec = {
-                    if (initialState && !targetState) {
-                        slideInHorizontally(tween(320)) { width -> width } + fadeIn(tween(220)) togetherWith
-                            slideOutHorizontally(tween(320)) { width -> -width } + fadeOut(tween(220))
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFFEAF5F4),
+                            Color(0xFFDCECEF),
+                            Color(0xFFDDE8F6),
+                        ),
+                    ),
+                ),
+            ) {
+                Box(
+                    modifier = Modifier.align(Alignment.TopEnd).size(380.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(Color(0xFF58B5AE).copy(alpha = 0.38f), Color.Transparent),
+                            ),
+                        ),
+                )
+                Box(
+                    modifier = Modifier.align(Alignment.BottomStart).size(440.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(Color(0xFF8589E0).copy(alpha = 0.25f), Color.Transparent),
+                            ),
+                        ),
+                )
+                AnimatedContent(
+                    targetState = showLoading,
+                    modifier = Modifier.fillMaxSize(),
+                    transitionSpec = {
+                        if (initialState && !targetState) {
+                            slideInHorizontally(tween(320)) { width -> width } + fadeIn(tween(220)) togetherWith
+                                slideOutHorizontally(tween(320)) { width -> -width } + fadeOut(tween(220))
+                        } else {
+                            slideInHorizontally(tween(320)) { width -> -width } + fadeIn(tween(220)) togetherWith
+                                slideOutHorizontally(tween(320)) { width -> width } + fadeOut(tween(220))
+                        }
+                    },
+                    label = "onboarding-transition",
+                ) { currentPage ->
+                    if (currentPage) {
+                        ModelLoadingScreen(progress = setupProgress)
                     } else {
-                        slideInHorizontally(tween(320)) { width -> -width } + fadeIn(tween(220)) togetherWith
-                            slideOutHorizontally(tween(320)) { width -> width } + fadeOut(tween(220))
-                    }
-                },
-                label = "onboarding-transition",
-            ) { currentPage ->
-                if (currentPage) {
-                    ModelLoadingScreen(progress = setupProgress)
-                } else {
-                    HorizontalPager(
-                        state = mainPagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        userScrollEnabled = !isMemoryDetailVisible,
-                    ) { page ->
-                        when (page) {
-                            CAPTURE_PAGE -> BorrowCaptureScreen(
-                                isRecording = isRecording,
-                                isHoldRecording = isHoldRecording,
-                                elapsedSeconds = elapsedSeconds,
-                                transcript = transcript,
-                                onToggleRecording = ::toggleRecording,
-                                onStartHoldRecording = { startRecording(holdToRecord = true) },
-                                onStopHoldRecording = ::stopHoldRecording,
-                            )
+                        HorizontalPager(
+                            state = mainPagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            userScrollEnabled = !isMemoryDetailVisible,
+                        ) { page ->
+                            when (page) {
+                                CAPTURE_PAGE -> BorrowCaptureScreen(
+                                    isRecording = isRecording,
+                                    isHoldRecording = isHoldRecording,
+                                    elapsedSeconds = elapsedSeconds,
+                                    transcript = transcript,
+                                    onToggleRecording = ::toggleRecording,
+                                    onStartHoldRecording = { startRecording(holdToRecord = true) },
+                                    onStopHoldRecording = ::stopHoldRecording,
+                                )
 
-                            MEMORIES_PAGE -> SavedMemoriesScreen(
-                                onReturnToCapture = {
-                                    scope.launch { mainPagerState.animateScrollToPage(CAPTURE_PAGE) }
-                                },
-                                onDetailVisibilityChanged = { isMemoryDetailVisible = it },
-                            )
+                                MEMORIES_PAGE -> SavedMemoriesScreen(
+                                    onReturnToCapture = {
+                                        scope.launch { mainPagerState.animateScrollToPage(CAPTURE_PAGE) }
+                                    },
+                                    onDetailVisibilityChanged = { isMemoryDetailVisible = it },
+                                )
+                            }
                         }
                     }
                 }

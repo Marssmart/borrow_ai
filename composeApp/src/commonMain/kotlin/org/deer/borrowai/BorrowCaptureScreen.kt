@@ -154,9 +154,9 @@ private fun MicrophoneButton(
     val infiniteTransition = rememberInfiniteTransition(label = "mic-pulse")
     val pulse by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isRecording) 1.055f else 1.02f,
+        targetValue = if (isRecording) 1.1f else 1.05f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isRecording) 520 else 1_300),
+            animation = tween(if (isRecording) 650 else 800),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "mic-scale",
@@ -165,7 +165,7 @@ private fun MicrophoneButton(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(if (isRecording) 1_050 else 1_600),
+            animation = tween(if (isRecording) 1_300 else 1_600),
             repeatMode = RepeatMode.Restart,
         ),
         label = "mic-ring",
@@ -177,26 +177,33 @@ private fun MicrophoneButton(
     )
     val buttonContentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.primary
     val pulseColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val buttonBorderColor = if (isRecording) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.primaryContainer
+    }
 
     Box(
-        modifier = Modifier.size(buttonSize).graphicsLayer {
-            scaleX = pulse
-            scaleY = pulse
-        },
+        modifier = Modifier.size(buttonSize * MAX_BUTTON_PULSE_SCALE + 4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            repeat(2) { ring ->
-                val progress = (pulseWave + ring * 0.5f) % 1f
-                drawCircle(
-                    color = pulseColor.copy(alpha = 0.28f * (1f - progress)),
-                    radius = size.minDimension * (0.39f + 0.11f * progress),
-                    style = Stroke(width = size.minDimension * 0.018f),
-                )
-            }
+        Canvas(Modifier.fillMaxSize().graphicsLayer { clip = false }) {
+            val buttonRadius = buttonSize.toPx() * pulse / 2f - 10.dp.toPx()
+            drawCircle(
+                color = Color.White.copy(alpha = 0.58f),
+                radius = buttonRadius + 4.dp.toPx(),
+                style = Stroke(width = 8.dp.toPx()),
+            )
+            drawCircle(
+                color = pulseColor.copy(
+                    alpha = (if (isRecording) 0.48f else 0.34f) * (1f - pulseWave),
+                ),
+                radius = buttonRadius + 8.dp.toPx() + 28.dp.toPx() * pulseWave,
+                style = Stroke(width = 2.dp.toPx()),
+            )
         }
         Surface(
-            modifier = Modifier.fillMaxSize().padding(10.dp)
+            modifier = Modifier.size(buttonSize * pulse).padding(10.dp)
                 .semantics {
                     role = Role.Button
                     contentDescription = if (isRecording) "Stop recording" else "Start recording"
@@ -225,14 +232,10 @@ private fun MicrophoneButton(
                         },
                     )
                 },
-            shape = CircleShape,
-            color = buttonColor,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = if (isRecording) Color.White.copy(alpha = 0.8f)
-                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ),
-                shadowElevation = 12.dp,
+                shape = CircleShape,
+                color = buttonColor,
+                border = BorderStroke(width = 8.dp, color = buttonBorderColor),
+                shadowElevation = 0.dp,
         ) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -311,3 +314,5 @@ private fun formatDuration(totalSeconds: Int): String {
     val seconds = totalSeconds % 60
     return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }
+
+private const val MAX_BUTTON_PULSE_SCALE = 1.1f
