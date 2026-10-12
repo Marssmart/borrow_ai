@@ -56,4 +56,50 @@ class DemoMediaSessionServiceTest {
         assertEquals("", service.idleTranscription.value)
         assertIs<MediaSessionState.Idle>(service.state.value)
     }
+
+    @Test
+    fun stoppedSessionJobsCannotUpdateAQuicklyRestartedRecording() = runTest {
+        val memories = InMemoryDemoMemoryService(
+            initialMemories = emptyList(),
+            epochClock = EpochClock { 1_800_000_000_000L },
+        )
+        val service = DemoMediaSessionService(memories, scope = backgroundScope)
+
+        service.startRecording()
+        advanceTimeBy(1_000)
+        service.stopRecording()
+        service.startRecording()
+        runCurrent()
+
+        val restartedRecording = assertIs<MediaSessionState.Recording>(service.state.value)
+        assertEquals(0L, restartedRecording.elapsedMillis)
+        assertEquals("", restartedRecording.transcription)
+
+        advanceTimeBy(45)
+        runCurrent()
+        assertEquals(
+            "T",
+            assertIs<MediaSessionState.Recording>(service.state.value).transcription,
+        )
+    }
+
+    @Test
+    fun callbacksFromAnObsoleteGenerationCannotChangeTheNewRecording() = runTest {
+        val memories = InMemoryDemoMemoryService(
+            initialMemories = emptyList(),
+            epochClock = EpochClock { 1_800_000_000_000L },
+        )
+        val service = DemoMediaSessionService(memories, scope = backgroundScope)
+
+        service.startRecording()
+        val obsoleteGeneration = service.currentSessionGeneration
+        service.startRecording()
+
+        service.appendTranscription(obsoleteGeneration, 'X')
+        service.updateElapsedTime(obsoleteGeneration)
+
+        val currentRecording = assertIs<MediaSessionState.Recording>(service.state.value)
+        assertEquals("", currentRecording.transcription)
+        assertEquals(0L, currentRecording.elapsedMillis)
+    }
 }

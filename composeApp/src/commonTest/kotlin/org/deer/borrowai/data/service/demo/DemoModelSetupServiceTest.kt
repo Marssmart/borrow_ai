@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.ModelSetupPhase
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -27,5 +28,31 @@ class DemoModelSetupServiceTest {
         runCurrent()
         assertEquals(ModelSetupPhase.READY, service.state.value.phase)
         setup.cancel()
+    }
+
+    @Test
+    fun cancelledSetupResumesFromItsCurrentProgress() = runTest {
+        val service = DemoModelSetupService(stepDelayMillis = 100)
+        val setup = backgroundScope.launch { service.prepare() }
+
+        runCurrent()
+        advanceTimeBy(300)
+        runCurrent()
+        setup.cancel()
+        runCurrent()
+        val progressBeforeResume = service.state.value.progress
+        assertTrue(progressBeforeResume > 0f)
+
+        val resumedSetup = backgroundScope.launch { service.prepare() }
+        runCurrent()
+        assertEquals(progressBeforeResume, service.state.value.progress)
+        advanceTimeBy(100)
+        runCurrent()
+        assertTrue(service.state.value.progress > progressBeforeResume)
+
+        advanceTimeBy(4_900)
+        runCurrent()
+        assertEquals(ModelSetupPhase.READY, service.state.value.phase)
+        resumedSetup.cancel()
     }
 }

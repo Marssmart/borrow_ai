@@ -14,6 +14,7 @@ class DemoModelSetupService(
 ) : ModelSetupService {
     private val setupMutex = Mutex()
     private val mutableState = MutableStateFlow(ModelSetupState())
+    private var completedSteps = 0
 
     override val state = mutableState.asStateFlow()
 
@@ -25,7 +26,7 @@ class DemoModelSetupService(
         setupMutex.withLock {
             if (mutableState.value.phase == ModelSetupPhase.READY) return
 
-            repeat(SETUP_PROGRESS_STEPS) { step ->
+            for (step in completedSteps until SETUP_PROGRESS_STEPS) {
                 val progress = (step + 1).toFloat() / SETUP_PROGRESS_STEPS
                 mutableState.value = ModelSetupState(
                     phase = SETUP_PHASES[
@@ -34,6 +35,7 @@ class DemoModelSetupService(
                     progress = progress,
                 )
                 if (stepDelayMillis > 0L) delay(stepDelayMillis)
+                completedSteps = step + 1
             }
             mutableState.value = ModelSetupState(ModelSetupPhase.READY, 1f)
         }

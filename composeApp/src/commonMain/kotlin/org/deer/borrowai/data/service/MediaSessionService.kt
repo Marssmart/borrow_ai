@@ -62,4 +62,6 @@ interface MediaSessionService {
     fun cancelPendingPlayback(): Boolean
 
     fun stopPlayback()
+
+    fun close()
 }

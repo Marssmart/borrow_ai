@@ -4,8 +4,8 @@ import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
 import org.deer.borrowai.data.app.AppMode
-import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 
 class MainActivity : ComponentActivity() {
@@ -18,10 +18,13 @@ class MainActivity : ComponentActivity() {
             } else {
                 null
             }
-        val services = AppServices.createFromStartupFlag(
-            startupModeFlag = startupModeFlag,
-            epochClock = EpochClock { System.currentTimeMillis() },
-        )
+        val services = ViewModelProvider(
+            this,
+            AppServicesViewModelFactory(
+                startupModeFlag = startupModeFlag,
+                epochClock = EpochClock { System.currentTimeMillis() },
+            ),
+        ).get(AppServicesViewModel::class.java).services
         setContent {
             App(services)
         }
