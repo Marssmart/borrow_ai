@@ -4,11 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.0.1]
 
-- Added mock onboarding with three voice-model and three LLM choices, simulated downloads, and a completion gate.
-- Added an 80%-width tap/hold microphone screen with a live Lorem Ipsum preview and swipe navigation.
-- Added a chronological, expandable saved-memories screen with mock transcript, summary, and playback.
-- Added the Compose-required iOS frame-duration plist setting to prevent startup failure.
-- Model selection, downloads, recording, transcription, and playback remain simulated.
+- Replaced model selection with simulated download/load steps for voice-to-text and summarization, connected by a vertical progress timeline.
+- Refined capture with an 80%-width tap/hold mic, pulsing white/red recording state, live-typing transcript, slide transitions, and the off-white/green palette.
+- Added newest-first memories with 240-character previews; tapping a card opens scrollable full-text detail with mock audio controls.
+- Added nested detail → list → capture swiping; the memory list is unbranded, and loading shows a centered BorrowAI title.
+- Added the Compose-required iOS frame-duration plist setting; model setup, recording, transcription, and playback remain simulated.
 
 ## [1.0.0]
 

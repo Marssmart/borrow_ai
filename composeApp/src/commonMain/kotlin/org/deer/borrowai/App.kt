@@ -3,8 +3,12 @@ package org.deer.borrowai
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
@@ -15,22 +19,17 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private enum class AppPage {
-    ModelSetup,
-    Capture,
-    SavedMemories,
-}
 
 private val BorrowColors = lightColorScheme(
     primary = Color(0xFF286B53),
@@ -57,25 +56,24 @@ private val TranscriptSamples = listOf(
 
 @Composable
 fun App() {
-    var page by remember { mutableStateOf(AppPage.ModelSetup) }
-    var selectedSpeechModel by remember { mutableStateOf<String?>(null) }
-    var selectedLanguageModel by remember { mutableStateOf<String?>(null) }
-    val downloadProgress = remember { mutableStateMapOf<String, Float>() }
+    var modelSetupComplete by rememberSaveable { mutableStateOf(false) }
+    var setupProgress by remember { mutableFloatStateOf(0f) }
+    var isMemoryDetailVisible by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val mainPagerState = rememberPagerState(pageCount = { MAIN_PAGE_COUNT })
 
     var isRecording by remember { mutableStateOf(false) }
     var isHoldRecording by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var transcript by remember { mutableStateOf(InitialTranscript) }
 
-    fun startMockDownload(modelId: String) {
-        if (downloadProgress.containsKey(modelId)) return
-        downloadProgress[modelId] = 0f
-        scope.launch {
-            repeat(DOWNLOAD_STEPS) { step ->
-                delay(DOWNLOAD_STEP_MILLIS)
-                downloadProgress[modelId] = (step + 1).toFloat() / DOWNLOAD_STEPS
+    LaunchedEffect(modelSetupComplete) {
+        if (!modelSetupComplete) {
+            repeat(SETUP_PROGRESS_STEPS) { step ->
+                delay(MODEL_SETUP_DURATION_MILLIS / SETUP_PROGRESS_STEPS)
+                setupProgress = (step + 1).toFloat() / SETUP_PROGRESS_STEPS
             }
+            modelSetupComplete = true
         }
     }
 
@@ -83,7 +81,7 @@ fun App() {
         isRecording = true
         isHoldRecording = holdToRecord
         elapsedSeconds = 0
-        transcript = InitialTranscript
+        transcript = ""
     }
 
     fun toggleRecording() {
@@ -104,25 +102,32 @@ fun App() {
 
     LaunchedEffect(isRecording) {
         if (isRecording) {
+            while (true) {
+                delay(TRANSCRIPT_CLOCK_INTERVAL_MILLIS)
+                elapsedSeconds += 1
+            }
+        }
+    }
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
             var sampleIndex = 0
             while (true) {
-                delay(TRANSCRIPT_INTERVAL_MILLIS)
-                elapsedSeconds += 1
-                val nextTranscript = "$transcript ${TranscriptSamples[sampleIndex % TranscriptSamples.size]}"
-                transcript = if (nextTranscript.length > MAX_TRANSCRIPT_LENGTH) {
-                    "…${nextTranscript.takeLast(MAX_TRANSCRIPT_LENGTH - 1)}"
-                } else {
-                    nextTranscript
+                val sample = "${TranscriptSamples[sampleIndex % TranscriptSamples.size]} "
+                for (character in sample) {
+                    delay(TRANSCRIPT_CHARACTER_INTERVAL_MILLIS)
+                    val nextTranscript = "$transcript$character"
+                    transcript = if (nextTranscript.length > MAX_TRANSCRIPT_LENGTH) {
+                        "…${nextTranscript.takeLast(MAX_TRANSCRIPT_LENGTH - 1)}"
+                    } else {
+                        nextTranscript
+                    }
                 }
                 sampleIndex += 1
             }
         }
     }
 
-    val selectedSpeech = MockModels.speech.firstOrNull { it.id == selectedSpeechModel }
-    val selectedLanguage = MockModels.language.firstOrNull { it.id == selectedLanguageModel }
-    val modelsReady = selectedSpeech?.let { downloadProgress[it.id] == 1f } == true &&
-        selectedLanguage?.let { downloadProgress[it.id] == 1f } == true
+    val showLoading = !modelSetupComplete
 
     MaterialTheme(colorScheme = BorrowColors) {
         Surface(
@@ -130,49 +135,59 @@ fun App() {
             color = MaterialTheme.colorScheme.background,
         ) {
             AnimatedContent(
-                targetState = page,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-                label = "app-page",
+                targetState = showLoading,
+                transitionSpec = {
+                    if (initialState && !targetState) {
+                        slideInHorizontally(tween(320)) { width -> width } + fadeIn(tween(220)) togetherWith
+                            slideOutHorizontally(tween(320)) { width -> -width } + fadeOut(tween(220))
+                    } else {
+                        slideInHorizontally(tween(320)) { width -> -width } + fadeIn(tween(220)) togetherWith
+                            slideOutHorizontally(tween(320)) { width -> width } + fadeOut(tween(220))
+                    }
+                },
+                label = "onboarding-transition",
             ) { currentPage ->
-                when (currentPage) {
-                    AppPage.ModelSetup -> ModelOnboardingScreen(
-                        selectedSpeechModel = selectedSpeechModel,
-                        selectedLanguageModel = selectedLanguageModel,
-                        downloadProgress = downloadProgress,
-                        canContinue = modelsReady,
-                        onSelectSpeechModel = { selectedSpeechModel = it },
-                        onSelectLanguageModel = { selectedLanguageModel = it },
-                        onDownload = ::startMockDownload,
-                        onContinue = { page = AppPage.Capture },
-                    )
+                if (currentPage) {
+                    ModelLoadingScreen(progress = setupProgress)
+                } else {
+                    HorizontalPager(
+                        state = mainPagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        userScrollEnabled = !isMemoryDetailVisible,
+                    ) { page ->
+                        when (page) {
+                            CAPTURE_PAGE -> BorrowCaptureScreen(
+                                isRecording = isRecording,
+                                isHoldRecording = isHoldRecording,
+                                elapsedSeconds = elapsedSeconds,
+                                transcript = transcript,
+                                onToggleRecording = ::toggleRecording,
+                                onStartHoldRecording = { startRecording(holdToRecord = true) },
+                                onStopHoldRecording = ::stopHoldRecording,
+                            )
 
-                    AppPage.Capture -> BorrowCaptureScreen(
-                        speechModelName = selectedSpeech?.name.orEmpty(),
-                        languageModelName = selectedLanguage?.name.orEmpty(),
-                        isRecording = isRecording,
-                        isHoldRecording = isHoldRecording,
-                        elapsedSeconds = elapsedSeconds,
-                        transcript = transcript,
-                        onToggleRecording = ::toggleRecording,
-                        onStartHoldRecording = { startRecording(holdToRecord = true) },
-                        onStopHoldRecording = ::stopHoldRecording,
-                        onOpenMemories = { page = AppPage.SavedMemories },
-                        onChangeModels = { page = AppPage.ModelSetup },
-                    )
-
-                    AppPage.SavedMemories -> SavedMemoriesScreen(
-                        onReturnToCapture = { page = AppPage.Capture },
-                    )
+                            MEMORIES_PAGE -> SavedMemoriesScreen(
+                                onReturnToCapture = {
+                                    scope.launch { mainPagerState.animateScrollToPage(CAPTURE_PAGE) }
+                                },
+                                onDetailVisibilityChanged = { isMemoryDetailVisible = it },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-private const val DOWNLOAD_STEPS = 30
-private const val DOWNLOAD_STEP_MILLIS = 100L
-private const val TRANSCRIPT_INTERVAL_MILLIS = 1_100L
+private const val MODEL_SETUP_DURATION_MILLIS = 5_000L
+private const val SETUP_PROGRESS_STEPS = 50
+private const val TRANSCRIPT_CLOCK_INTERVAL_MILLIS = 1_000L
+private const val TRANSCRIPT_CHARACTER_INTERVAL_MILLIS = 45L
 private const val MAX_TRANSCRIPT_LENGTH = 2_000
+private const val MAIN_PAGE_COUNT = 2
+private const val CAPTURE_PAGE = 0
+private const val MEMORIES_PAGE = 1
 
 private const val InitialTranscript =
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " +

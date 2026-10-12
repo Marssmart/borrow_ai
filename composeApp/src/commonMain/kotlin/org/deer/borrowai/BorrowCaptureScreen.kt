@@ -5,8 +5,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -62,8 +65,6 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun BorrowCaptureScreen(
-    speechModelName: String,
-    languageModelName: String,
     isRecording: Boolean,
     isHoldRecording: Boolean,
     elapsedSeconds: Int,
@@ -71,69 +72,45 @@ internal fun BorrowCaptureScreen(
     onToggleRecording: () -> Unit,
     onStartHoldRecording: () -> Unit,
     onStopHoldRecording: () -> Unit,
-    onOpenMemories: () -> Unit,
-    onChangeModels: () -> Unit,
 ) {
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .then(rememberHorizontalPageSwipe(onSwipeLeft = onOpenMemories)),
+            .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         val microphoneSize = maxWidth * 0.8f
-        Column(modifier = Modifier.fillMaxSize()) {
-            CaptureHeader(
-                onOpenMemories = onOpenMemories,
-                onChangeModels = onChangeModels,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 8.dp),
-            )
-
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 6.dp)) {
-                Text(
-                    "Capture a thought",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    "A live transcription preview, powered by mock data.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            SelectedModelLabels(
-                speechModelName = speechModelName,
-                languageModelName = languageModelName,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 10.dp),
-            )
-
-            TranscriptCard(
-                transcript = transcript,
-                isRecording = isRecording,
-                modifier = Modifier.fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 22.dp)
-                    .padding(top = 12.dp, bottom = 4.dp),
-            )
-
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Box(
-                modifier = Modifier.fillMaxWidth().weight(1.25f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                MicrophoneButton(
-                    size = microphoneSize,
-                    isRecording = isRecording,
-                    isHoldRecording = isHoldRecording,
-                    elapsedSeconds = elapsedSeconds,
-                    onToggleRecording = onToggleRecording,
-                    onStartHoldRecording = onStartHoldRecording,
-                    onStopHoldRecording = onStopHoldRecording,
+                Text(
+                    transcript,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 25.sp,
                 )
             }
 
+            MicrophoneButton(
+                buttonSize = microphoneSize,
+                isRecording = isRecording,
+                isHoldRecording = isHoldRecording,
+                elapsedSeconds = elapsedSeconds,
+                onToggleRecording = onToggleRecording,
+                onStartHoldRecording = onStartHoldRecording,
+                onStopHoldRecording = onStopHoldRecording,
+            )
+
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().weight(0.45f).padding(top = 16.dp, bottom = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Text(
                     text = if (isRecording) {
@@ -146,155 +123,23 @@ internal fun BorrowCaptureScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.6.sp,
                     color = if (isRecording) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     "SWIPE LEFT FOR SAVED MEMORIES",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 9.sp,
                     letterSpacing = 0.7.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun CaptureHeader(
-    onOpenMemories: () -> Unit,
-    onChangeModels: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.height(48.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("B", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(8.dp))
-            Text("BorrowAI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "DEMO",
-                modifier = Modifier.clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onOpenMemories) {
-                Text("Memories")
-            }
-            TextButton(onClick = onChangeModels) {
-                Text("Models")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SelectedModelLabels(
-    speechModelName: String,
-    languageModelName: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ModelLabel("VOICE", speechModelName)
-        ModelLabel("LLM", languageModelName)
-    }
-}
-
-@Composable
-private fun ModelLabel(kind: String, name: String) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                kind,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(
-                name,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TranscriptCard(
-    transcript: String,
-    isRecording: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(8.dp).clip(CircleShape).background(
-                        if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    ),
-                )
-                Spacer(Modifier.width(7.dp))
-                Text(
-                    if (isRecording) "LIVE MOCK TRANSCRIPTION" else "SAMPLE TRANSCRIPTION",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.7.sp,
-                    color = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "PREVIEW",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                transcript,
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 25.sp,
-            )
         }
     }
 }
 
 @Composable
 private fun MicrophoneButton(
-    size: Dp,
+    buttonSize: Dp,
     isRecording: Boolean,
     isHoldRecording: Boolean,
     elapsedSeconds: Int,
@@ -306,30 +151,49 @@ private fun MicrophoneButton(
     val latestOnToggle = rememberUpdatedState(onToggleRecording)
     val latestOnHoldStart = rememberUpdatedState(onStartHoldRecording)
     val latestOnHoldStop = rememberUpdatedState(onStopHoldRecording)
-    val pulse by rememberInfiniteTransition(label = "mic-pulse").animateFloat(
+    val infiniteTransition = rememberInfiniteTransition(label = "mic-pulse")
+    val pulse by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isRecording) 1.035f else 1f,
+        targetValue = if (isRecording) 1.055f else 1.02f,
         animationSpec = infiniteRepeatable(
-            animation = tween(850),
+            animation = tween(if (isRecording) 520 else 1_300),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "mic-scale",
     )
-    val buttonColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val pulseWave by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isRecording) 1_050 else 1_600),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "mic-ring",
+    )
+    val buttonColor by animateColorAsState(
+        targetValue = if (isRecording) MaterialTheme.colorScheme.error else Color.White,
+        animationSpec = tween(220),
+        label = "mic-color",
+    )
+    val buttonContentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.primary
+    val pulseColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
     Box(
-        modifier = Modifier.size(size).graphicsLayer {
+        modifier = Modifier.size(buttonSize).graphicsLayer {
             scaleX = pulse
             scaleY = pulse
         },
         contentAlignment = Alignment.Center,
     ) {
-        if (isRecording) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(2.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.10f)),
-            )
+        Canvas(Modifier.fillMaxSize()) {
+            repeat(2) { ring ->
+                val progress = (pulseWave + ring * 0.5f) % 1f
+                drawCircle(
+                    color = pulseColor.copy(alpha = 0.28f * (1f - progress)),
+                    radius = size.minDimension * (0.39f + 0.11f * progress),
+                    style = Stroke(width = size.minDimension * 0.018f),
+                )
+            }
         }
         Surface(
             modifier = Modifier.fillMaxSize().padding(10.dp)
@@ -363,7 +227,12 @@ private fun MicrophoneButton(
                 },
             shape = CircleShape,
             color = buttonColor,
-            shadowElevation = 12.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isRecording) Color.White.copy(alpha = 0.8f)
+                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                ),
+                shadowElevation = 12.dp,
         ) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -372,12 +241,12 @@ private fun MicrophoneButton(
             ) {
                 MicrophoneGlyph(
                     modifier = Modifier.size(62.dp),
-                    color = Color.White,
+                    color = buttonContentColor,
                 )
                 Spacer(Modifier.height(11.dp))
                 Text(
                     if (isRecording) "RECORDING" else "TAP OR HOLD",
-                    color = Color.White,
+                    color = buttonContentColor,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
@@ -386,7 +255,7 @@ private fun MicrophoneButton(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         formatDuration(elapsedSeconds),
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = buttonContentColor.copy(alpha = 0.9f),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
