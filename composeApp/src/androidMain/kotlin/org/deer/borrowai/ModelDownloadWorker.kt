@@ -117,18 +117,24 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
 fun WorkInfo.toModelSetupState(): ModelSetupState {
     val data = if (state.isFinished) outputData else progress
     return when (state) {
-        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ModelSetupState(
-            phase = if (tags.contains(ModelDownloadWork.METERED_OVERRIDE_TAG)) {
-                ModelSetupPhase.WAITING_FOR_NETWORK
-            } else {
-                ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
-            },
-        )
+        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
+            val phase = waitingModelSetupPhase(
+                runAttemptCount = runAttemptCount,
+                allowMetered = tags.contains(ModelDownloadWork.METERED_OVERRIDE_TAG),
+            )
+            data.toModelSetupState(defaultPhase = phase).copy(phase = phase)
+        }
         WorkInfo.State.RUNNING -> data.toModelSetupState(defaultPhase = ModelSetupPhase.NOT_STARTED)
         WorkInfo.State.SUCCEEDED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.READY)
         WorkInfo.State.FAILED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.FAILED)
         WorkInfo.State.CANCELLED -> ModelSetupState(phase = ModelSetupPhase.FAILED)
     }
+}
+
+internal fun waitingModelSetupPhase(runAttemptCount: Int, allowMetered: Boolean): ModelSetupPhase = when {
+    runAttemptCount > 0 -> ModelSetupPhase.WAITING_FOR_RETRY
+    allowMetered -> ModelSetupPhase.WAITING_FOR_NETWORK
+    else -> ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
 }
 
 private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupState {
@@ -166,7 +172,8 @@ private fun notification(context: Context, state: ModelSetupState): Notification
     val indeterminate = state.phase == ModelSetupPhase.CHOOSING_MODEL ||
         state.phase == ModelSetupPhase.NOT_STARTED ||
         state.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ||
-        state.phase == ModelSetupPhase.WAITING_FOR_NETWORK
+        state.phase == ModelSetupPhase.WAITING_FOR_NETWORK ||
+        state.phase == ModelSetupPhase.WAITING_FOR_RETRY
     val contentIntent = Intent(context, MainActivity::class.java).apply {
         putExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA, ServiceVariants.REAL_MODEL_SETUP.id)
         // Reuse the app task but recreate MainActivity so it consumes the real-model-setup extra in onCreate.
@@ -196,6 +203,7 @@ private fun phaseLabelRes(phase: ModelSetupPhase): Int = when (phase) {
     ModelSetupPhase.CHOOSING_MODEL -> R.string.notification_model_choosing
     ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK -> R.string.notification_model_waiting_for_wifi
     ModelSetupPhase.WAITING_FOR_NETWORK -> R.string.notification_model_waiting_for_network
+    ModelSetupPhase.WAITING_FOR_RETRY -> R.string.notification_model_waiting_for_retry
     ModelSetupPhase.DOWNLOADING_VOICE -> R.string.notification_model_downloading_voice
     ModelSetupPhase.LOADING_VOICE -> R.string.notification_model_checking_voice
     ModelSetupPhase.DOWNLOADING_LLM -> R.string.notification_model_downloading_llm
