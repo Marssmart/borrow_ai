@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.service.ModelSetupMilestones
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
@@ -86,6 +87,12 @@ class DownloadingModelSetupService(
                 phase = ModelSetupPhase.FAILED,
                 failedDuring = mutableState.value.phase,
                 retryableFailure = (error as? ModelDownloadException)?.retryable == true,
+                failureReason = when {
+                    (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
+                    error is ModelStorageException || error is kotlinx.io.IOException ->
+                        ModelSetupFailureReason.STORAGE
+                    else -> ModelSetupFailureReason.MODEL
+                },
             )
         }
     }

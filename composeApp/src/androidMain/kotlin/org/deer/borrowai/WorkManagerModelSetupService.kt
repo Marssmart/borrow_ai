@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,11 +19,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.io.IOException
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.model.ModelCatalog
+import org.deer.borrowai.data.service.model.ModelDownloadException
 import org.deer.borrowai.data.service.model.ModelFileStore
+import org.deer.borrowai.data.service.model.ModelStorageException
+import org.deer.borrowai.data.service.model.TierModels
 import java.util.UUID
 
 /**
@@ -56,12 +62,30 @@ class WorkManagerModelSetupService(
     }
 
     override suspend fun prepare() {
-        val device = AndroidDeviceEnvironment(appContext)
-        val store = ModelFileStore(device.modelDirectory)
-        val models = ModelCatalog.modelsForRam(device.totalMemoryBytes)
-        val modelsPresent = withContext(Dispatchers.IO) {
-            store.prepareDirectory()
-            store.isPresent(models.voice) && store.isPresent(models.llm)
+        val models: TierModels
+        val modelsPresent: Boolean
+        try {
+            val device = AndroidDeviceEnvironment(appContext)
+            val store = ModelFileStore(device.modelDirectory)
+            models = ModelCatalog.modelsForRam(device.totalMemoryBytes)
+            modelsPresent = withContext(Dispatchers.IO) {
+                store.prepareDirectory()
+                store.isPresent(models.voice) && store.isPresent(models.llm)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            mutableState.value = ModelSetupState(
+                phase = ModelSetupPhase.FAILED,
+                failedDuring = ModelSetupPhase.CHOOSING_MODEL,
+                failureReason = when {
+                    error is ModelStorageException || error is IOException -> ModelSetupFailureReason.STORAGE
+                    (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
+                    else -> ModelSetupFailureReason.MODEL
+                },
+                retryableFailure = (error as? ModelDownloadException)?.retryable == true,
+            )
+            return
         }
         if (modelsPresent) {
             localReadinessConfirmed = true

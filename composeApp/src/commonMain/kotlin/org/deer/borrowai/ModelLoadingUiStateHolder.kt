@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import org.deer.borrowai.data.service.ModelSetupPhase
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
 
@@ -22,6 +23,7 @@ internal class ModelLoadingUiStateHolder(
         val bytesTotal: Long = 0L,
         val animateTransitions: Boolean = true,
         val retryableFailure: Boolean = false,
+        val failureReason: ModelSetupFailureReason? = null,
     )
 
     private val mutableUiState = MutableStateFlow(modelSetupService.state.value.toUiState())
@@ -48,6 +50,7 @@ internal class ModelLoadingUiStateHolder(
         bytesTotal = bytesTotal,
         animateTransitions = animateTransitions,
         retryableFailure = retryableFailure,
+        failureReason = failureReason,
     )
 
     internal companion object {

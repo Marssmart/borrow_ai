@@ -42,14 +42,18 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupPhase
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.model_app_name
 import borrowai.composeapp.generated.resources.model_choosing
 import borrowai.composeapp.generated.resources.model_downloading
 import borrowai.composeapp.generated.resources.model_download_progress
-import borrowai.composeapp.generated.resources.model_failed
+import borrowai.composeapp.generated.resources.model_failed_model
+import borrowai.composeapp.generated.resources.model_failed_network
+import borrowai.composeapp.generated.resources.model_failed_storage
 import borrowai.composeapp.generated.resources.model_loading
 import borrowai.composeapp.generated.resources.model_ready
+import borrowai.composeapp.generated.resources.model_waiting_for_unmetered_network
 import org.deer.borrowai.data.service.model.ModelDownloadFormat
 import org.jetbrains.compose.resources.stringResource
 
@@ -151,9 +155,24 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             animateTransitions = uiState.animateTransitions,
                         )
                     }
+                    if (uiState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+                        Text(
+                            stringResource(Res.string.model_waiting_for_unmetered_network),
+                            modifier = Modifier.padding(top = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     if (uiState.phase == ModelSetupPhase.FAILED) {
                         Text(
-                            stringResource(Res.string.model_failed),
+                            stringResource(
+                                when (uiState.failureReason) {
+                                    ModelSetupFailureReason.NETWORK -> Res.string.model_failed_network
+                                    ModelSetupFailureReason.STORAGE -> Res.string.model_failed_storage
+                                    ModelSetupFailureReason.MODEL,
+                                    null -> Res.string.model_failed_model
+                                },
+                            ),
                             modifier = Modifier.padding(top = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium,
@@ -355,6 +374,7 @@ internal fun activeStepIndex(phase: ModelSetupPhase): Int? =
     when (phase) {
         ModelSetupPhase.NOT_STARTED,
         ModelSetupPhase.CHOOSING_MODEL -> 0
+        ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK -> null
         ModelSetupPhase.DOWNLOADING_VOICE -> 1
         ModelSetupPhase.LOADING_VOICE -> 2
         ModelSetupPhase.DOWNLOADING_LLM -> 3

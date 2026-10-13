@@ -3,6 +3,7 @@
     <string name="notification_channel_model_download">Model downloads</string>
     <string name="notification_model_download_title">Setting up BorrowAI</string>
     <string name="notification_model_choosing">Choosing the model for this device</string>
+    <string name="notification_model_waiting_for_wifi">Waiting for unmetered Wi-Fi</string>
     <string name="notification_model_downloading_voice">Downloading voice model</string>
     <string name="notification_model_checking_voice">Checking voice model</string>
     <string name="notification_model_downloading_llm">Downloading language model</string>
