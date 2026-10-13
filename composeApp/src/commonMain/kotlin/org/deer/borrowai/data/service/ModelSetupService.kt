@@ -37,5 +37,6 @@ interface ModelSetupService {
 
     suspend fun prepare()
 
-    suspend fun downloadOverMobileData()
+    /** Allows metered networking for the currently waiting Android model download only. */
+    suspend fun downloadOverMobileData() = Unit
 }

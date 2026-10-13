@@ -73,9 +73,6 @@ fun App(services: AppServices) {
         AppShellStateHolder(mainPagerState, scope)
     }
     val appUiState by appStateHolder.uiState.collectAsState()
-    LaunchedEffect(services.modelSetup) {
-        services.modelSetup.prepare()
-    }
     MaterialTheme(colorScheme = BorrowColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -123,9 +120,6 @@ fun App(services: AppServices) {
                         AppShellStateHolder.CAPTURE_PAGE -> BorrowCaptureScreen(
                             mediaSessionService = services.mediaSession,
                             modelSetupService = services.modelSetup,
-                            onDownloadOverMobileData = {
-                                scope.launch { services.modelSetup.downloadOverMobileData() }
-                            },
                         )
 
                         AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(

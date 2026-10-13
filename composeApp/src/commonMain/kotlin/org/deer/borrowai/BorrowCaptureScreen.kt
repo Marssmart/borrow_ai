@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.model.ModelDownloadFormat
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.capture_download_over_mobile_data
 import borrowai.composeapp.generated.resources.capture_elapsed_duration
@@ -96,7 +98,6 @@ import kotlinx.coroutines.launch
 internal fun BorrowCaptureScreen(
     mediaSessionService: MediaSessionService,
     modelSetupService: ModelSetupService,
-    onDownloadOverMobileData: () -> Unit,
 ) {
     val stateHolder = remember(mediaSessionService, modelSetupService) {
         CaptureUiStateHolder(
@@ -106,6 +107,7 @@ internal fun BorrowCaptureScreen(
     }
     val uiState by stateHolder.uiState.collectAsState()
     val setupState by modelSetupService.state.collectAsState()
+    val scope = rememberCoroutineScope()
     val modelReady = setupState.phase == ModelSetupPhase.READY
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
@@ -115,6 +117,7 @@ internal fun BorrowCaptureScreen(
         launch {
             modelSetupService.state.collect { stateHolder.setModelReady(it.phase == ModelSetupPhase.READY) }
         }
+        modelSetupService.prepare()
     }
 
     BoxWithConstraints(
@@ -187,7 +190,7 @@ internal fun BorrowCaptureScreen(
                         else MaterialTheme.colorScheme.onSurface,
                     )
                 } else if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
-                    Button(onClick = onDownloadOverMobileData) {
+                    Button(onClick = { scope.launch { modelSetupService.downloadOverMobileData() } }) {
                         Text(stringResource(Res.string.capture_download_over_mobile_data))
                     }
                 }
@@ -479,8 +482,8 @@ private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phas
         if (state.bytesTotal > 0L) {
             stringResource(
                 Res.string.capture_model_progress_transcription,
-                formatMegabytes(state.bytesDownloaded),
-                formatMegabytes(state.bytesTotal),
+                ModelDownloadFormat.megabytes(state.bytesDownloaded),
+                ModelDownloadFormat.megabytes(state.bytesTotal),
             )
         } else {
             stringResource(Res.string.capture_model_downloading_transcription)
@@ -491,8 +494,8 @@ private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phas
         if (state.bytesTotal > 0L) {
             stringResource(
                 Res.string.capture_model_progress_summarization,
-                formatMegabytes(state.bytesDownloaded),
-                formatMegabytes(state.bytesTotal),
+                ModelDownloadFormat.megabytes(state.bytesDownloaded),
+                ModelDownloadFormat.megabytes(state.bytesTotal),
             )
         } else {
             stringResource(Res.string.capture_model_downloading_summarization)
@@ -521,11 +524,3 @@ private fun modelSetupFailureDetail(state: ModelSetupState): String? {
         },
     )
 }
-
-private fun formatMegabytes(bytes: Long): String {
-    require(bytes >= 0L) { "A byte count cannot be negative." }
-    val digits = (bytes / BYTES_PER_MEGABYTE).toString()
-    return digits.reversed().chunked(3).joinToString(",").reversed()
-}
-
-private const val BYTES_PER_MEGABYTE = 1_000_000L

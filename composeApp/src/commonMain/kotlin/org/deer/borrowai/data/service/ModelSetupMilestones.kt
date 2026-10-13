@@ -1,8 +1,7 @@
 package org.deer.borrowai.data.service
 
 /**
- * Overall progress milestones shared by the demo and real model setup services.
- * Each setup stage ends at a quarter of the total, which matches the loader's connector segments.
+ * Overall progress milestones for the real model download's notification progress.
  */
 object ModelSetupMilestones {
     const val CHOOSING_END = 0.25f
