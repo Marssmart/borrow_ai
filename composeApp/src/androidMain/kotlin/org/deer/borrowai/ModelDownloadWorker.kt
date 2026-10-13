@@ -120,6 +120,8 @@ fun WorkInfo.toModelSetupState(): ModelSetupState {
         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
             val phase = waitingModelSetupPhase(
                 runAttemptCount = runAttemptCount,
+                nextScheduleTimeMillis = nextScheduleTimeMillis,
+                nowMillis = System.currentTimeMillis(),
                 allowMetered = tags.contains(ModelDownloadWork.METERED_OVERRIDE_TAG),
             )
             data.toModelSetupState(defaultPhase = phase).copy(phase = phase)
@@ -131,10 +133,20 @@ fun WorkInfo.toModelSetupState(): ModelSetupState {
     }
 }
 
-internal fun waitingModelSetupPhase(runAttemptCount: Int, allowMetered: Boolean): ModelSetupPhase = when {
-    runAttemptCount > 0 -> ModelSetupPhase.WAITING_FOR_RETRY
-    allowMetered -> ModelSetupPhase.WAITING_FOR_NETWORK
-    else -> ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
+internal fun waitingModelSetupPhase(
+    runAttemptCount: Int,
+    nextScheduleTimeMillis: Long,
+    nowMillis: Long,
+    allowMetered: Boolean,
+): ModelSetupPhase {
+    val retryBackoffActive = runAttemptCount > 0 &&
+        nextScheduleTimeMillis != Long.MAX_VALUE &&
+        nextScheduleTimeMillis > nowMillis
+    return when {
+        retryBackoffActive -> ModelSetupPhase.WAITING_FOR_RETRY
+        allowMetered -> ModelSetupPhase.WAITING_FOR_NETWORK
+        else -> ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
+    }
 }
 
 private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupState {
