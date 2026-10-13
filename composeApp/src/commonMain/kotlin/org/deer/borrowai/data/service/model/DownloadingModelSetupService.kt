@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.service.ModelSetupMilestones
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
@@ -45,31 +46,52 @@ class DownloadingModelSetupService(
     private suspend fun runSetup() {
         try {
             store.prepareDirectory()
-            mutableState.value = ModelSetupState(phase = ModelSetupPhase.CHOOSING_MODEL)
             val chosen = modelsForRam(totalRamBytes)
-            delay(choosingHoldMillis)
+            val voicePresent = store.isPresent(chosen.voice)
+            val llmPresent = store.isPresent(chosen.llm)
+            if (voicePresent && llmPresent) {
+                publishFastReady(chosen)
+                return
+            }
 
+            publish(ModelSetupPhase.CHOOSING_MODEL, 0f, chosen)
+            delay(choosingHoldMillis)
             publish(
                 ModelSetupPhase.DOWNLOADING_VOICE,
                 ModelSetupMilestones.CHOOSING_END,
                 chosen,
             )
-            downloadModel(chosen.voice, ModelSetupPhase.DOWNLOADING_VOICE, ModelSetupMilestones.CHOOSING_END,
-                ModelSetupMilestones.VOICE_DOWNLOAD_END)
+            val voiceDownloaded = downloadModel(
+                chosen.voice,
+                ModelSetupPhase.DOWNLOADING_VOICE,
+                ModelSetupMilestones.CHOOSING_END,
+                ModelSetupMilestones.VOICE_DOWNLOAD_END,
+            )
 
             publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END, chosen)
-            delay(loadingHoldMillis)
-            check(store.isPresent(chosen.voice)) { "The ${chosen.voice.displayName} file is missing." }
+            if (voiceDownloaded) delay(loadingHoldMillis)
 
             publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END, chosen)
-            downloadModel(chosen.llm, ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END,
-                ModelSetupMilestones.LLM_DOWNLOAD_END)
+            downloadModel(
+                chosen.llm,
+                ModelSetupPhase.DOWNLOADING_LLM,
+                ModelSetupMilestones.VOICE_LOAD_END,
+                ModelSetupMilestones.LLM_DOWNLOAD_END,
+            )
 
             publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END, chosen)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            mutableState.value = mutableState.value.copy(phase = ModelSetupPhase.FAILED)
+            mutableState.value = mutableState.value.copy(
+                phase = ModelSetupPhase.FAILED,
+                retryableFailure = (error as? ModelDownloadException)?.retryable == true,
+                failureReason = if ((error as? ModelDownloadException)?.retryable == true) {
+                    ModelSetupFailureReason.NETWORK
+                } else {
+                    ModelSetupFailureReason.MODEL
+                },
+            )
         }
     }
 
@@ -82,15 +104,28 @@ class DownloadingModelSetupService(
         )
     }
 
+    private fun publishFastReady(models: TierModels) {
+        publish(ModelSetupPhase.CHOOSING_MODEL, 0f, models)
+        publish(ModelSetupPhase.DOWNLOADING_VOICE, ModelSetupMilestones.CHOOSING_END, models)
+        publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END, models)
+        publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END, models)
+        mutableState.value = ModelSetupState(
+            phase = ModelSetupPhase.READY,
+            progress = 1f,
+            voiceModelName = models.voice.displayName,
+            llmModelName = models.llm.displayName,
+        )
+    }
+
     private suspend fun downloadModel(
         spec: ModelSpec,
         phase: ModelSetupPhase,
         startProgress: Float,
         endProgress: Float,
-    ) {
+    ): Boolean {
         if (store.isPresent(spec)) {
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
-            return
+            return false
         }
         val downloadedSha256 = downloader.download(spec.downloadUrl, store.partialPath(spec)) { bytes ->
             val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
@@ -103,6 +138,7 @@ class DownloadingModelSetupService(
         }
         store.commit(spec, downloadedSha256)
         mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+        return true
     }
 
     private companion object {

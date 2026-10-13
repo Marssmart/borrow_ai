@@ -61,17 +61,36 @@ class KtorModelDownloaderTest {
     }
 
     @Test
-    fun nonSuccessStatusFailsWithoutWritingTheDestination() = runTest {
+    fun clientErrorStatusFailsPermanentlyWithoutWritingTheDestination() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(destination.parent!!)
         val client = HttpClient(MockEngine { respond(content = "nope", status = HttpStatusCode.NotFound) })
 
-        assertFailsWith<ModelDownloadException> {
+        val error = assertFailsWith<ModelDownloadException> {
             KtorModelDownloader(client, fileSystem).download(url, destination) {}
         }
 
+        assertFalse(error.retryable)
         assertFalse(fileSystem.exists(destination))
         client.close()
+    }
+
+    @Test
+    fun timeoutRateLimitAndServerErrorsAreRetryable() = runTest {
+        listOf(
+            HttpStatusCode.RequestTimeout,
+            HttpStatusCode.TooManyRequests,
+            HttpStatusCode.InternalServerError,
+        ).forEach { status ->
+            val fileSystem = FakeFileSystem()
+            fileSystem.createDirectories(destination.parent!!)
+            val client = HttpClient(MockEngine { respond(content = "error", status = status) })
+            val error = assertFailsWith<ModelDownloadException> {
+                KtorModelDownloader(client, fileSystem).download(url, destination) {}
+            }
+            assertTrue(error.retryable, "HTTP ${status.value} should be retried")
+            client.close()
+        }
     }
 
     @Test
