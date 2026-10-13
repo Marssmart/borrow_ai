@@ -52,6 +52,22 @@ class ModelFileStore(
     }
 
     /**
+     * Completes an interrupted download when its partial file already has the full catalog size.
+     * A matching digest is committed; a full-size mismatch is discarded so a later request starts over.
+     */
+    fun commitCompletePartial(spec: ModelSpec): Boolean {
+        val partialPath = partialPath(spec)
+        if (fileSystem.metadataOrNull(partialPath)?.size != spec.sizeBytes) return false
+        val digest = digestFile(partialPath)
+        if (digest != spec.sha256) {
+            discardPartial(spec)
+            return false
+        }
+        commit(spec, digest)
+        return true
+    }
+
+    /**
      * Moves the partial file into the static name once its size and digest match. A short partial file is kept so
      * the next attempt can resume it; a full-size file with the wrong digest is discarded.
      */

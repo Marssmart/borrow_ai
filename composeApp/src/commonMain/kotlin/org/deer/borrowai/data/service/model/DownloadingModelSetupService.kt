@@ -130,6 +130,10 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return false
         }
+        if (store.commitCompletePartial(spec)) {
+            mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+            return false
+        }
         val downloadedSha256 = downloader.download(spec.downloadUrl, store.partialPath(spec)) { bytes ->
             val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
             mutableState.value = mutableState.value.copy(
