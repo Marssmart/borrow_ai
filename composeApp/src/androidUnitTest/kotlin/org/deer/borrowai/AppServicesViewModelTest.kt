@@ -6,8 +6,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
+import okio.Path
+import okio.Path.Companion.toPath
+import org.deer.borrowai.data.app.DeviceEnvironment
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.model.ModelTierSelector
 
 class AppServicesViewModelTest {
     @Test
@@ -16,6 +20,10 @@ class AppServicesViewModelTest {
         val factory = AppServicesViewModelFactory(
             serviceVariantId = "demo",
             epochClock = EpochClock { 1_800_000_000_000L },
+            device = object : DeviceEnvironment {
+                override val totalMemoryBytes: Long = 8L * ModelTierSelector.BYTES_PER_GIB
+                override val modelDirectory: Path = "/unused-models".toPath()
+            },
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)
         val services = first.services

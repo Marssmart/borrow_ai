@@ -3,6 +3,7 @@ package org.deer.borrowai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import org.deer.borrowai.data.app.AppServices
+import org.deer.borrowai.data.app.DeviceEnvironment
 import org.deer.borrowai.data.domain.EpochClock
 
 internal class AppServicesViewModel(
@@ -17,6 +18,7 @@ internal class AppServicesViewModel(
 internal class AppServicesViewModelFactory(
     private val serviceVariantId: String?,
     private val epochClock: EpochClock,
+    private val device: DeviceEnvironment,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass != AppServicesViewModel::class.java) {
@@ -27,6 +29,7 @@ internal class AppServicesViewModelFactory(
                 AppServices.createFromServiceVariant(
                     serviceVariantId = serviceVariantId,
                     epochClock = epochClock,
+                    device = device,
                 ),
             ),
         )

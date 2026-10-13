@@ -14,6 +14,7 @@ fun MainViewController(serviceVariantId: String?): UIViewController {
         epochClock = EpochClock {
             (NSDate().timeIntervalSince1970 * MILLIS_PER_SECOND).toLong()
         },
+        device = IosDeviceEnvironment(),
     )
     return ComposeUIViewController {
         DisposableEffect(services) {

@@ -9,20 +9,40 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 
 class AppServicesTest {
     @Test
     fun demoVariantBuildsEveryServiceAsDemo() {
-        val services = AppServices.createFromServiceVariant("demo", EpochClock { 1_800_000_000_000L })
+        val services = AppServices.createFromServiceVariant(
+            "demo",
+            EpochClock { 1_800_000_000_000L },
+            TestDeviceEnvironment(),
+        )
 
         assertEquals(ServiceVariants.DEMO, services.variant)
-        assertEquals(true, services.variant.hasDemoServices)
+        assertTrue(services.variant.hasDemoServices)
         assertNotNull(services.modelSetup as? DemoModelSetupService)
+        assertNotNull(services.memories as? InMemoryDemoMemoryService)
+        assertNotNull(services.mediaSession as? DemoMediaSessionService)
+        services.close()
+    }
+
+    @Test
+    fun realModelSetupVariantUsesDownloadingServiceAndKeepsOtherServicesDemo() {
+        val services = AppServices.createFromServiceVariant(
+            "real-model-setup",
+            EpochClock { 1_800_000_000_000L },
+            TestDeviceEnvironment(),
+        )
+
+        assertNotNull(services.modelSetup as? DownloadingModelSetupService)
         assertNotNull(services.memories as? InMemoryDemoMemoryService)
         assertNotNull(services.mediaSession as? DemoMediaSessionService)
         services.close()
@@ -31,13 +51,13 @@ class AppServicesTest {
     @Test
     fun unknownOrMissingVariantFailsFast() {
         assertFailsWith<UnknownServiceVariantException> {
-            AppServices.createFromServiceVariant("real", EpochClock { 1_800_000_000_000L })
+            AppServices.createFromServiceVariant("real", EpochClock { 1_800_000_000_000L }, TestDeviceEnvironment())
         }
         assertFailsWith<UnknownServiceVariantException> {
-            AppServices.createFromServiceVariant("", EpochClock { 1_800_000_000_000L })
+            AppServices.createFromServiceVariant("", EpochClock { 1_800_000_000_000L }, TestDeviceEnvironment())
         }
         assertFailsWith<UnknownServiceVariantException> {
-            AppServices.createFromServiceVariant(null, EpochClock { 1_800_000_000_000L })
+            AppServices.createFromServiceVariant(null, EpochClock { 1_800_000_000_000L }, TestDeviceEnvironment())
         }
     }
 
@@ -47,6 +67,7 @@ class AppServicesTest {
         val services = AppServices.createFromServiceVariant(
             serviceVariantId = "demo",
             epochClock = EpochClock { 1_800_000_000_000L },
+            device = TestDeviceEnvironment(),
             dispatcher = StandardTestDispatcher(testScheduler),
         )
 

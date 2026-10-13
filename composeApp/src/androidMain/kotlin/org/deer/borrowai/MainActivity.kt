@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
             AppServicesViewModelFactory(
                 serviceVariantId = serviceVariantId,
                 epochClock = EpochClock { System.currentTimeMillis() },
+                device = AndroidDeviceEnvironment(applicationContext),
             ),
         ).get(AppServicesViewModel::class.java).services
         setContent {

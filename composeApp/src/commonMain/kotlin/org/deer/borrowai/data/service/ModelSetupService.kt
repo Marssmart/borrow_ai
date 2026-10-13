@@ -20,11 +20,15 @@ enum class ModelSetupFailureReason {
     MODEL,
 }
 
+/** Names are null until the device tier has been chosen. */
 data class ModelSetupState(
     val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
     val progress: Float = 0f,
+    val voiceModelName: String? = null,
+    val llmModelName: String? = null,
     val bytesDownloaded: Long = 0L,
     val bytesTotal: Long = 0L,
+    val retryableFailure: Boolean = false,
     val failureReason: ModelSetupFailureReason? = null,
 )
 
