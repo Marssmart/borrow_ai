@@ -12,12 +12,13 @@ enum class ModelSetupPhase {
     FAILED,
 }
 
-/** Names are null until the device tier has been chosen. */
+/** Names are null until the device tier has been chosen. [failedDuring] keeps the step that failed visible. */
 data class ModelSetupState(
     val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
     val progress: Float = 0f,
     val voiceModelName: String? = null,
     val llmModelName: String? = null,
+    val failedDuring: ModelSetupPhase? = null,
 )
 
 interface ModelSetupService {

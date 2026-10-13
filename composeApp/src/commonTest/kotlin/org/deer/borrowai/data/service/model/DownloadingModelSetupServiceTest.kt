@@ -144,6 +144,7 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
     }

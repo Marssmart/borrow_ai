@@ -119,6 +119,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                         name = setupSteps.first(),
                         completed = animatedProgress >= 1f / ModelLoadingUiStateHolder.SETUP_STEP_COUNT,
                         active = isCurrentStep(uiState.phase, 0),
+                        labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, 0),
                     )
                     repeat(ModelLoadingUiStateHolder.SETUP_STEP_COUNT) { segment ->
                         ProgressLineSegment(
@@ -136,6 +137,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             name = setupSteps[nextStep],
                             completed = completed,
                             active = isCurrentStep(uiState.phase, nextStep),
+                            labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, nextStep),
                         )
                     }
                     if (uiState.phase == ModelSetupPhase.FAILED) {
@@ -184,6 +186,7 @@ private fun ModelBullet(
     name: String,
     completed: Boolean,
     active: Boolean,
+    labelVisible: Boolean,
 ) {
     val completionProgress by animateFloatAsState(
         targetValue = if (completed) 1f else 0f,
@@ -266,19 +269,38 @@ private fun ModelBullet(
         Text(
             text = name,
             modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
-            color = if (active || completed) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = when {
+                !labelVisible -> Color.Transparent
+                active || completed -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (active || completed) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }
 
+/** Index of the Ready row, the last row of the loader. */
+internal const val READY_STEP_INDEX = 4
+
+/**
+ * A label shows only once its step is completed or active; future steps keep a transparent label
+ * so it stays in the accessibility tree. Ready is always labeled. Visibility comes from the phase,
+ * not the animated progress.
+ */
+internal fun isStepLabelVisible(phase: ModelSetupPhase, failedDuring: ModelSetupPhase?, step: Int): Boolean {
+    if (step == READY_STEP_INDEX) return true
+    val effectivePhase = if (phase == ModelSetupPhase.FAILED) failedDuring ?: ModelSetupPhase.NOT_STARTED else phase
+    if (effectivePhase == ModelSetupPhase.READY) return true
+    val activeStep = activeStepIndex(effectivePhase) ?: return false
+    return step <= activeStep
+}
+
 private fun isCurrentStep(phase: ModelSetupPhase, step: Int): Boolean =
     activeStepIndex(phase) == step
 
 /** The loader row that is active for [phase], or null once every row has completed or the setup failed. */
-private fun activeStepIndex(phase: ModelSetupPhase): Int? =
+internal fun activeStepIndex(phase: ModelSetupPhase): Int? =
     when (phase) {
         ModelSetupPhase.NOT_STARTED,
         ModelSetupPhase.CHOOSING_MODEL -> 0

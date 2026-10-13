@@ -73,7 +73,10 @@ class DownloadingModelSetupService(
             throw error
         } catch (error: Exception) {
             models?.let(::discardPartials)
-            mutableState.value = mutableState.value.copy(phase = ModelSetupPhase.FAILED)
+            mutableState.value = mutableState.value.copy(
+                phase = ModelSetupPhase.FAILED,
+                failedDuring = mutableState.value.phase,
+            )
         }
     }
 

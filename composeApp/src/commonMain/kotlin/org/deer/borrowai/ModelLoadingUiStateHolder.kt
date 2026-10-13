@@ -17,6 +17,7 @@ internal class ModelLoadingUiStateHolder(
         val progress: Float = 0f,
         val voiceModelName: String? = null,
         val llmModelName: String? = null,
+        val failedDuring: ModelSetupPhase? = null,
     )
 
     private val mutableUiState = MutableStateFlow(modelSetupService.state.value.toUiState())
@@ -38,6 +39,7 @@ internal class ModelLoadingUiStateHolder(
         progress = progress,
         voiceModelName = voiceModelName,
         llmModelName = llmModelName,
+        failedDuring = failedDuring,
     )
 
     internal companion object {
