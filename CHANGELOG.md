@@ -5,8 +5,18 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 ## [1.0.5]
 
 - Removed the standalone model-loading route and moved setup status and progress onto the capture screen and recording button.
-- Simulated model selection, voice-model download and loading, and summarization-model download in the demo service so setup visuals are shown when the app launches.
-- Updated Android and iOS versioning to 1.0.5 (build 6). Model setup, recording, transcription, and summarization remain simulated.
+- Added RAM-based model tiers and real downloads for voice-to-text and summarization, with verified static model files and cached readiness.
+- Added resumable downloads, SHA-256 verification, model identity sidecars, WorkManager foreground downloads, retry and network handling, and numeric setup progress.
+- Added a one-download mobile-data override, while defaulting real Android downloads to unmetered Wi-Fi.
+- Persisted authenticated data-service variants and made the notification return to the saved variant.
+- The capture and memories pager remains available while setup runs; recording is disabled until models are ready.
+- Demo model setup simulates selection, voice-model download and loading, and summarization-model download on the capture screen.
+- Added a RAM-based model tier choice for voice-to-text and summarization: devices under 5 GiB get Whisper Tiny and Gemma 2B, 5 GiB to under 10 GiB get Whisper Base and Gemma 7B, and 10 GiB or more get Whisper Large v3 and Gemma 9B.
+- Added a real model download service that downloads the tier's models to static files under the app's models folder, verifies their sizes, and skips the download on later launches when the files are already present.
+- Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; `demo` is the debug default, and unknown or missing values fail fast.
+- Changed the loader to "Choosing correct model for your device", then "Downloading model {name}", "Loading model {name}", "Downloading model {name}", and "Ready". Step labels appear only once their step is completed or active.
+- Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
+- Updated Android and iOS versioning to 1.0.5 (build 6). Memories, media sessions, transcription, and summarization remain demo-only.
 
 ## [1.0.4]
 
