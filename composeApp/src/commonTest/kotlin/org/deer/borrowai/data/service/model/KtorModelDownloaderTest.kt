@@ -5,6 +5,7 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
 import okio.Path
@@ -16,6 +17,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class KtorModelDownloaderTest {
@@ -105,6 +107,10 @@ class KtorModelDownloaderTest {
                 respond(
                     content = body.copyOfRange(prefixLength, body.size),
                     status = HttpStatusCode.PartialContent,
+                    headers = headersOf(
+                        HttpHeaders.ContentRange,
+                        "bytes $prefixLength-${body.lastIndex}/${body.size}",
+                    ),
                 )
             },
         )
@@ -117,6 +123,46 @@ class KtorModelDownloaderTest {
         assertEquals(sha256Hex(body), digest)
         assertEquals(body.size.toLong(), progress.last())
         assertTrue(progress.first() > prefixLength)
+        client.close()
+    }
+
+    @Test
+    fun missingContentRangeRestartsFromZero() = runTest {
+        assertInvalidContentRangeRestarts(contentRange = null)
+    }
+
+    @Test
+    fun mismatchedContentRangeRestartsFromZero() = runTest {
+        assertInvalidContentRangeRestarts(contentRange = "bytes 79-199999/200000")
+    }
+
+    private suspend fun assertInvalidContentRangeRestarts(contentRange: String?) {
+        val fileSystem = FakeFileSystem()
+        val prefixLength = 80_000
+        fileSystem.writePartial(destination, body.copyOfRange(0, prefixLength))
+        var requests = 0
+        val client = HttpClient(
+            MockEngine { request ->
+                requests++
+                if (requests == 1) {
+                    respond(
+                        content = body.copyOfRange(prefixLength, body.size),
+                        status = HttpStatusCode.PartialContent,
+                        headers = contentRange?.let { headersOf(HttpHeaders.ContentRange, it) }
+                            ?: io.ktor.http.Headers.Empty,
+                    )
+                } else {
+                    assertNull(request.headers[HttpHeaders.Range])
+                    respond(content = body, status = HttpStatusCode.OK)
+                }
+            },
+        )
+
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) {}
+
+        assertEquals(2, requests)
+        assertContentEquals(body, fileSystem.readAll(destination))
+        assertEquals(sha256Hex(body), digest)
         client.close()
     }
 

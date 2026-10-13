@@ -46,37 +46,37 @@ class KtorModelDownloader(
     ): String {
         val existingBytes = fileSystem.metadataOrNull(destination)?.size ?: 0L
         return try {
-            client.prepareGet(url) {
-                if (existingBytes > 0L) header(HttpHeaders.Range, "bytes=$existingBytes-")
-            }.execute { response ->
-                if (response.status == HttpStatusCode.RequestedRangeNotSatisfiable && existingBytes > 0L) {
-                    try {
-                        fileSystem.delete(destination, mustExist = false)
-                    } catch (error: IOException) {
-                        throw ModelStorageException("Unable to discard the invalid partial model file.", error)
+            if (existingBytes <= 0L) {
+                downloadFromStart(url, destination, onProgress)
+            } else {
+                val resumedDigest = client.prepareGet(url) {
+                    header(HttpHeaders.Range, "bytes=$existingBytes-")
+                }.execute { response ->
+                    if (response.status == HttpStatusCode.RequestedRangeNotSatisfiable) {
+                        discardPartial(destination)
+                        throw ModelDownloadException(
+                            "The partial model file was invalid and will restart on the next attempt.",
+                        )
                     }
-                    throw ModelDownloadException("The partial model file was invalid and will restart on the next attempt.")
-                }
-                if (!response.status.isSuccess()) {
-                    val status = response.status.value
-                    throw ModelDownloadException(
-                        "Model download failed with HTTP $status.",
-                        retryable = status == HTTP_REQUEST_TIMEOUT ||
-                            status == HTTP_TOO_MANY_REQUESTS ||
-                            status in HTTP_SERVER_ERROR_RANGE,
-                    )
-                }
-                val resumed = existingBytes > 0L && response.status == HttpStatusCode.PartialContent
-                val base = if (resumed) existingBytes else 0L
-                if (resumed) {
-                    writeBody(response, destination, append = true, base = base, onProgress = onProgress)
-                    try {
-                        digestOf(destination)
-                    } catch (error: IOException) {
-                        throw ModelStorageException("Unable to verify the resumed model file.", error)
+                    ensureSuccessfulResponse(response)
+                    if (response.status == HttpStatusCode.PartialContent &&
+                        contentRangeStart(response.headers[HttpHeaders.ContentRange]) != existingBytes
+                    ) {
+                        null
+                    } else if (response.status == HttpStatusCode.PartialContent) {
+                        writeBody(response, destination, append = true, base = existingBytes, onProgress = onProgress)
+                        try {
+                            digestOf(destination)
+                        } catch (error: IOException) {
+                            throw ModelStorageException("Unable to verify the resumed model file.", error)
+                        }
+                    } else {
+                        writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
                     }
-                } else {
-                    writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+                }
+                resumedDigest ?: run {
+                    discardPartial(destination)
+                    downloadFromStart(url, destination, onProgress)
                 }
             }
         } catch (error: CancellationException) {
@@ -87,6 +87,39 @@ class KtorModelDownloader(
             throw error
         } catch (error: IOException) {
             throw ModelDownloadException("Model download was interrupted by a network I/O error.", retryable = true, cause = error)
+        }
+    }
+
+    private suspend fun downloadFromStart(
+        url: String,
+        destination: Path,
+        onProgress: (Long) -> Unit,
+    ): String = client.prepareGet(url).execute { response ->
+        ensureSuccessfulResponse(response)
+        writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+    }
+
+    private fun ensureSuccessfulResponse(response: HttpResponse) {
+        if (response.status.isSuccess()) return
+        val status = response.status.value
+        throw ModelDownloadException(
+            "Model download failed with HTTP $status.",
+            retryable = status == HTTP_REQUEST_TIMEOUT ||
+                status == HTTP_TOO_MANY_REQUESTS ||
+                status in HTTP_SERVER_ERROR_RANGE,
+        )
+    }
+
+    private fun contentRangeStart(value: String?): Long? {
+        val match = value?.let(CONTENT_RANGE_REGEX::matchEntire) ?: return null
+        return match.groupValues[1].toLongOrNull()
+    }
+
+    private fun discardPartial(destination: Path) {
+        try {
+            fileSystem.delete(destination, mustExist = false)
+        } catch (error: IOException) {
+            throw ModelStorageException("Unable to discard the invalid partial model file.", error)
         }
     }
 
@@ -151,5 +184,6 @@ class KtorModelDownloader(
         const val HTTP_REQUEST_TIMEOUT = 408
         const val HTTP_TOO_MANY_REQUESTS = 429
         val HTTP_SERVER_ERROR_RANGE = 500..599
+        val CONTENT_RANGE_REGEX = Regex("""bytes\s+(\d+)-\d+/(?:\d+|\*)""", RegexOption.IGNORE_CASE)
     }
 }
