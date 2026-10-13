@@ -5,7 +5,8 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 ## [1.0.5]
 
 - Added a RAM-based model tier choice for voice-to-text and summarization: devices under 5 GiB get Whisper Tiny and Gemma 2B, 5 GiB to under 10 GiB get Whisper Base and Gemma 7B, and 10 GiB or more get Whisper Large v3 and Gemma 9B.
-- Added a real model download service that downloads the tier's models to static files under the app's models folder, verifies their sizes, and skips the download on later launches when the files are already present.
+- Added a real model download service that downloads the tier's models from pinned Hugging Face revisions to static files under the app's models folder. Each file is checked against its size and SHA-256 before it is used, interrupted downloads resume with an HTTP Range request, and later launches skip files that are already present and verified.
+- On Android, model downloads run as WorkManager work in a dataSync foreground service with a progress notification, so they keep running when the screen is off. The notification permission is requested on Android 13 and later; denying it still lets the download run. iOS downloads are not background-capable in this release.
 - Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; `demo` is the debug default, and unknown or missing values fail fast.
 - Changed the loader to "Choosing correct model for your device", then "Downloading model {name}", "Loading model {name}", "Downloading model {name}", and "Ready". Step labels appear only once their step is completed or active.
 - Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".

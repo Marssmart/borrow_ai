@@ -37,6 +37,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.ktor.client.okhttp)
         }
 

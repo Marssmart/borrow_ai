@@ -1,6 +1,5 @@
 package org.deer.borrowai.data.app
 
-import io.ktor.client.HttpClient
 import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -14,11 +13,7 @@ import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
-import org.deer.borrowai.data.service.model.DownloadingModelSetupService
-import org.deer.borrowai.data.service.model.KtorModelDownloader
 import org.deer.borrowai.data.service.model.ModelCatalog
-import org.deer.borrowai.data.service.model.ModelFileStore
-import org.deer.borrowai.data.service.model.createPlatformModelHttpClient
 
 class AppServices private constructor(
     val variant: ServiceVariant,
@@ -26,7 +21,7 @@ class AppServices private constructor(
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
     private val graphJob: CompletableJob,
-    private val httpClient: HttpClient?,
+    private val onCloseModelSetup: () -> Unit,
 ) {
     private val closed = MutableStateFlow(false)
 
@@ -39,7 +34,7 @@ class AppServices private constructor(
             try {
                 graphJob.cancel()
             } finally {
-                httpClient?.close()
+                onCloseModelSetup()
             }
         }
     }
@@ -88,20 +83,14 @@ class AppServices private constructor(
                 ServiceMode.DEMO -> DemoMediaSessionService(memoryService = memories, scope = graphScope)
                 ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEDIA_SESSION)
             }
-            var httpClient: HttpClient? = null
+            var onCloseModelSetup: () -> Unit = {}
             val modelSetup = when (variant.modeOf(DataService.MODEL_SETUP)) {
                 ServiceMode.DEMO -> DemoModelSetupService(
                     models = ModelCatalog.modelsForRam(device.totalMemoryBytes),
                 )
-                ServiceMode.REAL -> {
-                    val client = createPlatformModelHttpClient()
-                    httpClient = client
-                    DownloadingModelSetupService(
-                        totalRamBytes = device.totalMemoryBytes,
-                        store = ModelFileStore(device.modelDirectory),
-                        downloader = KtorModelDownloader(client),
-                        scope = graphScope,
-                    )
+                ServiceMode.REAL -> device.createRealModelSetup(graphScope).let { real ->
+                    onCloseModelSetup = real.onClose
+                    real.service
                 }
             }
             return AppServices(
@@ -110,7 +99,7 @@ class AppServices private constructor(
                 memories = memories,
                 mediaSession = mediaSession,
                 graphJob = graphJob,
-                httpClient = httpClient,
+                onCloseModelSetup = onCloseModelSetup,
             )
         }
     }
