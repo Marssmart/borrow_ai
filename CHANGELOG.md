@@ -11,6 +11,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
 - Updated Android and iOS versioning to 1.0.5 (build 5). Memories, media sessions, transcription, and summarization remain demo-only.
 
+## [1.0.4]
+
+- Added a basic GitHub Actions Gradle job that runs Android unit tests and assembles the debug app.
+- Bumped Android and iOS app versions to 1.0.4 (build 5).
+
 ## [1.0.3]
 
 - Added model setup, memory CRUD, and media-session service contracts with in-memory demo providers and service tests.
