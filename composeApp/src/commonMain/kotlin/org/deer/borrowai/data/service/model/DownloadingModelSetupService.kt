@@ -86,10 +86,11 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(
                 phase = ModelSetupPhase.FAILED,
                 retryableFailure = (error as? ModelDownloadException)?.retryable == true,
-                failureReason = if ((error as? ModelDownloadException)?.retryable == true) {
-                    ModelSetupFailureReason.NETWORK
-                } else {
-                    ModelSetupFailureReason.MODEL
+                failureReason = when {
+                    (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
+                    error is ModelStorageException || error is kotlinx.io.IOException ->
+                        ModelSetupFailureReason.STORAGE
+                    else -> ModelSetupFailureReason.MODEL
                 },
             )
         }

@@ -16,6 +16,7 @@ import androidx.work.workDataOf
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupPhase
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
@@ -37,6 +38,7 @@ object ModelDownloadWork {
     const val KEY_BYTES_TOTAL = "bytesTotal"
     const val KEY_ANIMATE_TRANSITIONS = "animateTransitions"
     const val KEY_RETRYABLE_FAILURE = "retryableFailure"
+    const val KEY_FAILURE_REASON = "failureReason"
 }
 
 /**
@@ -107,13 +109,15 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
     ModelDownloadWork.KEY_BYTES_TOTAL to bytesTotal,
     ModelDownloadWork.KEY_ANIMATE_TRANSITIONS to animateTransitions,
     ModelDownloadWork.KEY_RETRYABLE_FAILURE to retryableFailure,
+    ModelDownloadWork.KEY_FAILURE_REASON to failureReason?.name.orEmpty(),
 )
 
 /** Maps a unique-work record to the loader state. Finished work reports its output; running work reports progress. */
 fun WorkInfo.toModelSetupState(): ModelSetupState {
     val data = if (state.isFinished) outputData else progress
     return when (state) {
-        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ModelSetupState()
+        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
+            ModelSetupState(phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK)
         WorkInfo.State.RUNNING -> data.toModelSetupState(defaultPhase = ModelSetupPhase.NOT_STARTED)
         WorkInfo.State.SUCCEEDED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.READY)
             .copy(animateTransitions = false)
@@ -138,6 +142,8 @@ private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupSta
             phase != ModelSetupPhase.READY,
         ),
         retryableFailure = getBoolean(ModelDownloadWork.KEY_RETRYABLE_FAILURE, false),
+        failureReason = getString(ModelDownloadWork.KEY_FAILURE_REASON)
+            ?.let { name -> ModelSetupFailureReason.entries.firstOrNull { it.name == name } },
         failedDuring = getString(ModelDownloadWork.KEY_FAILED_DURING)
             ?.let { name -> ModelSetupPhase.entries.firstOrNull { it.name == name } },
     )
@@ -158,7 +164,9 @@ private fun foregroundInfo(context: Context, state: ModelSetupState): Foreground
 
 private fun notification(context: Context, state: ModelSetupState): Notification {
     val percent = (state.progress * 100).toInt().coerceIn(0, 100)
-    val indeterminate = state.phase == ModelSetupPhase.CHOOSING_MODEL || state.phase == ModelSetupPhase.NOT_STARTED
+    val indeterminate = state.phase == ModelSetupPhase.CHOOSING_MODEL ||
+        state.phase == ModelSetupPhase.NOT_STARTED ||
+        state.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
     return NotificationCompat.Builder(context, ModelDownloadWork.NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_download)
         .setContentTitle(context.getString(R.string.notification_model_download_title))
@@ -173,6 +181,7 @@ private fun notification(context: Context, state: ModelSetupState): Notification
 private fun phaseLabelRes(phase: ModelSetupPhase): Int = when (phase) {
     ModelSetupPhase.NOT_STARTED,
     ModelSetupPhase.CHOOSING_MODEL -> R.string.notification_model_choosing
+    ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK -> R.string.notification_model_waiting_for_wifi
     ModelSetupPhase.DOWNLOADING_VOICE -> R.string.notification_model_downloading_voice
     ModelSetupPhase.LOADING_VOICE -> R.string.notification_model_checking_voice
     ModelSetupPhase.DOWNLOADING_LLM -> R.string.notification_model_downloading_llm
