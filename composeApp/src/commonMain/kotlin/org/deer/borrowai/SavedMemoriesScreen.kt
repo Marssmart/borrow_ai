@@ -82,6 +82,7 @@ import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_original
 import borrowai.composeapp.generated.resources.memory_stop_summary
 import borrowai.composeapp.generated.resources.memory_summary
+import borrowai.composeapp.generated.resources.memory_summary_audio_playing
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -295,7 +296,7 @@ private fun MemoryCard(
             verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_SPACING),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AudioGlyph(playing = playingContent == PlaybackContent.TRANSCRIPTION)
+                AudioGlyph(playingContent = playingContent)
                 Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_CARD_GLYPH_SPACING))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -580,9 +581,13 @@ private fun AudioPlaybackButtons(
 }
 
 @Composable
-private fun AudioGlyph(playing: Boolean) {
+private fun AudioGlyph(playingContent: PlaybackContent?) {
     val description = stringResource(
-        if (playing) Res.string.memory_audio_playing else Res.string.memory_audio_not_playing,
+        when (playingContent) {
+            PlaybackContent.TRANSCRIPTION -> Res.string.memory_audio_playing
+            PlaybackContent.SUMMARY -> Res.string.memory_summary_audio_playing
+            null -> Res.string.memory_audio_not_playing
+        },
     )
     Box(
         modifier = Modifier.size(SavedMemoriesStateHolder.MEMORY_AUDIO_GLYPH_SIZE).clip(CircleShape)
@@ -593,7 +598,7 @@ private fun AudioGlyph(playing: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (playing) "Ⅱ" else "▶",
+            if (playingContent != null) "Ⅱ" else "▶",
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,

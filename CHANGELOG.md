@@ -10,6 +10,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added explicit demo startup wiring for Android and iOS, including a demo default for Android debug builds launched from the home screen. Real mode remains fail-fast.
 - Added recording/playback exclusivity and confirmation when playback replaces a recording.
 - Retained the service graph across Android configuration changes and the iOS controller lifetime; closed background work with its owner and guarded restarted sessions from stale updates.
+- Made the memory audio glyph and accessibility description reflect active transcription or summary playback.
 - Updated Android and iOS versioning to 1.0.3 (build 4). Transcription, summarization, and persistent storage remain demo-only; production ML and ObjectBox providers are not implemented.
 
 ## [1.0.2]
