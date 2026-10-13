@@ -17,6 +17,7 @@
     <string name="capture_model_progress_summarization">Summarization %1$s / %2$s MB</string>
     <string name="capture_model_waiting_for_unmetered_network">Waiting for unmetered Wi-Fi</string>
     <string name="capture_model_waiting_for_network">Waiting for network</string>
+    <string name="capture_model_waiting_for_retry">Retrying model download</string>
     <string name="capture_download_over_mobile_data">Download over mobile data</string>
     <string name="capture_model_failed_network">Download failed. Check Wi-Fi, then relaunch to retry.</string>
     <string name="capture_model_failed_storage">Check device storage, then relaunch BorrowAI.</string>
