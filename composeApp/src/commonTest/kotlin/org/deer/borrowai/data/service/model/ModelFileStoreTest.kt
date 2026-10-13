@@ -83,6 +83,53 @@ class ModelFileStoreTest {
     }
 
     @Test
+    fun matchingPartialIdentityPreservesTheResumePrefix() {
+        val fileSystem = FakeFileSystem()
+        val store = ModelFileStore(directory, fileSystem)
+        store.prepareDirectory()
+        store.preparePartial(model)
+        writeFile(fileSystem, store.partialPath(model), contents.copyOfRange(0, 512))
+
+        store.preparePartial(model)
+
+        assertEquals(512L, fileSystem.metadataOrNull(store.partialPath(model))?.size)
+    }
+
+    @Test
+    fun partialFromDifferentRevisionIsDiscardedAndIdentityIsUpdated() {
+        val fileSystem = FakeFileSystem()
+        val store = ModelFileStore(directory, fileSystem)
+        store.prepareDirectory()
+        val priorModel = model.copy(
+            downloadUrl = "https://example.test/old-voice.bin",
+            revision = "old-revision",
+        )
+        store.preparePartial(priorModel)
+        writeFile(fileSystem, store.partialPath(priorModel), contents.copyOfRange(0, 512))
+
+        store.preparePartial(model)
+
+        assertFalse(fileSystem.exists(store.partialPath(model)))
+        assertEquals(
+            "1\n${model.downloadUrl}\n${model.revision}\n${model.sizeBytes}\n${model.sha256}\n",
+            readText(fileSystem, store.partialIdentityPath(model)),
+        )
+    }
+
+    @Test
+    fun unidentifiedLegacyPartialIsDiscardedBeforeResume() {
+        val fileSystem = FakeFileSystem()
+        val store = ModelFileStore(directory, fileSystem)
+        fileSystem.createDirectories(directory)
+        writeFile(fileSystem, store.partialPath(model), contents.copyOfRange(0, 512))
+
+        store.preparePartial(model)
+
+        assertFalse(fileSystem.exists(store.partialPath(model)))
+        assertTrue(fileSystem.exists(store.partialIdentityPath(model)))
+    }
+
+    @Test
     fun staleRecordDoesNotTrustCorruptedFile() {
         val fileSystem = FakeFileSystem()
         val store = ModelFileStore(directory, fileSystem)

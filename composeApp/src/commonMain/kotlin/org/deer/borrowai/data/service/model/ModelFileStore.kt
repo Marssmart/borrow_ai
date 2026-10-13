@@ -17,6 +17,9 @@ class ModelFileStore(
 
     fun partialPath(spec: ModelSpec): Path = modelDirectory / (spec.fileName + PARTIAL_SUFFIX)
 
+    fun partialIdentityPath(spec: ModelSpec): Path =
+        modelDirectory / (spec.fileName + PARTIAL_IDENTITY_SUFFIX)
+
     fun verifiedRecordPath(spec: ModelSpec): Path = modelDirectory / (spec.fileName + VERIFIED_SUFFIX)
 
     /**
@@ -49,6 +52,22 @@ class ModelFileStore(
 
     fun discardPartial(spec: ModelSpec) {
         fileSystem.delete(partialPath(spec), mustExist = false)
+        fileSystem.delete(partialIdentityPath(spec), mustExist = false)
+        fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
+    }
+
+    /**
+     * Persists which catalog model owns the static partial path. An unidentified or differently identified partial
+     * is discarded before it can be resumed or committed.
+     */
+    fun preparePartial(spec: ModelSpec) {
+        val expected = PartialIdentity.from(spec)
+        val partialExists = fileSystem.metadataOrNull(partialPath(spec)) != null
+        val recorded = readPartialIdentity(spec)
+        if (partialExists && recorded != expected) {
+            fileSystem.delete(partialPath(spec), mustExist = false)
+        }
+        if (recorded != expected) writePartialIdentity(spec, expected)
     }
 
     /**
@@ -61,6 +80,7 @@ class ModelFileStore(
         val digest = digestFile(partialPath)
         if (digest != spec.sha256) {
             discardPartial(spec)
+            writePartialIdentity(spec, PartialIdentity.from(spec))
             return false
         }
         commit(spec, digest)
@@ -73,8 +93,11 @@ class ModelFileStore(
      */
     fun commit(spec: ModelSpec, downloadedSha256: String) {
         val partialSize = fileSystem.metadataOrNull(partialPath(spec))?.size
-        check(partialSize == spec.sizeBytes) {
-            "The ${spec.displayName} download is incomplete: $partialSize of ${spec.sizeBytes} bytes."
+        if (partialSize != spec.sizeBytes) {
+            throw ModelDownloadException(
+                "The ${spec.displayName} download was interrupted: $partialSize of ${spec.sizeBytes} bytes received.",
+                retryable = true,
+            )
         }
         if (downloadedSha256 != spec.sha256) {
             discardPartial(spec)
@@ -82,6 +105,8 @@ class ModelFileStore(
         }
         fileSystem.delete(finalPath(spec), mustExist = false)
         fileSystem.atomicMove(partialPath(spec), finalPath(spec))
+        fileSystem.delete(partialIdentityPath(spec), mustExist = false)
+        fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
         val lastModifiedAtMillis = fileSystem.metadataOrNull(finalPath(spec))?.lastModifiedAtMillis
         writeVerificationRecord(spec, lastModifiedAtMillis)
     }
@@ -111,6 +136,48 @@ class ModelFileStore(
         }
     }
 
+    private fun readPartialIdentity(spec: ModelSpec): PartialIdentity? {
+        val identityPath = partialIdentityPath(spec)
+        if (fileSystem.metadataOrNull(identityPath) == null) return null
+        val source = fileSystem.source(identityPath).buffer()
+        try {
+            val fields = source.readUtf8().trimEnd('\n').split('\n')
+            if (fields.size != PARTIAL_IDENTITY_FIELD_COUNT || fields[0] != PARTIAL_IDENTITY_VERSION) {
+                return null
+            }
+            val sizeBytes = fields[3].toLongOrNull() ?: return null
+            if (!DIGEST_PATTERN.matches(fields[4])) return null
+            return PartialIdentity(
+                downloadUrl = fields[1],
+                revision = fields[2],
+                sizeBytes = sizeBytes,
+                sha256 = fields[4],
+            )
+        } finally {
+            source.close()
+        }
+    }
+
+    private fun writePartialIdentity(spec: ModelSpec, identity: PartialIdentity) {
+        val identityPath = partialIdentityPath(spec)
+        val temporaryPath = partialIdentityTempPath(spec)
+        fileSystem.delete(temporaryPath, mustExist = false)
+        val sink = fileSystem.sink(temporaryPath).buffer()
+        try {
+            sink.writeUtf8(
+                "$PARTIAL_IDENTITY_VERSION\n${identity.downloadUrl}\n${identity.revision}\n" +
+                    "${identity.sizeBytes}\n${identity.sha256}\n",
+            )
+        } finally {
+            sink.close()
+        }
+        fileSystem.delete(identityPath, mustExist = false)
+        fileSystem.atomicMove(temporaryPath, identityPath)
+    }
+
+    private fun partialIdentityTempPath(spec: ModelSpec): Path =
+        modelDirectory / (spec.fileName + PARTIAL_IDENTITY_TEMP_SUFFIX)
+
     private fun writeVerificationRecord(spec: ModelSpec, lastModifiedAtMillis: Long?) {
         if (lastModifiedAtMillis == null) {
             fileSystem.delete(verifiedRecordPath(spec), mustExist = false)
@@ -137,12 +204,32 @@ class ModelFileStore(
         val sha256: String,
     )
 
+    private data class PartialIdentity(
+        val downloadUrl: String,
+        val revision: String,
+        val sizeBytes: Long,
+        val sha256: String,
+    ) {
+        companion object {
+            fun from(spec: ModelSpec) = PartialIdentity(
+                downloadUrl = spec.downloadUrl,
+                revision = spec.revision,
+                sizeBytes = spec.sizeBytes,
+                sha256 = spec.sha256,
+            )
+        }
+    }
+
     private companion object {
         const val PARTIAL_SUFFIX = ".part"
+        const val PARTIAL_IDENTITY_SUFFIX = ".part.identity"
+        const val PARTIAL_IDENTITY_TEMP_SUFFIX = ".part.identity.tmp"
         const val VERIFIED_SUFFIX = ".verified"
         const val VERIFIED_TEMP_SUFFIX = ".verified.tmp"
         const val RECORD_VERSION = "1"
         const val RECORD_FIELD_COUNT = 4
+        const val PARTIAL_IDENTITY_VERSION = "1"
+        const val PARTIAL_IDENTITY_FIELD_COUNT = 5
         val DIGEST_PATTERN = Regex("[0-9a-f]{64}")
     }
 }
