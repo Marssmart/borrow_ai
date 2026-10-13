@@ -11,5 +11,5 @@ class AndroidDeviceEnvironment(context: Context) : DeviceEnvironment {
         (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(info)
     }.totalMem
 
-    override val modelDirectory: Path = modelDirectoryUnder(context.filesDir.absolutePath)
+    override val modelDirectory: Path = modelDirectoryUnder(context.noBackupFilesDir.absolutePath)
 }
