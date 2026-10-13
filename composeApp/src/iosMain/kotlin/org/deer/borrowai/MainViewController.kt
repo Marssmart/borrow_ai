@@ -8,9 +8,9 @@ import platform.Foundation.NSDate
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIViewController
 
-fun MainViewController(startupModeFlag: String?): UIViewController {
-    val services = AppServices.createFromStartupFlag(
-        startupModeFlag = startupModeFlag,
+fun MainViewController(serviceVariantId: String?): UIViewController {
+    val services = AppServices.createFromServiceVariant(
+        serviceVariantId = serviceVariantId,
         epochClock = EpochClock {
             (NSDate().timeIntervalSince1970 * MILLIS_PER_SECOND).toLong()
         },

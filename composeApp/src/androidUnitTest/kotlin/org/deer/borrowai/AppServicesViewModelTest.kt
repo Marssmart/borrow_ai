@@ -14,7 +14,7 @@ class AppServicesViewModelTest {
     fun serviceGraphSurvivesProviderRecreationAndClosesWithItsStore() {
         val store = ViewModelStore()
         val factory = AppServicesViewModelFactory(
-            startupModeFlag = "demo",
+            serviceVariantId = "demo",
             epochClock = EpochClock { 1_800_000_000_000L },
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)

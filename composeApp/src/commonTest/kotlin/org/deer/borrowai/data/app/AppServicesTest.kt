@@ -17,34 +17,35 @@ import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 
 class AppServicesTest {
     @Test
-    fun startupFlagSelectsDemoOnlyForDemo() {
-        assertEquals(AppMode.DEMO, AppMode.fromStartupFlag(" demo "))
-        assertEquals(AppMode.REAL, AppMode.fromStartupFlag(null))
-        assertEquals(AppMode.REAL, AppMode.fromStartupFlag("invalid"))
-        assertEquals(AppMode.REAL, AppMode.fromStartupFlag("real"))
+    fun demoVariantBuildsEveryServiceAsDemo() {
+        val services = AppServices.createFromServiceVariant("demo", EpochClock { 1_800_000_000_000L })
 
-        val services = AppServices.createFromStartupFlag("demo", EpochClock { 1_800_000_000_000L })
-        assertEquals(AppMode.DEMO, services.mode)
+        assertEquals(ServiceVariants.DEMO, services.variant)
+        assertEquals(true, services.variant.hasDemoServices)
         assertNotNull(services.modelSetup as? DemoModelSetupService)
         assertNotNull(services.memories as? InMemoryDemoMemoryService)
         assertNotNull(services.mediaSession as? DemoMediaSessionService)
+        services.close()
     }
 
     @Test
-    fun realModeFailsInsteadOfFallingBackToDemo() {
-        assertFailsWith<RealServicesUnavailableException> {
-            AppServices.createFromStartupFlag("real", EpochClock { 1_800_000_000_000L })
+    fun unknownOrMissingVariantFailsFast() {
+        assertFailsWith<UnknownServiceVariantException> {
+            AppServices.createFromServiceVariant("real", EpochClock { 1_800_000_000_000L })
         }
-        assertFailsWith<RealServicesUnavailableException> {
-            AppServices.createFromStartupFlag(null, EpochClock { 1_800_000_000_000L })
+        assertFailsWith<UnknownServiceVariantException> {
+            AppServices.createFromServiceVariant("", EpochClock { 1_800_000_000_000L })
+        }
+        assertFailsWith<UnknownServiceVariantException> {
+            AppServices.createFromServiceVariant(null, EpochClock { 1_800_000_000_000L })
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun closingServiceGraphCancelsMediaSessionWork() = runTest {
-        val services = AppServices.createFromStartupFlag(
-            startupModeFlag = "demo",
+        val services = AppServices.createFromServiceVariant(
+            serviceVariantId = "demo",
             epochClock = EpochClock { 1_800_000_000_000L },
             dispatcher = StandardTestDispatcher(testScheduler),
         )
