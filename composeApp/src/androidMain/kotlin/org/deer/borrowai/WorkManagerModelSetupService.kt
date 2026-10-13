@@ -79,15 +79,8 @@ class WorkManagerModelSetupService(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            mutableState.value = ModelSetupState(
-                phase = ModelSetupPhase.FAILED,
-                failureReason = when {
-                    error is ModelStorageException || error is IOException -> ModelSetupFailureReason.STORAGE
-                    (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
-                    else -> ModelSetupFailureReason.MODEL
-                },
-                retryableFailure = (error as? ModelDownloadException)?.retryable == true,
-            )
+            error.cancellationCause()?.let { throw it }
+            publishFailure(error)
             return
         }
         if (modelsPresent) {
@@ -102,34 +95,41 @@ class WorkManagerModelSetupService(
         }
         if (state.value.phase == ModelSetupPhase.FAILED) mutableState.value = ModelSetupState()
 
-        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(
-                        if (allowMetered) NetworkType.CONNECTED else NetworkType.UNMETERED,
-                    )
-                    .build(),
+        try {
+            val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(
+                            if (allowMetered) NetworkType.CONNECTED else NetworkType.UNMETERED,
+                        )
+                        .build(),
+                )
+                .apply {
+                    if (allowMetered) addTag(ModelDownloadWork.METERED_OVERRIDE_TAG)
+                }
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+            val operation = workManager.enqueueUniqueWork(
+                ModelDownloadWork.UNIQUE_WORK_NAME,
+                if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+                request,
             )
-            .apply {
-                if (allowMetered) addTag(ModelDownloadWork.METERED_OVERRIDE_TAG)
+            val infos = withContext(Dispatchers.IO) {
+                operation.result.get()
+                workManager.getWorkInfosForUniqueWork(ModelDownloadWork.UNIQUE_WORK_NAME).get()
             }
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .build()
-        val operation = workManager.enqueueUniqueWork(
-            ModelDownloadWork.UNIQUE_WORK_NAME,
-            if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
-            request,
-        )
-        val infos = withContext(Dispatchers.IO) {
-            operation.result.get()
-            workManager.getWorkInfosForUniqueWork(ModelDownloadWork.UNIQUE_WORK_NAME).get()
+            val retained = infos.firstOrNull { it.id == request.id }
+                ?: infos.firstOrNull { !it.state.isFinished }
+                ?: infos.lastOrNull()
+                ?: error("WorkManager did not retain model download work.")
+            trackedWorkId = retained.id
+            publish(infos)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            error.cancellationCause()?.let { throw it }
+            publishFailure(error, models, fallbackReason = ModelSetupFailureReason.STORAGE)
         }
-        val retained = infos.firstOrNull { it.id == request.id }
-            ?: infos.firstOrNull { !it.state.isFinished }
-            ?: infos.lastOrNull()
-            ?: error("WorkManager did not retain model download work.")
-        trackedWorkId = retained.id
-        publish(infos)
     }
 
     /**
@@ -148,5 +148,41 @@ class WorkManagerModelSetupService(
             trackedWorkId = active.id
             mutableState.value = active.toModelSetupState()
         }
+    }
+
+    private fun publishFailure(
+        error: Throwable,
+        models: TierModels? = null,
+        fallbackReason: ModelSetupFailureReason? = null,
+    ) {
+        val cause = error.rootCause()
+        val downloadError = cause as? ModelDownloadException
+        mutableState.value = ModelSetupState(
+            phase = ModelSetupPhase.FAILED,
+            voiceModelName = models?.voice?.displayName,
+            llmModelName = models?.llm?.displayName,
+            failureReason = when {
+                cause is ModelStorageException || cause is IOException -> ModelSetupFailureReason.STORAGE
+                downloadError?.retryable == true -> ModelSetupFailureReason.NETWORK
+                fallbackReason != null -> fallbackReason
+                else -> ModelSetupFailureReason.MODEL
+            },
+            retryableFailure = downloadError?.retryable == true,
+        )
+    }
+
+    private fun Throwable.rootCause(): Throwable {
+        var cause = this
+        while (cause.cause != null && cause.cause !== cause) cause = cause.cause!!
+        return cause
+    }
+
+    private fun Throwable.cancellationCause(): CancellationException? {
+        var cause: Throwable? = this
+        while (cause != null) {
+            if (cause is CancellationException) return cause
+            cause = cause.cause?.takeUnless { it === cause }
+        }
+        return null
     }
 }
