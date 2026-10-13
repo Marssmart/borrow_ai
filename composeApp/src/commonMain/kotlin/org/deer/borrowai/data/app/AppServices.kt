@@ -15,7 +15,7 @@ import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 
 class AppServices private constructor(
-    val mode: AppMode,
+    val variant: ServiceVariant,
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
@@ -34,44 +34,62 @@ class AppServices private constructor(
     }
 
     companion object {
-        fun createFromStartupFlag(
-            startupModeFlag: String?,
+        fun createFromServiceVariant(
+            serviceVariantId: String?,
             epochClock: EpochClock,
-        ): AppServices = createFromStartupFlag(
-            startupModeFlag = startupModeFlag,
+        ): AppServices = createFromServiceVariant(
+            serviceVariantId = serviceVariantId,
             epochClock = epochClock,
             dispatcher = Dispatchers.Default,
         )
 
-        internal fun createFromStartupFlag(
-            startupModeFlag: String?,
+        internal fun createFromServiceVariant(
+            serviceVariantId: String?,
             epochClock: EpochClock,
             dispatcher: CoroutineDispatcher,
         ): AppServices {
-            val mode = AppMode.fromStartupFlag(startupModeFlag)
-            return when (mode) {
-                AppMode.DEMO -> {
-                    val graphJob = SupervisorJob()
-                    val graphScope = CoroutineScope(graphJob + dispatcher)
-                    val memories = InMemoryDemoMemoryService(epochClock = epochClock)
-                    AppServices(
-                        mode = mode,
-                        modelSetup = DemoModelSetupService(),
-                        memories = memories,
-                        mediaSession = DemoMediaSessionService(
-                            memoryService = memories,
-                            scope = graphScope,
-                        ),
-                        graphJob = graphJob,
-                    )
-                }
-
-                AppMode.REAL -> throw RealServicesUnavailableException()
+            val variant = ServiceVariants.fromId(serviceVariantId)
+            val graphJob = SupervisorJob()
+            val graphScope = CoroutineScope(graphJob + dispatcher)
+            return try {
+                buildGraph(variant, epochClock, graphScope, graphJob)
+            } catch (error: Throwable) {
+                graphJob.cancel()
+                throw error
             }
+        }
+
+        private fun buildGraph(
+            variant: ServiceVariant,
+            epochClock: EpochClock,
+            graphScope: CoroutineScope,
+            graphJob: CompletableJob,
+        ): AppServices {
+            val memories = when (variant.modeOf(DataService.MEMORIES)) {
+                ServiceMode.DEMO -> InMemoryDemoMemoryService(epochClock = epochClock)
+                ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEMORIES)
+            }
+            val mediaSession = when (variant.modeOf(DataService.MEDIA_SESSION)) {
+                ServiceMode.DEMO -> DemoMediaSessionService(memoryService = memories, scope = graphScope)
+                ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEDIA_SESSION)
+            }
+            val modelSetup = when (variant.modeOf(DataService.MODEL_SETUP)) {
+                ServiceMode.DEMO -> DemoModelSetupService()
+                ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MODEL_SETUP)
+            }
+            return AppServices(
+                variant = variant,
+                modelSetup = modelSetup,
+                memories = memories,
+                mediaSession = mediaSession,
+                graphJob = graphJob,
+            )
         }
     }
 }
 
-class RealServicesUnavailableException : IllegalStateException(
-    "Real mode was requested, but production data services have not been implemented.",
+class RealServicesUnavailableException(
+    service: DataService,
+) : IllegalStateException(
+    "Real mode was requested for ${service.name}, but its production data service has not been implemented.",
 )

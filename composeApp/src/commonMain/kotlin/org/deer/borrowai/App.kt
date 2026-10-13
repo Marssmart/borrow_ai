@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.service.ModelSetupPhase
 import borrowai.composeapp.generated.resources.Res
@@ -161,7 +160,7 @@ fun App(services: AppServices) {
                         }
                     }
                 }
-                if (services.mode == AppMode.DEMO) {
+                if (services.variant.hasDemoServices) {
                     DemoDataBadge(
                         modifier = Modifier.align(
                             if (appUiState.isMemoryDetailVisible) Alignment.TopCenter else Alignment.TopEnd,

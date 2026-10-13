@@ -15,7 +15,7 @@ internal class AppServicesViewModel(
 }
 
 internal class AppServicesViewModelFactory(
-    private val startupModeFlag: String?,
+    private val serviceVariantId: String?,
     private val epochClock: EpochClock,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -24,8 +24,8 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
-                AppServices.createFromStartupFlag(
-                    startupModeFlag = startupModeFlag,
+                AppServices.createFromServiceVariant(
+                    serviceVariantId = serviceVariantId,
                     epochClock = epochClock,
                 ),
             ),
