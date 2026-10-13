@@ -35,16 +35,17 @@ class ModelFileStore(
     }
 
     /**
-     * Moves the verified partial file into the static name. The digest is the one computed while the
-     * partial file was written; the file is renamed only when size and digest both match.
+     * Moves the partial file into the static name once its size and digest match. A short partial file is kept so
+     * the next attempt can resume it; a full-size file with the wrong digest is discarded.
      */
     fun commit(spec: ModelSpec, downloadedSha256: String) {
         val partialSize = fileSystem.metadataOrNull(partialPath(spec))?.size
         check(partialSize == spec.sizeBytes) {
             "The ${spec.displayName} download is incomplete: $partialSize of ${spec.sizeBytes} bytes."
         }
-        check(downloadedSha256 == spec.sha256) {
-            "The ${spec.displayName} download failed checksum verification."
+        if (downloadedSha256 != spec.sha256) {
+            discardPartial(spec)
+            error("The ${spec.displayName} download failed checksum verification.")
         }
         fileSystem.delete(finalPath(spec), mustExist = false)
         fileSystem.atomicMove(partialPath(spec), finalPath(spec))
