@@ -54,24 +54,23 @@ class KtorModelDownloader(
                 }.execute { response ->
                     if (response.status == HttpStatusCode.RequestedRangeNotSatisfiable) {
                         discardPartial(destination)
-                        throw ModelDownloadException(
-                            "The partial model file was invalid and will restart on the next attempt.",
-                        )
-                    }
-                    ensureSuccessfulResponse(response)
-                    if (response.status == HttpStatusCode.PartialContent &&
-                        contentRangeStart(response.headers[HttpHeaders.ContentRange]) != existingBytes
-                    ) {
                         null
-                    } else if (response.status == HttpStatusCode.PartialContent) {
-                        writeBody(response, destination, append = true, base = existingBytes, onProgress = onProgress)
-                        try {
-                            digestOf(destination)
-                        } catch (error: IOException) {
-                            throw ModelStorageException("Unable to verify the resumed model file.", error)
-                        }
                     } else {
-                        writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+                        ensureSuccessfulResponse(response)
+                        if (response.status == HttpStatusCode.PartialContent &&
+                            contentRangeStart(response.headers[HttpHeaders.ContentRange]) != existingBytes
+                        ) {
+                            null
+                        } else if (response.status == HttpStatusCode.PartialContent) {
+                            writeBody(response, destination, append = true, base = existingBytes, onProgress = onProgress)
+                            try {
+                                digestOf(destination)
+                            } catch (error: IOException) {
+                                throw ModelStorageException("Unable to verify the resumed model file.", error)
+                            }
+                        } else {
+                            writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+                        }
                     }
                 }
                 resumedDigest ?: run {

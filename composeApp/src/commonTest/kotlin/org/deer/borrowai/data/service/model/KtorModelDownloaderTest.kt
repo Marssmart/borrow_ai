@@ -180,16 +180,27 @@ class KtorModelDownloaderTest {
     }
 
     @Test
-    fun unsatisfiableRangeDiscardsThePartialFileAndFails() = runTest {
+    fun unsatisfiableRangeDiscardsPartialAndImmediatelyRestartsFromZero() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.writePartial(destination, body.copyOfRange(0, 1_000))
-        val client = HttpClient(MockEngine { respond(content = "", status = HttpStatusCode.RequestedRangeNotSatisfiable) })
+        var requests = 0
+        val client = HttpClient(
+            MockEngine { request ->
+                requests++
+                if (requests == 1) {
+                    respond(content = "", status = HttpStatusCode.RequestedRangeNotSatisfiable)
+                } else {
+                    assertNull(request.headers[HttpHeaders.Range])
+                    respond(content = body, status = HttpStatusCode.OK)
+                }
+            },
+        )
 
-        assertFailsWith<ModelDownloadException> {
-            KtorModelDownloader(client, fileSystem).download(url, destination) {}
-        }
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) {}
 
-        assertFalse(fileSystem.exists(destination))
+        assertEquals(2, requests)
+        assertContentEquals(body, fileSystem.readAll(destination))
+        assertEquals(sha256Hex(body), digest)
         client.close()
     }
 }

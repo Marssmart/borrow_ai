@@ -178,6 +178,7 @@ class DownloadingModelSetupServiceTest {
     fun interruptedPartialFileIsContinuedByTheDownloader() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
+        store(fileSystem).preparePartial(voice)
         writeText(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), "partial")
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
 
@@ -191,6 +192,7 @@ class DownloadingModelSetupServiceTest {
     fun fullSizePartialWithValidDigestIsCommittedWithoutRangeRequest() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
+        store(fileSystem).preparePartial(voice)
         writeBytes(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), ByteArray(voice.sizeBytes.toInt()))
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope)
@@ -277,7 +279,8 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.MODEL, setup.state.value.failureReason)
+        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
+        assertTrue(setup.state.value.retryableFailure)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
     }

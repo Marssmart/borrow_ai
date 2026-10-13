@@ -128,6 +128,7 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return false
         }
+        store.preparePartial(spec)
         if (store.commitCompletePartial(spec)) {
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return false
