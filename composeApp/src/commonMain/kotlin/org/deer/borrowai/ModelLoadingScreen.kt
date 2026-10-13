@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -36,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupService
@@ -123,12 +123,12 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                         completed = animatedProgress >= 1f / ModelLoadingUiStateHolder.SETUP_STEP_COUNT,
                         active = isCurrentStep(uiState.phase, 0),
                         labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, 0),
-                        trailingText = null,
                     )
                     repeat(ModelLoadingUiStateHolder.SETUP_STEP_COUNT) { segment ->
                         ProgressLineSegment(
                             progress = (animatedProgress * ModelLoadingUiStateHolder.SETUP_STEP_COUNT - segment)
                                 .coerceIn(0f, 1f),
+                            centerText = downloadProgressText(uiState, segment),
                         )
                         val nextStep = segment + 1
                         val completed = if (nextStep < ModelLoadingUiStateHolder.SETUP_STEP_COUNT) {
@@ -142,7 +142,6 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             completed = completed,
                             active = isCurrentStep(uiState.phase, nextStep),
                             labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, nextStep),
-                            trailingText = downloadProgressText(uiState, nextStep),
                         )
                     }
                     if (uiState.phase == ModelSetupPhase.FAILED) {
@@ -160,13 +159,17 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
 }
 
 @Composable
-private fun ProgressLineSegment(progress: Float) {
+private fun ProgressLineSegment(progress: Float, centerText: String?) {
     val trackColor = MaterialTheme.colorScheme.outline
     val progressColor = MaterialTheme.colorScheme.primary
-    Canvas(
-        modifier = Modifier.width(ModelLoadingUiStateHolder.BULLET_SIZE)
-            .height(ModelLoadingUiStateHolder.CONNECTOR_HEIGHT),
+    Box(
+        modifier = Modifier.fillMaxWidth().height(ModelLoadingUiStateHolder.CONNECTOR_HEIGHT),
     ) {
+        Canvas(
+            modifier = Modifier.align(Alignment.CenterStart)
+                .width(ModelLoadingUiStateHolder.BULLET_SIZE)
+                .fillMaxHeight(),
+        ) {
         val x = size.width / 2
         val strokeWidth = ModelLoadingUiStateHolder.CONNECTOR_WIDTH.toPx()
         drawLine(
@@ -183,6 +186,17 @@ private fun ProgressLineSegment(progress: Float) {
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round,
         )
+        }
+        if (centerText != null) {
+            Text(
+                text = centerText,
+                modifier = Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -192,7 +206,6 @@ private fun ModelBullet(
     completed: Boolean,
     active: Boolean,
     labelVisible: Boolean,
-    trailingText: String?,
 ) {
     val completionProgress by animateFloatAsState(
         targetValue = if (completed) 1f else 0f,
@@ -274,10 +287,7 @@ private fun ModelBullet(
         )
         Text(
             text = name,
-            modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING)
-                .then(if (trailingText != null) Modifier.weight(1f) else Modifier),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
             color = when {
                 !labelVisible -> Color.Transparent
                 active || completed -> MaterialTheme.colorScheme.onSurface
@@ -286,16 +296,6 @@ private fun ModelBullet(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (active || completed) FontWeight.SemiBold else FontWeight.Normal,
         )
-        if (trailingText != null) {
-            Text(
-                text = trailingText,
-                modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
-                maxLines = 1,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
     }
 }
 
