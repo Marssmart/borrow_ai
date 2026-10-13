@@ -53,12 +53,63 @@ class KtorModelDownloaderTest {
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
         val progress = mutableListOf<Long>()
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) { progress += it }
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) { progress += it }
 
         assertContentEquals(body, fileSystem.readAll(destination))
         assertEquals(sha256Hex(body), digest)
         assertEquals(body.size.toLong(), progress.last())
         assertEquals(progress.sorted(), progress)
+        client.close()
+    }
+
+    @Test
+    fun oversizedFreshResponseIsStoppedAndItsPartialIsDiscarded() = runTest {
+        val fileSystem = FakeFileSystem()
+        fileSystem.createDirectories(destination.parent!!)
+        val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
+        val progress = mutableListOf<Long>()
+
+        val error = assertFailsWith<ModelDownloadException> {
+            KtorModelDownloader(client, fileSystem).download(
+                url,
+                destination,
+                expectedSizeBytes = body.size.toLong() - 1L,
+            ) { progress += it }
+        }
+
+        assertFalse(error.retryable)
+        assertFalse(fileSystem.exists(destination))
+        assertTrue(progress.isNotEmpty())
+        assertTrue(progress.last() < body.size.toLong())
+        client.close()
+    }
+
+    @Test
+    fun oversizedResumedResponseDiscardsTheExistingPrefix() = runTest {
+        val fileSystem = FakeFileSystem()
+        val prefixLength = 80_000
+        fileSystem.writePartial(destination, body.copyOfRange(0, prefixLength))
+        val oversizedSuffix = body.copyOfRange(prefixLength, body.size) + byteArrayOf(42)
+        val client = HttpClient(
+            MockEngine { request ->
+                assertEquals("bytes=$prefixLength-", request.headers[HttpHeaders.Range])
+                respond(
+                    content = oversizedSuffix,
+                    status = HttpStatusCode.PartialContent,
+                    headers = headersOf(
+                        HttpHeaders.ContentRange,
+                        "bytes $prefixLength-${body.lastIndex}/${body.size}",
+                    ),
+                )
+            },
+        )
+
+        val error = assertFailsWith<ModelDownloadException> {
+            KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
+        }
+
+        assertFalse(error.retryable)
+        assertFalse(fileSystem.exists(destination))
         client.close()
     }
 
@@ -69,7 +120,7 @@ class KtorModelDownloaderTest {
         val client = HttpClient(MockEngine { respond(content = "nope", status = HttpStatusCode.NotFound) })
 
         val error = assertFailsWith<ModelDownloadException> {
-            KtorModelDownloader(client, fileSystem).download(url, destination) {}
+            KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
         }
 
         assertFalse(error.retryable)
@@ -88,7 +139,7 @@ class KtorModelDownloaderTest {
             fileSystem.createDirectories(destination.parent!!)
             val client = HttpClient(MockEngine { respond(content = "error", status = status) })
             val error = assertFailsWith<ModelDownloadException> {
-                KtorModelDownloader(client, fileSystem).download(url, destination) {}
+                KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
             }
             assertTrue(error.retryable, "HTTP ${status.value} should be retried")
             client.close()
@@ -116,7 +167,7 @@ class KtorModelDownloaderTest {
         )
         val progress = mutableListOf<Long>()
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) { progress += it }
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) { progress += it }
 
         assertEquals("bytes=$prefixLength-", requestedRange)
         assertContentEquals(body, fileSystem.readAll(destination))
@@ -158,7 +209,7 @@ class KtorModelDownloaderTest {
             },
         )
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) {}
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
 
         assertEquals(2, requests)
         assertContentEquals(body, fileSystem.readAll(destination))
@@ -172,7 +223,7 @@ class KtorModelDownloaderTest {
         fileSystem.writePartial(destination, body.copyOfRange(0, 1_000))
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) {}
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
 
         assertContentEquals(body, fileSystem.readAll(destination))
         assertEquals(sha256Hex(body), digest)
@@ -196,7 +247,7 @@ class KtorModelDownloaderTest {
             },
         )
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) {}
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
 
         assertEquals(2, requests)
         assertContentEquals(body, fileSystem.readAll(destination))

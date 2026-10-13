@@ -289,7 +289,12 @@ class DownloadingModelSetupServiceTest {
     fun httpFailureMovesSetupToFailed() = runTest {
         val fileSystem = FakeFileSystem()
         val downloader = object : ModelDownloader {
-            override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit): String {
+            override suspend fun download(
+                url: String,
+                destination: Path,
+                expectedSizeBytes: Long,
+                onProgress: (Long) -> Unit,
+            ): String {
                 throw ModelDownloadException("Model download failed with HTTP 500.", retryable = true)
             }
         }
@@ -386,9 +391,16 @@ class DownloadingModelSetupServiceTest {
     ) : ModelDownloader {
         val requestedUrls = mutableListOf<String>()
 
-        override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit): String {
+        override suspend fun download(
+            url: String,
+            destination: Path,
+            expectedSizeBytes: Long,
+            onProgress: (Long) -> Unit,
+        ): String {
             requestedUrls += url
-            val target = specs.first { it.downloadUrl == url }.sizeBytes - shortBy
+            val model = specs.first { it.downloadUrl == url }
+            assertEquals(model.sizeBytes, expectedSizeBytes)
+            val target = model.sizeBytes - shortBy
             val hashing = HashingSink.sha256(fileSystem.sink(destination))
             val sink = hashing.buffer()
             try {
