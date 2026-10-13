@@ -43,12 +43,10 @@ class DownloadingModelSetupService(
     }
 
     private suspend fun runSetup() {
-        var models: TierModels? = null
         try {
             store.prepareDirectory()
             mutableState.value = ModelSetupState(phase = ModelSetupPhase.CHOOSING_MODEL)
             val chosen = modelsForRam(totalRamBytes)
-            models = chosen
             delay(choosingHoldMillis)
 
             publish(
@@ -69,10 +67,8 @@ class DownloadingModelSetupService(
 
             publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END, chosen)
         } catch (error: CancellationException) {
-            models?.let(::discardPartials)
             throw error
         } catch (error: Exception) {
-            models?.let(::discardPartials)
             mutableState.value = mutableState.value.copy(phase = ModelSetupPhase.FAILED)
         }
     }
@@ -96,7 +92,6 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress)
             return
         }
-        store.discardPartial(spec)
         val downloadedSha256 = downloader.download(spec.downloadUrl, store.partialPath(spec)) { bytes ->
             val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
             mutableState.value = mutableState.value.copy(
@@ -106,11 +101,6 @@ class DownloadingModelSetupService(
         }
         store.commit(spec, downloadedSha256)
         mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress)
-    }
-
-    private fun discardPartials(models: TierModels) {
-        store.discardPartial(models.voice)
-        store.discardPartial(models.llm)
     }
 
     private companion object {

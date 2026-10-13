@@ -135,7 +135,7 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
-    fun interruptedPartialFileIsDiscardedAndRedownloaded() = runTest {
+    fun interruptedPartialFileIsContinuedByTheDownloader() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
         writeText(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), "partial")
@@ -194,7 +194,7 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
-    fun incompleteDownloadFailsWithoutLeavingAFinalFile() = runTest {
+    fun incompleteDownloadFailsAndKeepsThePartialFileForResume() = runTest {
         val fileSystem = FakeFileSystem()
         val setup = service(fileSystem, RecordingDownloader(fileSystem, listOf(voice, llm), shortBy = 1L), backgroundScope)
 
@@ -203,7 +203,7 @@ class DownloadingModelSetupServiceTest {
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
-        assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
+        assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
     }
 
     @Test
