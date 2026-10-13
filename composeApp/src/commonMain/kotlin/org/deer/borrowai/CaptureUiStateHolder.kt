@@ -13,6 +13,7 @@ import org.deer.borrowai.data.service.MediaSessionState
 
 internal class CaptureUiStateHolder(
     private val mediaSessionService: MediaSessionService,
+    initiallyModelReady: Boolean = false,
 ) {
     data class UiState(
         val isRecording: Boolean = false,
@@ -28,6 +29,11 @@ internal class CaptureUiStateHolder(
     )
 
     val uiState: StateFlow<UiState> = mutableUiState.asStateFlow()
+    private var isModelReady = initiallyModelReady
+
+    fun setModelReady(ready: Boolean) {
+        isModelReady = ready
+    }
 
     suspend fun observeMediaSession() {
         combine(mediaSessionService.state, mediaSessionService.idleTranscription) { session, idleTranscript ->
@@ -58,6 +64,7 @@ internal class CaptureUiStateHolder(
     }
 
     private fun startRecording(holdToRecord: Boolean) {
+        if (!isModelReady) return
         mediaSessionService.startRecording(holdToRecord)
         bindMediaSession(
             mediaSessionService.state.value,

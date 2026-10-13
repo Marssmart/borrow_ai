@@ -136,98 +136,23 @@
       text-transform: uppercase;
     }
 
-    .screen--loading {
-      align-items: center;
-      justify-content: center;
-      padding: 32px 19px;
-    }
-    .loading-title {
-      margin: 0 0 38px;
-      color: #123b43;
-      font-size: 30px;
-      font-weight: 760;
-      letter-spacing: -.055em;
-      text-align: center;
-    }
-    .loading-timeline {
-      width: 100%;
-      max-width: 260px;
-      padding: 17px 15px;
-      border: 1px solid rgb(255 255 255 / 94%);
-      border-radius: 24px;
-      background: rgb(255 255 255 / 43%);
-      box-shadow: 0 12px 28px rgb(35 93 99 / 10%), inset 0 1px 0 rgb(255 255 255 / 88%);
-      backdrop-filter: blur(17px) saturate(1.25);
-    }
-    .timeline-step {
+    .setup-state-preview {
       display: flex;
-      min-height: 23px;
       align-items: center;
-      gap: 12px;
-      color: #47636a;
-      font-size: 11px;
-      font-weight: 500;
-      line-height: 1.3;
-      transition: color .25s ease, font-weight .25s ease;
+      gap: 9px;
+      margin: 0 0 20px;
+      color: #53605b;
+      font-size: 12px;
+      font-weight: 700;
     }
-    .timeline-step.active,
-    .timeline-step.complete { color: #123b43; font-weight: 700; }
-    .step-bullet {
-      position: relative;
-      z-index: 2;
-      display: grid;
-      width: 18px;
-      height: 18px;
-      flex: 0 0 18px;
-      place-items: center;
-      border: 1.5px solid #a9cbd0;
-      border-radius: 50%;
-      background: rgb(250 255 255 / 88%);
-      transition: border-color .22s ease, background .22s ease, box-shadow .22s ease;
-    }
-    .timeline-step.active .step-bullet {
-      border-color: #14757b;
-      box-shadow: 0 0 0 4px #c9e5e7;
-    }
-    .timeline-step.active .step-bullet::after {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: #14757b;
-      content: "";
-    }
-    .timeline-step.complete .step-bullet {
-      border-color: #14757b;
-      background: #14757b;
-      box-shadow: 0 0 0 2px #dcecef;
-    }
-    .timeline-step.complete .step-bullet::after {
-      width: 5px;
-      height: 8px;
-      transform: translateY(-1px) rotate(45deg);
-      border-right: 1.5px solid #fff;
-      border-bottom: 1.5px solid #fff;
-      content: "";
-    }
-    .timeline-segment {
-      position: relative;
-      width: 18px;
-      height: 26px;
-    }
-    .timeline-track,
-    .timeline-fill {
-      position: absolute;
-      top: 0;
-      left: 8px;
-      width: 2px;
-      border-radius: 2px;
-    }
-    .timeline-track { height: 100%; background: #a9cbd0; }
-    .timeline-fill {
-      height: var(--fill);
-      background: #14757b;
-      box-shadow: 0 0 13px rgb(20 117 123 / 55%);
-      transition: height .22s ease;
+    .setup-state-preview select {
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid #d2d9d4;
+      border-radius: 10px;
+      background: #fff;
+      color: #253b31;
+      font: inherit;
     }
 
     .screen--capture { padding: 24px 17px 17px; }
@@ -282,6 +207,14 @@
       box-shadow: 0 0 0 8px rgb(255 255 255 / 55%), 0 0 36px rgb(201 52 88 / 36%);
       animation: mic-pulse-recording 1.3s ease-in-out infinite;
     }
+    .mic-button[data-state="setup"] {
+      --mic-border: #c0c8c6;
+      background: #e5e9e8;
+      color: #66716f;
+      box-shadow: 0 0 0 8px rgb(255 255 255 / 52%);
+      animation: none;
+      cursor: not-allowed;
+    }
     .mic-button::before {
       position: absolute;
       inset: -14px;
@@ -291,8 +224,15 @@
       animation: mic-ring 1.8s ease-out infinite;
     }
     .mic-button[data-state="recording"]::before { border-color: rgb(201 52 88 / 35%); }
+    .mic-button[data-state="setup"]::before { display: none; }
     .mic-button svg { width: 48px; height: 48px; margin-bottom: 6px; }
-    .mic-button strong { font-size: 10px; letter-spacing: .13em; }
+    .mic-button strong {
+      max-width: 100%;
+      font-size: 10px;
+      letter-spacing: .04em;
+      line-height: 1.3;
+      text-align: center;
+    }
     .mic-button small { margin-top: 5px; font-size: 11px; opacity: .86; }
     .capture-guidance {
       display: flex;
@@ -308,6 +248,17 @@
       letter-spacing: .11em;
       text-align: center;
     }
+    .mobile-data-action {
+      padding: 6px 10px;
+      border: 1px solid #14757b;
+      border-radius: 999px;
+      background: #14757b;
+      color: #fff;
+      cursor: pointer;
+      font-size: 8px;
+      font-weight: 750;
+    }
+    .mobile-data-action[hidden] { display: none; }
     .capture-guidance span:last-child { color: #47636a; font-size: 7px; }
 
     .screen--list { padding: 26px 12px 10px; }
@@ -584,33 +535,35 @@
       </button>
     </header>
 
-    <div class="mock-grid">
-      <figure class="screen-preview">
-        <div class="device"><div class="screen-content">
-          <div class="screen screen--loading">
-            <h2 class="loading-title">BorrowAI</h2>
-            <div class="loading-timeline" data-loading-timeline></div>
-          </div>
-        </div></div>
-        <figcaption class="screen-caption">Loading</figcaption>
-      </figure>
+    <label class="setup-state-preview">
+      Preview setup state
+      <select data-setup-state-select aria-label="Preview model setup state">
+        <option value="transcription">Transcription download</option>
+        <option value="summarization">Summarization download</option>
+        <option value="waiting">Waiting for Wi-Fi</option>
+        <option value="ready">Ready to record</option>
+      </select>
+    </label>
 
+    <div class="mock-grid">
       <figure class="screen-preview">
         <div class="device"><div class="screen-content">
           <div class="screen screen--capture">
             <div class="transcript" data-capture-transcript></div>
             <div class="mic-zone">
-              <div class="mic-button" data-mic-button data-state="idle" aria-label="Start recording">
+              <div class="mic-button" data-mic-button data-state="setup" data-setup-state="transcription"
+                   aria-disabled="true" aria-label="Transcription 1,042 / 4,534 MB">
                 <svg viewBox="0 0 48 48" aria-hidden="true">
                   <rect x="18" y="5" width="12" height="24" rx="6" fill="currentColor"/>
                   <path d="M12 22v2a12 12 0 0 0 24 0v-2M24 36v7m-8 0h16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
                 </svg>
-                <strong data-mic-label>TAP OR HOLD</strong>
+                <strong data-mic-label>Transcription 1,042 / 4,534 MB</strong>
                 <small data-mic-time hidden>00:00</small>
               </div>
             </div>
             <div class="capture-guidance">
               <span data-capture-guidance>TAP TO RECORD  ·  HOLD UNTIL RELEASE</span>
+              <button class="mobile-data-action" data-mobile-data-action type="button" hidden>Download over mobile data</button>
               <span>SWIPE LEFT FOR SAVED MEMORIES</span>
             </div>
           </div>
@@ -700,13 +653,12 @@
       "Remember to send the notes to the team before the afternoon review.",
       "A clear summary will make it easier to pick this conversation back up later.",
     ];
-    const setupSteps = [
-      "Downloading voice-to-text model",
-      "Loading voice-to-text model",
-      "Downloading summarization model",
-      "Loading summarization model",
-      "Ready",
-    ];
+    const setupStatusLabels = {
+      transcription: "Transcription 1,042 / 4,534 MB",
+      summarization: "Summarization 5,233 / 5,761 MB",
+      waiting: "Waiting for unmetered Wi-Fi",
+      ready: "TAP OR HOLD",
+    };
     const capturePhases = [
       { name: "idle", duration: 2_000 },
       { name: "recording", duration: 1_000 },
@@ -719,8 +671,6 @@
       { track: "summary", duration: 2_300 },
       { track: null, duration: 1_700 },
     ];
-    const loadingDuration = 7_200;
-    const readyHold = 1_100;
     const tickDuration = 60;
 
     const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({
@@ -824,11 +774,6 @@
       renderMemoryCard(memory, index, floatingPanelsDesign)
     ).join("");
 
-    document.querySelector("[data-loading-timeline]").innerHTML = setupSteps.map((label, index) =>
-      `<div class="timeline-step" data-step="${index}"><span class="step-bullet" aria-hidden="true"></span><span>${label}</span></div>` +
-      (index < 4 ? `<div class="timeline-segment" data-segment="${index}" aria-hidden="true"><span class="timeline-track"></span><span class="timeline-fill" style="--fill:0%"></span></div>` : "")
-    ).join("");
-
     const detailMemory = memories[0];
     document.querySelector("[data-detail-date]").textContent = detailMemory.date;
     document.querySelector("[data-detail-title]").textContent = detailMemory.title;
@@ -837,9 +782,11 @@
     document.querySelector("[data-detail-original]").textContent = detailMemory.original;
 
     const motionToggle = document.getElementById("motion-toggle");
+    const setupStateSelect = document.querySelector("[data-setup-state-select]");
+    const mobileDataAction = document.querySelector("[data-mobile-data-action]");
     let paused = false;
     let timer = null;
-    let loadingElapsed = 0;
+    let setupPreviewState = setupStateSelect.value;
     let capturePhaseIndex = 0;
     let capturePhaseElapsed = 0;
     let recordingElapsed = 0;
@@ -849,38 +796,32 @@
     let playbackPhaseIndex = 0;
     let playbackPhaseElapsed = 0;
 
-    function updateLoading() {
-      const progress = Math.max(0, Math.min(1, loadingElapsed / loadingDuration));
-      document.querySelectorAll(".timeline-step").forEach((step) => {
-        const index = Number(step.dataset.step);
-        const completed = index < 4 ? progress >= (index + 1) / 4 : progress >= 1;
-        const active = index < 4 && progress >= index / 4 && progress < (index + 1) / 4;
-        step.classList.toggle("complete", completed);
-        step.classList.toggle("active", active);
-      });
-      document.querySelectorAll(".timeline-segment").forEach((segment) => {
-        const index = Number(segment.dataset.segment);
-        const fill = Math.max(0, Math.min(1, progress * 4 - index));
-        segment.querySelector(".timeline-fill").style.setProperty("--fill", `${fill * 100}%`);
-      });
-    }
-
     function updateCapture() {
       const phase = capturePhases[capturePhaseIndex];
-      const recording = phase.name !== "idle";
+      const ready = setupPreviewState === "ready";
+      const recording = ready && phase.name !== "idle";
+      const setupLabel = setupStatusLabels[setupPreviewState];
       const mic = document.querySelector("[data-mic-button]");
-      mic.dataset.state = recording ? "recording" : "idle";
-      mic.setAttribute("aria-label", recording ? "Stop recording" : "Start recording");
-      document.querySelector("[data-mic-label]").textContent = recording ? "RECORDING" : "TAP OR HOLD";
+      mic.dataset.state = !ready ? "setup" : recording ? "recording" : "idle";
+      mic.dataset.setupState = setupPreviewState;
+      mic.setAttribute("aria-disabled", String(!ready));
+      mic.setAttribute(
+        "aria-label",
+        ready ? recording ? "Stop recording" : "Start recording" : setupLabel,
+      );
+      document.querySelector("[data-mic-label]").textContent =
+        ready && recording ? "RECORDING" : setupLabel;
       const time = document.querySelector("[data-mic-time]");
       time.hidden = !recording;
       const totalSeconds = Math.floor(recordingElapsed / 1_000);
       time.textContent = `${Math.floor(totalSeconds / 60).toString().padStart(2, "0")}:${(totalSeconds % 60).toString().padStart(2, "0")}`;
-      document.querySelector("[data-capture-guidance]").textContent =
-        recording ? "TAP TO STOP" : "TAP TO RECORD  ·  HOLD UNTIL RELEASE";
+      const guidance = document.querySelector("[data-capture-guidance]");
+      guidance.hidden = !ready;
+      guidance.textContent = recording ? "TAP TO STOP" : "TAP TO RECORD  ·  HOLD UNTIL RELEASE";
+      mobileDataAction.hidden = setupPreviewState !== "waiting";
       const transcript = document.querySelector("[data-capture-transcript]");
       transcript.textContent = captureText;
-      transcript.classList.toggle("is-typing", phase.name === "transcribing");
+      transcript.classList.toggle("is-typing", ready && phase.name === "transcribing");
     }
 
     function updatePlayback() {
@@ -899,31 +840,29 @@
     }
 
     function advance() {
-      const loadingCycle = loadingDuration + readyHold;
-      loadingElapsed = (loadingElapsed + tickDuration) % loadingCycle;
-      updateLoading();
-
-      const phase = capturePhases[capturePhaseIndex];
-      capturePhaseElapsed += tickDuration;
-      if (phase.name !== "idle") recordingElapsed += tickDuration;
-      if (phase.name === "transcribing") {
-        captureText = currentSample.slice(
-          0,
-          Math.floor(currentSample.length * Math.min(capturePhaseElapsed / phase.duration, 1)),
-        );
-      }
-      if (capturePhaseElapsed >= phase.duration) {
-        if (phase.name === "transcribing") captureText = currentSample;
-        capturePhaseIndex = (capturePhaseIndex + 1) % capturePhases.length;
-        capturePhaseElapsed = 0;
-        const nextPhase = capturePhases[capturePhaseIndex];
-        if (nextPhase.name === "recording") {
-          recordingElapsed = 0;
-          captureText = "";
-        } else if (nextPhase.name === "transcribing") {
-          currentSample = transcriptSamples[sampleIndex % transcriptSamples.length];
-          sampleIndex += 1;
-          captureText = "";
+      if (setupPreviewState === "ready") {
+        const phase = capturePhases[capturePhaseIndex];
+        capturePhaseElapsed += tickDuration;
+        if (phase.name !== "idle") recordingElapsed += tickDuration;
+        if (phase.name === "transcribing") {
+          captureText = currentSample.slice(
+            0,
+            Math.floor(currentSample.length * Math.min(capturePhaseElapsed / phase.duration, 1)),
+          );
+        }
+        if (capturePhaseElapsed >= phase.duration) {
+          if (phase.name === "transcribing") captureText = currentSample;
+          capturePhaseIndex = (capturePhaseIndex + 1) % capturePhases.length;
+          capturePhaseElapsed = 0;
+          const nextPhase = capturePhases[capturePhaseIndex];
+          if (nextPhase.name === "recording") {
+            recordingElapsed = 0;
+            captureText = "";
+          } else if (nextPhase.name === "transcribing") {
+            currentSample = transcriptSamples[sampleIndex % transcriptSamples.length];
+            sampleIndex += 1;
+            captureText = "";
+          }
         }
       }
       updateCapture();
@@ -956,7 +895,19 @@
       requestAnimationFrame(() => pauseCssAnimations(paused));
     });
 
-    updateLoading();
+    setupStateSelect.addEventListener("change", () => {
+      setupPreviewState = setupStateSelect.value;
+      capturePhaseIndex = 0;
+      capturePhaseElapsed = 0;
+      recordingElapsed = 0;
+      updateCapture();
+    });
+    mobileDataAction.addEventListener("click", () => {
+      setupPreviewState = "transcription";
+      setupStateSelect.value = setupPreviewState;
+      updateCapture();
+    });
+
     updateCapture();
     updatePlayback();
     timer = setInterval(advance, tickDuration);

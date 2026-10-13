@@ -33,8 +33,6 @@ internal class AppShellStateHolder(
         const val MAIN_PAGE_COUNT = 2
         const val CAPTURE_PAGE = 0
         const val MEMORIES_PAGE = 1
-        const val PAGE_TRANSITION_MILLIS = 320
-        const val FADE_TRANSITION_MILLIS = 220
         const val DEMO_BADGE_ALPHA = 0.9f
         val DEMO_BADGE_LETTER_SPACING = 0.5.sp
         val BACKGROUND_TOP_GLOW_SIZE = 380.dp
