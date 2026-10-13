@@ -1,0 +1,24 @@
+<resources>
+    <string name="memory_saved_memories_title">Saved memories</string>
+    <string name="memory_return_to_recording">Swipe right to return to recording</string>
+    <string name="memory_summary">SUMMARY</string>
+    <string name="memory_original_transcription">ORIGINAL TRANSCRIPTION</string>
+    <string name="memory_back_to_memories">← Memories</string>
+    <string name="memory_capture">Capture</string>
+    <string name="memory_play_original">Play original</string>
+    <string name="memory_stop_original">Stop original</string>
+    <string name="memory_play_summary">Play summary</string>
+    <string name="memory_stop_summary">Stop summary</string>
+    <string name="memory_audio_playing">Original audio is playing</string>
+    <string name="memory_audio_not_playing">Original audio is not playing</string>
+    <string name="memory_summary_audio_playing">Summary audio is playing</string>
+    <string name="memory_open_details">Open memory details</string>
+    <string name="memory_dismiss">Dismiss</string>
+    <string name="memory_playback_confirmation_title">Stop recording and play?</string>
+    <string name="memory_playback_confirmation_message">Playing this saved memory will stop your active recording.</string>
+    <string name="memory_playback_confirmation_cancel">Keep recording</string>
+    <string name="memory_playback_confirmation_confirm">Stop and play</string>
+    <string name="memory_playback_error_title">Playback unavailable</string>
+    <string name="memory_playback_memory_missing_message">This saved memory is no longer available.</string>
+    <string name="memory_playback_request_failed_message">Playback could not be started. Try again.</string>
+</resources>

@@ -1,0 +1,11 @@
+<resources>
+    <string name="capture_release_to_stop">RELEASE TO STOP</string>
+    <string name="capture_tap_to_stop">TAP TO STOP</string>
+    <string name="capture_tap_to_record_hold">TAP/HOLD TO RECORD</string>
+    <string name="capture_swipe_saved_memories">SWIPE LEFT FOR SAVED MEMORIES</string>
+    <string name="capture_stop_recording_description">Stop recording</string>
+    <string name="capture_start_recording_description">Start recording</string>
+    <string name="capture_recording_label">RECORDING</string>
+    <string name="capture_tap_or_hold">TAP OR HOLD</string>
+    <string name="capture_elapsed_duration">%1$s:%2$s</string>
+</resources>

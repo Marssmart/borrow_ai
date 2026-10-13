@@ -21,8 +21,14 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.animation)
             implementation(compose.material3)
+            implementation(compose.components.resources)
             implementation(compose.ui)
             implementation(libs.kotlinx.coroutines.core)
+        }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
 
         androidMain.dependencies {
@@ -39,7 +45,7 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         versionName = rootProject.version.toString()
     }
 }

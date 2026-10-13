@@ -2,6 +2,17 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.3]
+
+- Added model setup, memory CRUD, and media-session service contracts with in-memory demo providers and service tests.
+- Moved app, capture, model-loading, and saved-memory UI state into `StateFlow` holders, keeping pager/scroll state and component constants with their owners.
+- Localized app, capture, model, memory, accessibility, and confirmation copy; added locale-aware Android/iOS memory timestamps and a demo-only data badge.
+- Added explicit demo startup wiring for Android and iOS, including a demo default for Android debug builds launched from the home screen. Real mode remains fail-fast.
+- Added recording/playback exclusivity and confirmation when playback replaces a recording.
+- Retained the service graph across Android configuration changes and the iOS controller lifetime; closed background work with its owner and guarded restarted sessions from stale updates.
+- Made the memory audio glyph and accessibility description reflect active transcription or summary playback.
+- Updated Android and iOS versioning to 1.0.3 (build 4). Transcription, summarization, and persistent storage remain demo-only; production ML and ObjectBox providers are not implemented.
+
 ## [1.0.2]
 
 - Smoothed model-loading progress and microphone pulse transitions; the mic retains a circular outline without elevation artifacts.
