@@ -2,6 +2,7 @@ package org.deer.borrowai
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -73,10 +74,14 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
     )
     val animatedProgress by animateFloatAsState(
         targetValue = uiState.progress.coerceIn(0f, 1f),
-        animationSpec = tween(
-            ModelLoadingUiStateHolder.PROGRESS_ANIMATION_MILLIS,
-            easing = LinearEasing,
-        ),
+        animationSpec = if (uiState.animateTransitions) {
+            tween(
+                ModelLoadingUiStateHolder.PROGRESS_ANIMATION_MILLIS,
+                easing = LinearEasing,
+            )
+        } else {
+            snap()
+        },
         label = "model-setup-progress",
     )
 
@@ -123,6 +128,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                         completed = animatedProgress >= 1f / ModelLoadingUiStateHolder.SETUP_STEP_COUNT,
                         active = isCurrentStep(uiState.phase, 0),
                         labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, 0),
+                        animateTransitions = uiState.animateTransitions,
                     )
                     repeat(ModelLoadingUiStateHolder.SETUP_STEP_COUNT) { segment ->
                         ProgressLineSegment(
@@ -142,6 +148,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             completed = completed,
                             active = isCurrentStep(uiState.phase, nextStep),
                             labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, nextStep),
+                            animateTransitions = uiState.animateTransitions,
                         )
                     }
                     if (uiState.phase == ModelSetupPhase.FAILED) {
@@ -206,15 +213,24 @@ private fun ModelBullet(
     completed: Boolean,
     active: Boolean,
     labelVisible: Boolean,
+    animateTransitions: Boolean,
 ) {
     val completionProgress by animateFloatAsState(
         targetValue = if (completed) 1f else 0f,
-        animationSpec = tween(ModelLoadingUiStateHolder.BULLET_TRANSITION_MILLIS),
+        animationSpec = if (animateTransitions) {
+            tween(ModelLoadingUiStateHolder.BULLET_TRANSITION_MILLIS)
+        } else {
+            snap()
+        },
         label = "model-bullet-complete",
     )
     val activeProgress by animateFloatAsState(
         targetValue = if (active) 1f else 0f,
-        animationSpec = tween(ModelLoadingUiStateHolder.BULLET_TRANSITION_MILLIS),
+        animationSpec = if (animateTransitions) {
+            tween(ModelLoadingUiStateHolder.BULLET_TRANSITION_MILLIS)
+        } else {
+            snap()
+        },
         label = "model-bullet-active",
     )
     val primaryColor = MaterialTheme.colorScheme.primary

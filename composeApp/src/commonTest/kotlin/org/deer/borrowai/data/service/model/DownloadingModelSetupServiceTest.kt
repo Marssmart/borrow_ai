@@ -5,6 +5,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
 import okio.FileSystem
@@ -101,6 +102,44 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun alreadyPresentModelsReachReadyWithoutHoldsOrAnimations() = runTest {
+        val fileSystem = FakeFileSystem()
+        val store = store(fileSystem)
+        store.prepareDirectory()
+        writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
+        store.commit(voice, voice.sha256)
+        writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
+        store.commit(llm, llm.sha256)
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = DownloadingModelSetupService(
+            totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
+            store = store,
+            downloader = downloader,
+            scope = backgroundScope,
+            choosingHoldMillis = 60_000L,
+            loadingHoldMillis = 60_000L,
+            modelsForRam = { tierModels },
+        )
+        val phases = mutableListOf<ModelSetupPhase>()
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            setup.state.collect { state ->
+                if (phases.lastOrNull() != state.phase) phases += state.phase
+            }
+        }
+        val prepare = launch { setup.prepare() }
+
+        runCurrent()
+
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertFalse(setup.state.value.animateTransitions)
+        assertEquals(emptyList(), downloader.requestedUrls)
+        assertEquals(0L, testScheduler.currentTime)
+        assertTrue(phases.last() == ModelSetupPhase.READY)
+        assertFalse(prepare.isActive)
+        collector.cancel()
+    }
+
+    @Test
     fun namesAreChosenFromTheDeviceTierAndPublishedWhenDownloadsStart() = runTest {
         val fileSystem = FakeFileSystem()
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
@@ -111,6 +150,7 @@ class DownloadingModelSetupServiceTest {
         assertEquals("Test Voice", setup.state.value.voiceModelName)
         assertEquals("Test LLM", setup.state.value.llmModelName)
         assertEquals(1f, setup.state.value.progress)
+        assertTrue(setup.state.value.animateTransitions)
     }
 
     @Test
@@ -212,7 +252,7 @@ class DownloadingModelSetupServiceTest {
         val fileSystem = FakeFileSystem()
         val downloader = object : ModelDownloader {
             override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit): String {
-                throw ModelDownloadException("Model download failed with HTTP 500.")
+                throw ModelDownloadException("Model download failed with HTTP 500.", retryable = true)
             }
         }
         val setup = service(fileSystem, downloader, backgroundScope)
@@ -221,6 +261,7 @@ class DownloadingModelSetupServiceTest {
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertNull(fileSystem.metadataOrNull(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
+        assertTrue(setup.state.value.retryableFailure)
     }
 
     @Test

@@ -20,6 +20,8 @@ internal class ModelLoadingUiStateHolder(
         val failedDuring: ModelSetupPhase? = null,
         val bytesDownloaded: Long = 0L,
         val bytesTotal: Long = 0L,
+        val animateTransitions: Boolean = true,
+        val retryableFailure: Boolean = false,
     )
 
     private val mutableUiState = MutableStateFlow(modelSetupService.state.value.toUiState())
@@ -44,6 +46,8 @@ internal class ModelLoadingUiStateHolder(
         failedDuring = failedDuring,
         bytesDownloaded = bytesDownloaded,
         bytesTotal = bytesTotal,
+        animateTransitions = animateTransitions,
+        retryableFailure = retryableFailure,
     )
 
     internal companion object {

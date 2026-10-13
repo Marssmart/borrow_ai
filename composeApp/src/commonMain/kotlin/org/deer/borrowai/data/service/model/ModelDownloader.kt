@@ -9,6 +9,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
+import kotlinx.io.IOException
 import okio.FileSystem
 import okio.HashingSink
 import okio.HashingSource
@@ -25,7 +27,13 @@ interface ModelDownloader {
     suspend fun download(url: String, destination: Path, onProgress: (bytesDownloaded: Long) -> Unit): String
 }
 
-class ModelDownloadException(message: String) : IllegalStateException(message)
+class ModelDownloadException(
+    message: String,
+    val retryable: Boolean = false,
+    cause: Throwable? = null,
+) : IllegalStateException(message, cause)
+
+class ModelStorageException(message: String, cause: Throwable) : IllegalStateException(message, cause)
 
 class KtorModelDownloader(
     private val client: HttpClient,
@@ -37,24 +45,48 @@ class KtorModelDownloader(
         onProgress: (bytesDownloaded: Long) -> Unit,
     ): String {
         val existingBytes = fileSystem.metadataOrNull(destination)?.size ?: 0L
-        return client.prepareGet(url) {
-            if (existingBytes > 0L) header(HttpHeaders.Range, "bytes=$existingBytes-")
-        }.execute { response ->
-            if (response.status == HttpStatusCode.RequestedRangeNotSatisfiable && existingBytes > 0L) {
-                fileSystem.delete(destination, mustExist = false)
-                throw ModelDownloadException("The partial model file was invalid and will restart on the next attempt.")
+        return try {
+            client.prepareGet(url) {
+                if (existingBytes > 0L) header(HttpHeaders.Range, "bytes=$existingBytes-")
+            }.execute { response ->
+                if (response.status == HttpStatusCode.RequestedRangeNotSatisfiable && existingBytes > 0L) {
+                    try {
+                        fileSystem.delete(destination, mustExist = false)
+                    } catch (error: IOException) {
+                        throw ModelStorageException("Unable to discard the invalid partial model file.", error)
+                    }
+                    throw ModelDownloadException("The partial model file was invalid and will restart on the next attempt.")
+                }
+                if (!response.status.isSuccess()) {
+                    val status = response.status.value
+                    throw ModelDownloadException(
+                        "Model download failed with HTTP $status.",
+                        retryable = status == HTTP_REQUEST_TIMEOUT ||
+                            status == HTTP_TOO_MANY_REQUESTS ||
+                            status in HTTP_SERVER_ERROR_RANGE,
+                    )
+                }
+                val resumed = existingBytes > 0L && response.status == HttpStatusCode.PartialContent
+                val base = if (resumed) existingBytes else 0L
+                if (resumed) {
+                    writeBody(response, destination, append = true, base = base, onProgress = onProgress)
+                    try {
+                        digestOf(destination)
+                    } catch (error: IOException) {
+                        throw ModelStorageException("Unable to verify the resumed model file.", error)
+                    }
+                } else {
+                    writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+                }
             }
-            if (!response.status.isSuccess()) {
-                throw ModelDownloadException("Model download failed with HTTP ${response.status.value}.")
-            }
-            val resumed = existingBytes > 0L && response.status == HttpStatusCode.PartialContent
-            val base = if (resumed) existingBytes else 0L
-            if (resumed) {
-                writeBody(response, destination, append = true, base = base, onProgress = onProgress)
-                digestOf(destination)
-            } else {
-                writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
-            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ModelDownloadException) {
+            throw error
+        } catch (error: ModelStorageException) {
+            throw error
+        } catch (error: IOException) {
+            throw ModelDownloadException("Model download was interrupted by a network I/O error.", retryable = true, cause = error)
         }
     }
 
@@ -68,20 +100,36 @@ class KtorModelDownloader(
     ): String {
         val channel = response.bodyAsChannel()
         val buffer = ByteArray(BUFFER_BYTES)
-        val rawSink = if (append) fileSystem.appendingSink(destination) else fileSystem.sink(destination)
+        val rawSink = try {
+            if (append) fileSystem.appendingSink(destination) else fileSystem.sink(destination)
+        } catch (error: IOException) {
+            throw ModelStorageException("Unable to open the partial model file for writing.", error)
+        }
         val hashing = HashingSink.sha256(rawSink)
         val sink = hashing.buffer()
         try {
             var total = base
             while (true) {
-                val read = channel.readAvailable(buffer)
+                val read = try {
+                    channel.readAvailable(buffer)
+                } catch (error: IOException) {
+                    throw ModelDownloadException("Model download was interrupted while reading the network response.", retryable = true, cause = error)
+                }
                 if (read < 0) break
-                sink.write(buffer, 0, read)
+                try {
+                    sink.write(buffer, 0, read)
+                } catch (error: IOException) {
+                    throw ModelStorageException("Unable to write the partial model file.", error)
+                }
                 total += read
                 onProgress(total)
             }
         } finally {
-            sink.close()
+            try {
+                sink.close()
+            } catch (error: IOException) {
+                throw ModelStorageException("Unable to close the partial model file.", error)
+            }
         }
         return hashing.hash.hex()
     }
@@ -100,5 +148,8 @@ class KtorModelDownloader(
 
     private companion object {
         const val BUFFER_BYTES = 64 * 1024
+        const val HTTP_REQUEST_TIMEOUT = 408
+        const val HTTP_TOO_MANY_REQUESTS = 429
+        val HTTP_SERVER_ERROR_RANGE = 500..599
     }
 }

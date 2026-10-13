@@ -35,6 +35,8 @@ object ModelDownloadWork {
     const val KEY_FAILED_DURING = "failedDuring"
     const val KEY_BYTES_DOWNLOADED = "bytesDownloaded"
     const val KEY_BYTES_TOTAL = "bytesTotal"
+    const val KEY_ANIMATE_TRANSITIONS = "animateTransitions"
+    const val KEY_RETRYABLE_FAILURE = "retryableFailure"
 }
 
 /**
@@ -56,6 +58,7 @@ class ModelDownloadWorker(
         val device = AndroidDeviceEnvironment(applicationContext)
         val client = createPlatformModelHttpClient()
         var lastNotified: Pair<ModelSetupPhase, Int>? = null
+        var lastPersistedProgress: Pair<ModelSetupPhase, Int>? = null
         try {
             return coroutineScope {
                 val setup = DownloadingModelSetupService(
@@ -66,8 +69,11 @@ class ModelDownloadWorker(
                 )
                 val publisher = launch {
                     setup.state.collect { state ->
-                        setProgress(state.toWorkData())
                         val notified = state.phase to (state.progress * 100).toInt()
+                        if (notified != lastPersistedProgress) {
+                            lastPersistedProgress = notified
+                            setProgress(state.toWorkData())
+                        }
                         if (notified != lastNotified && state.phase != ModelSetupPhase.READY) {
                             lastNotified = notified
                             setForeground(foregroundInfo(applicationContext, state))
@@ -80,8 +86,8 @@ class ModelDownloadWorker(
                 val finished = setup.state.value
                 when {
                     finished.phase == ModelSetupPhase.READY -> Result.success(finished.toWorkData())
-                    // A failed attempt keeps its .part file, so the next attempt resumes instead of restarting.
-                    runAttemptCount < ModelDownloadWork.MAX_ATTEMPTS -> Result.retry()
+                    finished.retryableFailure &&
+                        runAttemptCount + 1 < ModelDownloadWork.MAX_ATTEMPTS -> Result.retry()
                     else -> Result.failure(finished.toWorkData())
                 }
             }
@@ -99,6 +105,8 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
     ModelDownloadWork.KEY_FAILED_DURING to failedDuring?.name.orEmpty(),
     ModelDownloadWork.KEY_BYTES_DOWNLOADED to bytesDownloaded,
     ModelDownloadWork.KEY_BYTES_TOTAL to bytesTotal,
+    ModelDownloadWork.KEY_ANIMATE_TRANSITIONS to animateTransitions,
+    ModelDownloadWork.KEY_RETRYABLE_FAILURE to retryableFailure,
 )
 
 /** Maps a unique-work record to the loader state. Finished work reports its output; running work reports progress. */
@@ -108,6 +116,7 @@ fun WorkInfo.toModelSetupState(): ModelSetupState {
         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ModelSetupState()
         WorkInfo.State.RUNNING -> data.toModelSetupState(defaultPhase = ModelSetupPhase.NOT_STARTED)
         WorkInfo.State.SUCCEEDED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.READY)
+            .copy(animateTransitions = false)
         WorkInfo.State.FAILED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.FAILED)
         WorkInfo.State.CANCELLED -> ModelSetupState(phase = ModelSetupPhase.FAILED)
     }
@@ -124,6 +133,11 @@ private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupSta
         llmModelName = getString(ModelDownloadWork.KEY_LLM_NAME)?.takeIf { it.isNotEmpty() },
         bytesDownloaded = getLong(ModelDownloadWork.KEY_BYTES_DOWNLOADED, 0L),
         bytesTotal = getLong(ModelDownloadWork.KEY_BYTES_TOTAL, 0L),
+        animateTransitions = getBoolean(
+            ModelDownloadWork.KEY_ANIMATE_TRANSITIONS,
+            phase != ModelSetupPhase.READY,
+        ),
+        retryableFailure = getBoolean(ModelDownloadWork.KEY_RETRYABLE_FAILURE, false),
         failedDuring = getString(ModelDownloadWork.KEY_FAILED_DURING)
             ?.let { name -> ModelSetupPhase.entries.firstOrNull { it.name == name } },
     )

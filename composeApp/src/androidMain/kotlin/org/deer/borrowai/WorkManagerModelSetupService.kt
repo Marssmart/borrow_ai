@@ -21,6 +21,8 @@ import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.model.ModelCatalog
+import org.deer.borrowai.data.service.model.ModelFileStore
 import java.util.UUID
 
 /**
@@ -31,7 +33,8 @@ class WorkManagerModelSetupService(
     context: Context,
     scope: CoroutineScope,
 ) : ModelSetupService {
-    private val workManager = WorkManager.getInstance(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val workManager = WorkManager.getInstance(appContext)
     private val mutableState = MutableStateFlow(ModelSetupState())
     private val workInfos = workManager.getWorkInfosForUniqueWorkLiveData(ModelDownloadWork.UNIQUE_WORK_NAME)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -39,6 +42,9 @@ class WorkManagerModelSetupService(
 
     @Volatile
     private var trackedWorkId: UUID? = null
+
+    @Volatile
+    private var localReadinessConfirmed = false
 
     override val state: StateFlow<ModelSetupState> = mutableState.asStateFlow()
 
@@ -50,11 +56,28 @@ class WorkManagerModelSetupService(
     }
 
     override suspend fun prepare() {
-        if (state.value.phase == ModelSetupPhase.READY) return
+        val device = AndroidDeviceEnvironment(appContext)
+        val store = ModelFileStore(device.modelDirectory)
+        val models = ModelCatalog.modelsForRam(device.totalMemoryBytes)
+        val modelsPresent = withContext(Dispatchers.IO) {
+            store.prepareDirectory()
+            store.isPresent(models.voice) && store.isPresent(models.llm)
+        }
+        if (modelsPresent) {
+            localReadinessConfirmed = true
+            mutableState.value = ModelSetupState(
+                phase = ModelSetupPhase.READY,
+                progress = 1f,
+                voiceModelName = models.voice.displayName,
+                llmModelName = models.llm.displayName,
+                animateTransitions = false,
+            )
+            return
+        }
         if (state.value.phase == ModelSetupPhase.FAILED) mutableState.value = ModelSetupState()
 
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build())
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         val operation = workManager.enqueueUniqueWork(
@@ -62,8 +85,16 @@ class WorkManagerModelSetupService(
             ExistingWorkPolicy.KEEP,
             request,
         )
-        withContext(Dispatchers.IO) { operation.result.get() }
-        trackedWorkId = request.id
+        val infos = withContext(Dispatchers.IO) {
+            operation.result.get()
+            workManager.getWorkInfosForUniqueWork(ModelDownloadWork.UNIQUE_WORK_NAME).get()
+        }
+        val retained = infos.firstOrNull { it.id == request.id }
+            ?: infos.firstOrNull { !it.state.isFinished }
+            ?: infos.lastOrNull()
+            ?: error("WorkManager did not retain model download work.")
+        trackedWorkId = retained.id
+        publish(infos)
     }
 
     /**
@@ -71,13 +102,16 @@ class WorkManagerModelSetupService(
      * same record keeps its terminal state until new work starts.
      */
     private fun publish(infos: List<WorkInfo>) {
-        val active = infos.firstOrNull { !it.state.isFinished }
-        val tracked = if (active != null) {
-            trackedWorkId = active.id
-            active
-        } else {
-            infos.firstOrNull { it.id == trackedWorkId } ?: return
+        if (localReadinessConfirmed) return
+        val tracked = infos.firstOrNull { it.id == trackedWorkId }
+        if (tracked != null) {
+            mutableState.value = tracked.toModelSetupState()
+            return
         }
-        mutableState.value = tracked.toModelSetupState()
+        val active = infos.firstOrNull { !it.state.isFinished }
+        if (active != null) {
+            trackedWorkId = active.id
+            mutableState.value = active.toModelSetupState()
+        }
     }
 }

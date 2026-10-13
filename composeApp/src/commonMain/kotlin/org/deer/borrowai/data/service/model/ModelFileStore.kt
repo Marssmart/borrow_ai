@@ -11,19 +11,36 @@ import okio.buffer
 class ModelFileStore(
     val modelDirectory: Path,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val digestFile: (Path) -> String = { path -> sha256File(fileSystem, path) },
 ) {
     fun finalPath(spec: ModelSpec): Path = modelDirectory / spec.fileName
 
     fun partialPath(spec: ModelSpec): Path = modelDirectory / (spec.fileName + PARTIAL_SUFFIX)
 
+    fun verifiedRecordPath(spec: ModelSpec): Path = modelDirectory / (spec.fileName + VERIFIED_SUFFIX)
+
     /**
-     * A model is present only when its final file has the catalog size and re-hashes to the catalog SHA-256,
-     * so a skip never trusts a file that was not verified.
+     * A verified metadata record avoids re-hashing multi-gigabyte files on each launch. Missing or stale records
+     * trigger a full digest check before the model is trusted.
      */
     fun isPresent(spec: ModelSpec): Boolean {
         val path = finalPath(spec)
-        if (fileSystem.metadataOrNull(path)?.size != spec.sizeBytes) return false
-        return sha256Of(path) == spec.sha256
+        val metadata = fileSystem.metadataOrNull(path) ?: return false
+        if (metadata.size != spec.sizeBytes) {
+            fileSystem.delete(verifiedRecordPath(spec), mustExist = false)
+            return false
+        }
+        val lastModifiedAtMillis = metadata.lastModifiedAtMillis ?: return verifyAndCache(spec, path, null)
+        val record = readVerificationRecord(spec)
+        if (
+            record != null &&
+            record.sizeBytes == spec.sizeBytes &&
+            record.lastModifiedAtMillis == lastModifiedAtMillis &&
+            record.sha256 == spec.sha256
+        ) {
+            return true
+        }
+        return verifyAndCache(spec, path, lastModifiedAtMillis)
     }
 
     fun prepareDirectory() {
@@ -49,22 +66,80 @@ class ModelFileStore(
         }
         fileSystem.delete(finalPath(spec), mustExist = false)
         fileSystem.atomicMove(partialPath(spec), finalPath(spec))
+        val lastModifiedAtMillis = fileSystem.metadataOrNull(finalPath(spec))?.lastModifiedAtMillis
+        writeVerificationRecord(spec, lastModifiedAtMillis)
     }
 
-    private fun sha256Of(path: Path): String {
-        val hashing = HashingSource.sha256(fileSystem.source(path))
-        val source = hashing.buffer()
+    private fun verifyAndCache(spec: ModelSpec, path: Path, lastModifiedAtMillis: Long?): Boolean {
+        if (digestFile(path) != spec.sha256) {
+            fileSystem.delete(verifiedRecordPath(spec), mustExist = false)
+            return false
+        }
+        writeVerificationRecord(spec, lastModifiedAtMillis)
+        return true
+    }
+
+    private fun readVerificationRecord(spec: ModelSpec): VerificationRecord? {
+        val recordPath = verifiedRecordPath(spec)
+        if (fileSystem.metadataOrNull(recordPath) == null) return null
+        val source = fileSystem.source(recordPath).buffer()
         try {
-            source.readAll(blackholeSink())
+            val fields = source.readUtf8().trimEnd('\n').split('\n')
+            if (fields.size != RECORD_FIELD_COUNT || fields[0] != RECORD_VERSION) return null
+            val sizeBytes = fields[1].toLongOrNull() ?: return null
+            val lastModifiedAtMillis = fields[2].toLongOrNull() ?: return null
+            if (!DIGEST_PATTERN.matches(fields[3])) return null
+            return VerificationRecord(sizeBytes, lastModifiedAtMillis, fields[3])
         } finally {
             source.close()
         }
-        return hashing.hash.hex()
     }
+
+    private fun writeVerificationRecord(spec: ModelSpec, lastModifiedAtMillis: Long?) {
+        if (lastModifiedAtMillis == null) {
+            fileSystem.delete(verifiedRecordPath(spec), mustExist = false)
+            return
+        }
+        val recordPath = verifiedRecordPath(spec)
+        val temporaryPath = modelDirectory / (spec.fileName + VERIFIED_TEMP_SUFFIX)
+        fileSystem.delete(temporaryPath, mustExist = false)
+        val sink = fileSystem.sink(temporaryPath).buffer()
+        try {
+            sink.writeUtf8(
+                "$RECORD_VERSION\n${spec.sizeBytes}\n$lastModifiedAtMillis\n${spec.sha256}\n",
+            )
+        } finally {
+            sink.close()
+        }
+        fileSystem.delete(recordPath, mustExist = false)
+        fileSystem.atomicMove(temporaryPath, recordPath)
+    }
+
+    private data class VerificationRecord(
+        val sizeBytes: Long,
+        val lastModifiedAtMillis: Long,
+        val sha256: String,
+    )
 
     private companion object {
         const val PARTIAL_SUFFIX = ".part"
+        const val VERIFIED_SUFFIX = ".verified"
+        const val VERIFIED_TEMP_SUFFIX = ".verified.tmp"
+        const val RECORD_VERSION = "1"
+        const val RECORD_FIELD_COUNT = 4
+        val DIGEST_PATTERN = Regex("[0-9a-f]{64}")
     }
+}
+
+private fun sha256File(fileSystem: FileSystem, path: Path): String {
+    val hashing = HashingSource.sha256(fileSystem.source(path))
+    val source = hashing.buffer()
+    try {
+        source.readAll(blackholeSink())
+    } finally {
+        source.close()
+    }
+    return hashing.hash.hex()
 }
 
 internal fun modelDirectoryUnder(appDirectory: String): Path =

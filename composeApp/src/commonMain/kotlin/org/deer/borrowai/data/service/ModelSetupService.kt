@@ -21,6 +21,8 @@ data class ModelSetupState(
     val failedDuring: ModelSetupPhase? = null,
     val bytesDownloaded: Long = 0L,
     val bytesTotal: Long = 0L,
+    val animateTransitions: Boolean = true,
+    val retryableFailure: Boolean = false,
 )
 
 interface ModelSetupService {
