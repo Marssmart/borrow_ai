@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: ["**"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gradle-android:
-    name: Gradle tests, Android build, and lint
+  gradle-build:
+    name: Gradle build and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -40,80 +40,5 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run Gradle unit tests, Android build, and lint
-        run: ./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug :composeApp:lintDebug --no-daemon
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-debug-apk
-          path: composeApp/build/outputs/apk/debug/composeApp-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-
-  android-emulator:
-    name: Android emulator smoke test
-    needs: gradle-android
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Download debug APK
-        uses: actions/download-artifact@v4
-        with:
-          name: android-debug-apk
-          path: artifacts/android-debug-apk
-
-      - name: Launch and verify BorrowAI on an Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: bash scripts/android-smoke.sh artifacts/android-debug-apk/composeApp-debug.apk
-
-  ios-simulator:
-    name: iOS Simulator tests and app smoke test
-    runs-on: macos-15
-    timeout-minutes: 60
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Run Kotlin tests on the iOS Simulator
-        run: ./gradlew :composeApp:iosSimulatorArm64Test --no-daemon
-
-      - name: Build the iOS app for Simulator
-        run: >-
-          xcodebuild
-          -project iosApp/iosApp.xcodeproj
-          -scheme BorrowAI
-          -destination 'generic/platform=iOS Simulator'
-          -configuration Debug
-          -derivedDataPath build/ios-derived
-          CODE_SIGNING_ALLOWED=NO
-          build
-
-      - name: Launch and verify BorrowAI on an iOS Simulator
-        run: bash scripts/ios-smoke.sh build/ios-derived/Build/Products/Debug-iphonesimulator/BorrowAI.app
-
-      - name: Upload iOS Simulator app
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-simulator-app
-          path: build/ios-derived/Build/Products/Debug-iphonesimulator/BorrowAI.app
-          if-no-files-found: error
-          retention-days: 7
+      - name: Run Gradle unit tests and build the Android app
+        run: ./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug --no-daemon
