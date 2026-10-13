@@ -3,7 +3,9 @@ package org.deer.borrowai
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.app.ServiceVariants
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
 import org.deer.borrowai.data.service.model.ModelFileStore
@@ -29,6 +32,7 @@ object ModelDownloadWork {
     const val NOTIFICATION_ID = 1051
     const val MAX_ATTEMPTS = 5
     const val METERED_OVERRIDE_TAG = "borrowai-model-download-metered"
+    const val SERVICE_VARIANT_EXTRA = "BORROW_AI_SERVICE_VARIANT"
 
     const val KEY_PHASE = "phase"
     const val KEY_PROGRESS = "progress"
@@ -163,6 +167,18 @@ private fun notification(context: Context, state: ModelSetupState): Notification
         state.phase == ModelSetupPhase.NOT_STARTED ||
         state.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ||
         state.phase == ModelSetupPhase.WAITING_FOR_NETWORK
+    val contentIntent = Intent(context, MainActivity::class.java).apply {
+        putExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA, ServiceVariants.REAL_MODEL_SETUP.id)
+        // Reuse the app task but recreate MainActivity so it consumes the real-model-setup extra in onCreate.
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        ModelDownloadWork.NOTIFICATION_ID,
+        contentIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
     return NotificationCompat.Builder(context, ModelDownloadWork.NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_download)
         .setContentTitle(context.getString(R.string.notification_model_download_title))
@@ -171,6 +187,7 @@ private fun notification(context: Context, state: ModelSetupState): Notification
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setProgress(100, percent, indeterminate)
+        .setContentIntent(pendingIntent)
         .build()
 }
 

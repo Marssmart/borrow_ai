@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Home-screen launches cannot carry the variant extra from the IDE run configuration.
-        val serviceVariantId = intent.getStringExtra(SERVICE_VARIANT_EXTRA)
+        val serviceVariantId = intent.getStringExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA)
             ?: if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                 ServiceVariants.DEMO.id
             } else {
@@ -60,7 +60,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        const val SERVICE_VARIANT_EXTRA = "BORROW_AI_SERVICE_VARIANT"
         const val PREFERENCES_NAME = "borrowai-permissions"
         const val NOTIFICATION_PERMISSION_REQUESTED = "model-download-notification-requested"
     }
