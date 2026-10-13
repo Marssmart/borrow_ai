@@ -28,15 +28,14 @@ object ModelDownloadWork {
     const val NOTIFICATION_CHANNEL_ID = "model-download"
     const val NOTIFICATION_ID = 1051
     const val MAX_ATTEMPTS = 5
+    const val METERED_OVERRIDE_TAG = "borrowai-model-download-metered"
 
     const val KEY_PHASE = "phase"
     const val KEY_PROGRESS = "progress"
     const val KEY_VOICE_NAME = "voiceModelName"
     const val KEY_LLM_NAME = "llmModelName"
-    const val KEY_FAILED_DURING = "failedDuring"
     const val KEY_BYTES_DOWNLOADED = "bytesDownloaded"
     const val KEY_BYTES_TOTAL = "bytesTotal"
-    const val KEY_ANIMATE_TRANSITIONS = "animateTransitions"
     const val KEY_RETRYABLE_FAILURE = "retryableFailure"
     const val KEY_FAILURE_REASON = "failureReason"
 }
@@ -104,10 +103,8 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
     ModelDownloadWork.KEY_PROGRESS to progress,
     ModelDownloadWork.KEY_VOICE_NAME to voiceModelName.orEmpty(),
     ModelDownloadWork.KEY_LLM_NAME to llmModelName.orEmpty(),
-    ModelDownloadWork.KEY_FAILED_DURING to failedDuring?.name.orEmpty(),
     ModelDownloadWork.KEY_BYTES_DOWNLOADED to bytesDownloaded,
     ModelDownloadWork.KEY_BYTES_TOTAL to bytesTotal,
-    ModelDownloadWork.KEY_ANIMATE_TRANSITIONS to animateTransitions,
     ModelDownloadWork.KEY_RETRYABLE_FAILURE to retryableFailure,
     ModelDownloadWork.KEY_FAILURE_REASON to failureReason?.name.orEmpty(),
 )
@@ -116,11 +113,15 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
 fun WorkInfo.toModelSetupState(): ModelSetupState {
     val data = if (state.isFinished) outputData else progress
     return when (state) {
-        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
-            ModelSetupState(phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK)
+        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ModelSetupState(
+            phase = if (tags.contains(ModelDownloadWork.METERED_OVERRIDE_TAG)) {
+                ModelSetupPhase.WAITING_FOR_NETWORK
+            } else {
+                ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
+            },
+        )
         WorkInfo.State.RUNNING -> data.toModelSetupState(defaultPhase = ModelSetupPhase.NOT_STARTED)
         WorkInfo.State.SUCCEEDED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.READY)
-            .copy(animateTransitions = false)
         WorkInfo.State.FAILED -> data.toModelSetupState(defaultPhase = ModelSetupPhase.FAILED)
         WorkInfo.State.CANCELLED -> ModelSetupState(phase = ModelSetupPhase.FAILED)
     }
@@ -137,15 +138,9 @@ private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupSta
         llmModelName = getString(ModelDownloadWork.KEY_LLM_NAME)?.takeIf { it.isNotEmpty() },
         bytesDownloaded = getLong(ModelDownloadWork.KEY_BYTES_DOWNLOADED, 0L),
         bytesTotal = getLong(ModelDownloadWork.KEY_BYTES_TOTAL, 0L),
-        animateTransitions = getBoolean(
-            ModelDownloadWork.KEY_ANIMATE_TRANSITIONS,
-            phase != ModelSetupPhase.READY,
-        ),
         retryableFailure = getBoolean(ModelDownloadWork.KEY_RETRYABLE_FAILURE, false),
         failureReason = getString(ModelDownloadWork.KEY_FAILURE_REASON)
             ?.let { name -> ModelSetupFailureReason.entries.firstOrNull { it.name == name } },
-        failedDuring = getString(ModelDownloadWork.KEY_FAILED_DURING)
-            ?.let { name -> ModelSetupPhase.entries.firstOrNull { it.name == name } },
     )
 }
 
@@ -166,7 +161,8 @@ private fun notification(context: Context, state: ModelSetupState): Notification
     val percent = (state.progress * 100).toInt().coerceIn(0, 100)
     val indeterminate = state.phase == ModelSetupPhase.CHOOSING_MODEL ||
         state.phase == ModelSetupPhase.NOT_STARTED ||
-        state.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
+        state.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ||
+        state.phase == ModelSetupPhase.WAITING_FOR_NETWORK
     return NotificationCompat.Builder(context, ModelDownloadWork.NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_download)
         .setContentTitle(context.getString(R.string.notification_model_download_title))
@@ -182,6 +178,7 @@ private fun phaseLabelRes(phase: ModelSetupPhase): Int = when (phase) {
     ModelSetupPhase.NOT_STARTED,
     ModelSetupPhase.CHOOSING_MODEL -> R.string.notification_model_choosing
     ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK -> R.string.notification_model_waiting_for_wifi
+    ModelSetupPhase.WAITING_FOR_NETWORK -> R.string.notification_model_waiting_for_network
     ModelSetupPhase.DOWNLOADING_VOICE -> R.string.notification_model_downloading_voice
     ModelSetupPhase.LOADING_VOICE -> R.string.notification_model_checking_voice
     ModelSetupPhase.DOWNLOADING_LLM -> R.string.notification_model_downloading_llm

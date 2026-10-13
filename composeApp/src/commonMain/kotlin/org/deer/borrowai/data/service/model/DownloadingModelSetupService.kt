@@ -85,7 +85,6 @@ class DownloadingModelSetupService(
         } catch (error: Exception) {
             mutableState.value = mutableState.value.copy(
                 phase = ModelSetupPhase.FAILED,
-                failedDuring = mutableState.value.phase,
                 retryableFailure = (error as? ModelDownloadException)?.retryable == true,
                 failureReason = when {
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
@@ -116,7 +115,6 @@ class DownloadingModelSetupService(
             progress = 1f,
             voiceModelName = models.voice.displayName,
             llmModelName = models.llm.displayName,
-            animateTransitions = false,
         )
     }
 

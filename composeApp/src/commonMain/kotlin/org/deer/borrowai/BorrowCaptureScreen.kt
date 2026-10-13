@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -57,8 +60,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.deer.borrowai.data.service.MediaSessionService
+import org.deer.borrowai.data.service.ModelSetupFailureReason
+import org.deer.borrowai.data.service.ModelSetupPhase
+import org.deer.borrowai.data.service.ModelSetupService
+import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.model.ModelDownloadFormat
 import borrowai.composeapp.generated.resources.Res
+import borrowai.composeapp.generated.resources.capture_download_over_mobile_data
 import borrowai.composeapp.generated.resources.capture_elapsed_duration
+import borrowai.composeapp.generated.resources.capture_model_choosing
+import borrowai.composeapp.generated.resources.capture_model_downloading_summarization
+import borrowai.composeapp.generated.resources.capture_model_downloading_transcription
+import borrowai.composeapp.generated.resources.capture_model_failed_model
+import borrowai.composeapp.generated.resources.capture_model_failed_model_detail
+import borrowai.composeapp.generated.resources.capture_model_failed_network
+import borrowai.composeapp.generated.resources.capture_model_failed_network_detail
+import borrowai.composeapp.generated.resources.capture_model_failed_storage
+import borrowai.composeapp.generated.resources.capture_model_failed_storage_detail
+import borrowai.composeapp.generated.resources.capture_model_loading_transcription
+import borrowai.composeapp.generated.resources.capture_model_progress_summarization
+import borrowai.composeapp.generated.resources.capture_model_progress_transcription
+import borrowai.composeapp.generated.resources.capture_model_waiting_for_network
+import borrowai.composeapp.generated.resources.capture_model_waiting_for_unmetered_network
+import borrowai.composeapp.generated.resources.capture_models_unavailable
 import borrowai.composeapp.generated.resources.capture_recording_label
 import borrowai.composeapp.generated.resources.capture_release_to_stop
 import borrowai.composeapp.generated.resources.capture_start_recording_description
@@ -68,15 +92,32 @@ import borrowai.composeapp.generated.resources.capture_tap_or_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_record_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_stop
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun BorrowCaptureScreen(
     mediaSessionService: MediaSessionService,
+    modelSetupService: ModelSetupService,
 ) {
-    val stateHolder = remember(mediaSessionService) { CaptureUiStateHolder(mediaSessionService) }
+    val stateHolder = remember(mediaSessionService, modelSetupService) {
+        CaptureUiStateHolder(
+            mediaSessionService = mediaSessionService,
+            initiallyModelReady = modelSetupService.state.value.phase == ModelSetupPhase.READY,
+        )
+    }
     val uiState by stateHolder.uiState.collectAsState()
-    LaunchedEffect(stateHolder) {
-        stateHolder.observeMediaSession()
+    val setupState by modelSetupService.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    val modelReady = setupState.phase == ModelSetupPhase.READY
+    val modelStatus = modelSetupStatus(setupState)
+    val modelFailureDetail = modelSetupFailureDetail(setupState)
+
+    LaunchedEffect(stateHolder, modelSetupService) {
+        launch { stateHolder.observeMediaSession() }
+        launch {
+            modelSetupService.state.collect { stateHolder.setModelReady(it.phase == ModelSetupPhase.READY) }
+        }
+        modelSetupService.prepare()
     }
 
     BoxWithConstraints(
@@ -112,7 +153,9 @@ internal fun BorrowCaptureScreen(
                 buttonSize = microphoneSize,
                 isRecording = uiState.isRecording,
                 isHoldRecording = uiState.isHoldRecording,
+                isEnabled = modelReady,
                 elapsedSeconds = uiState.elapsedSeconds,
+                statusLabel = modelStatus,
                 onToggleRecording = stateHolder::toggleRecording,
                 onStartHoldRecording = stateHolder::startHoldRecording,
                 onStopHoldRecording = stateHolder::stopHoldRecording,
@@ -128,23 +171,37 @@ internal fun BorrowCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
             ) {
-                Text(
-                    text = if (uiState.isRecording) {
-                        if (uiState.isHoldRecording) {
-                            stringResource(Res.string.capture_release_to_stop)
+                if (modelReady) {
+                    Text(
+                        text = if (uiState.isRecording) {
+                            if (uiState.isHoldRecording) {
+                                stringResource(Res.string.capture_release_to_stop)
+                            } else {
+                                stringResource(Res.string.capture_tap_to_stop)
+                            }
                         } else {
-                            stringResource(Res.string.capture_tap_to_stop)
-                        }
-                    } else {
-                        stringResource(Res.string.capture_tap_to_record_hold)
-                    },
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = CaptureUiStateHolder.STATUS_LETTER_SPACING,
-                    color = if (uiState.isRecording) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface,
-                )
+                            stringResource(Res.string.capture_tap_to_record_hold)
+                        },
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = CaptureUiStateHolder.STATUS_LETTER_SPACING,
+                        color = if (uiState.isRecording) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                } else if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+                    Button(onClick = { scope.launch { modelSetupService.downloadOverMobileData() } }) {
+                        Text(stringResource(Res.string.capture_download_over_mobile_data))
+                    }
+                }
+                if (modelFailureDetail != null) {
+                    Text(
+                        text = modelFailureDetail,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     stringResource(Res.string.capture_swipe_saved_memories),
                     style = MaterialTheme.typography.labelSmall,
@@ -164,23 +221,28 @@ private fun MicrophoneButton(
     buttonSize: Dp,
     isRecording: Boolean,
     isHoldRecording: Boolean,
+    isEnabled: Boolean,
     elapsedSeconds: Int,
+    statusLabel: String?,
     onToggleRecording: () -> Unit,
     onStartHoldRecording: () -> Unit,
     onStopHoldRecording: () -> Unit,
 ) {
     val latestIsRecording = rememberUpdatedState(isRecording)
+    val latestIsEnabled = rememberUpdatedState(isEnabled)
     val latestOnToggle = rememberUpdatedState(onToggleRecording)
     val latestOnHoldStart = rememberUpdatedState(onStartHoldRecording)
     val latestOnHoldStop = rememberUpdatedState(onStopHoldRecording)
-    val microphoneDescription = stringResource(
+    val defaultDescription = stringResource(
         if (isRecording) Res.string.capture_stop_recording_description
         else Res.string.capture_start_recording_description,
     )
+    val microphoneDescription = if (isEnabled) defaultDescription
+    else statusLabel ?: stringResource(Res.string.capture_models_unavailable)
     val infiniteTransition = rememberInfiniteTransition(label = "mic-pulse")
     val pulse by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isRecording) {
+        targetValue = if (!isEnabled) 1f else if (isRecording) {
             CaptureUiStateHolder.RECORDING_BUTTON_PULSE_SCALE
         } else {
             CaptureUiStateHolder.IDLE_BUTTON_PULSE_SCALE
@@ -207,14 +269,24 @@ private fun MicrophoneButton(
         label = "mic-ring",
     )
     val buttonColor by animateColorAsState(
-        targetValue = if (isRecording) MaterialTheme.colorScheme.error else Color.White,
+        targetValue = when {
+            !isEnabled -> MaterialTheme.colorScheme.surfaceVariant
+            isRecording -> MaterialTheme.colorScheme.error
+            else -> Color.White
+        },
         animationSpec = tween(CaptureUiStateHolder.COLOR_TRANSITION_MILLIS),
         label = "mic-color",
     )
-    val buttonContentColor = if (isRecording) Color.White else MaterialTheme.colorScheme.primary
+    val buttonContentColor = when {
+        !isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+        isRecording -> Color.White
+        else -> MaterialTheme.colorScheme.primary
+    }
     val pulseColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val buttonBorderColor = if (isRecording) {
         MaterialTheme.colorScheme.error.copy(alpha = CaptureUiStateHolder.RECORDING_BORDER_ALPHA)
+    } else if (!isEnabled) {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
     } else {
         MaterialTheme.colorScheme.primaryContainer
     }
@@ -234,17 +306,19 @@ private fun MicrophoneButton(
                 radius = buttonRadius + CaptureUiStateHolder.BUTTON_HALO_EXTRA_RADIUS.toPx(),
                 style = Stroke(width = CaptureUiStateHolder.BUTTON_BORDER_WIDTH.toPx()),
             )
-            drawCircle(
-                color = pulseColor.copy(
-                    alpha = (
-                        if (isRecording) CaptureUiStateHolder.RECORDING_RING_ALPHA
-                        else CaptureUiStateHolder.IDLE_RING_ALPHA
-                    ) * (1f - pulseWave),
-                ),
-                radius = buttonRadius + CaptureUiStateHolder.RING_INITIAL_RADIUS.toPx() +
-                    CaptureUiStateHolder.RING_WAVE_EXTENT.toPx() * pulseWave,
-                style = Stroke(width = CaptureUiStateHolder.RING_STROKE_WIDTH.toPx()),
-            )
+            if (isEnabled) {
+                drawCircle(
+                    color = pulseColor.copy(
+                        alpha = (
+                            if (isRecording) CaptureUiStateHolder.RECORDING_RING_ALPHA
+                            else CaptureUiStateHolder.IDLE_RING_ALPHA
+                        ) * (1f - pulseWave),
+                    ),
+                    radius = buttonRadius + CaptureUiStateHolder.RING_INITIAL_RADIUS.toPx() +
+                        CaptureUiStateHolder.RING_WAVE_EXTENT.toPx() * pulseWave,
+                    style = Stroke(width = CaptureUiStateHolder.RING_STROKE_WIDTH.toPx()),
+                )
+            }
         }
         Surface(
             modifier = Modifier.size(buttonSize * pulse)
@@ -252,12 +326,17 @@ private fun MicrophoneButton(
                 .semantics {
                     role = Role.Button
                     contentDescription = microphoneDescription
-                    onClick {
-                        latestOnToggle.value()
-                        true
+                    if (isEnabled) {
+                        onClick {
+                            latestOnToggle.value()
+                            true
+                        }
+                    } else {
+                        disabled()
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(isEnabled) {
+                    if (!isEnabled) return@pointerInput
                     var holdStarted = false
                     detectTapGestures(
                         onPress = {
@@ -270,7 +349,7 @@ private fun MicrophoneButton(
                             }
                         },
                         onLongPress = {
-                            if (!latestIsRecording.value) {
+                            if (latestIsEnabled.value && !latestIsRecording.value) {
                                 holdStarted = true
                                 latestOnHoldStart.value()
                             }
@@ -297,14 +376,16 @@ private fun MicrophoneButton(
                 )
                 Spacer(Modifier.height(CaptureUiStateHolder.BUTTON_GLYPH_SPACING))
                 Text(
-                    stringResource(
-                        if (isRecording) Res.string.capture_recording_label
-                        else Res.string.capture_tap_or_hold,
+                    text = statusLabel ?: stringResource(
+                        if (isRecording) Res.string.capture_recording_label else Res.string.capture_tap_or_hold,
                     ),
                     color = buttonContentColor,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = if (isEnabled) MaterialTheme.typography.labelLarge
+                    else MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = CaptureUiStateHolder.BUTTON_CONTENT_FONT_SPACING,
+                    textAlign = TextAlign.Center,
+                    maxLines = if (isEnabled) 1 else 3,
                 )
                 if (isRecording) {
                     Spacer(Modifier.height(CaptureUiStateHolder.RECORDING_DURATION_SPACING))
@@ -388,4 +469,58 @@ private fun formatDurationParts(totalSeconds: Int): Pair<String, String> {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return minutes.toString().padStart(2, '0') to seconds.toString().padStart(2, '0')
+}
+
+@Composable
+private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phase) {
+    ModelSetupPhase.NOT_STARTED,
+    ModelSetupPhase.CHOOSING_MODEL -> stringResource(Res.string.capture_model_choosing)
+    ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ->
+        stringResource(Res.string.capture_model_waiting_for_unmetered_network)
+    ModelSetupPhase.WAITING_FOR_NETWORK -> stringResource(Res.string.capture_model_waiting_for_network)
+    ModelSetupPhase.DOWNLOADING_VOICE -> {
+        if (state.bytesTotal > 0L) {
+            stringResource(
+                Res.string.capture_model_progress_transcription,
+                ModelDownloadFormat.megabytes(state.bytesDownloaded),
+                ModelDownloadFormat.megabytes(state.bytesTotal),
+            )
+        } else {
+            stringResource(Res.string.capture_model_downloading_transcription)
+        }
+    }
+    ModelSetupPhase.LOADING_VOICE -> stringResource(Res.string.capture_model_loading_transcription)
+    ModelSetupPhase.DOWNLOADING_LLM -> {
+        if (state.bytesTotal > 0L) {
+            stringResource(
+                Res.string.capture_model_progress_summarization,
+                ModelDownloadFormat.megabytes(state.bytesDownloaded),
+                ModelDownloadFormat.megabytes(state.bytesTotal),
+            )
+        } else {
+            stringResource(Res.string.capture_model_downloading_summarization)
+        }
+    }
+    ModelSetupPhase.READY -> null
+    ModelSetupPhase.FAILED -> stringResource(
+        when (state.failureReason) {
+            ModelSetupFailureReason.NETWORK -> Res.string.capture_model_failed_network
+            ModelSetupFailureReason.STORAGE -> Res.string.capture_model_failed_storage
+            ModelSetupFailureReason.MODEL,
+            null -> Res.string.capture_model_failed_model
+        },
+    )
+}
+
+@Composable
+private fun modelSetupFailureDetail(state: ModelSetupState): String? {
+    if (state.phase != ModelSetupPhase.FAILED) return null
+    return stringResource(
+        when (state.failureReason) {
+            ModelSetupFailureReason.NETWORK -> Res.string.capture_model_failed_network_detail
+            ModelSetupFailureReason.STORAGE -> Res.string.capture_model_failed_storage_detail
+            ModelSetupFailureReason.MODEL,
+            null -> Res.string.capture_model_failed_model_detail
+        },
+    )
 }

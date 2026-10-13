@@ -19,6 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupState
 
@@ -102,7 +103,7 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
-    fun alreadyPresentModelsReachReadyWithoutHoldsOrAnimations() = runTest {
+    fun alreadyPresentModelsReachReadyWithoutHolds() = runTest {
         val fileSystem = FakeFileSystem()
         val store = store(fileSystem)
         store.prepareDirectory()
@@ -131,7 +132,6 @@ class DownloadingModelSetupServiceTest {
         runCurrent()
 
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
-        assertFalse(setup.state.value.animateTransitions)
         assertEquals(emptyList(), downloader.requestedUrls)
         assertEquals(0L, testScheduler.currentTime)
         assertTrue(phases.last() == ModelSetupPhase.READY)
@@ -150,7 +150,6 @@ class DownloadingModelSetupServiceTest {
         assertEquals("Test Voice", setup.state.value.voiceModelName)
         assertEquals("Test LLM", setup.state.value.llmModelName)
         assertEquals(1f, setup.state.value.progress)
-        assertTrue(setup.state.value.animateTransitions)
     }
 
     @Test
@@ -265,7 +264,7 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
+        assertEquals(ModelSetupFailureReason.MODEL, setup.state.value.failureReason)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
     }
@@ -278,7 +277,7 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
+        assertEquals(ModelSetupFailureReason.MODEL, setup.state.value.failureReason)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
     }

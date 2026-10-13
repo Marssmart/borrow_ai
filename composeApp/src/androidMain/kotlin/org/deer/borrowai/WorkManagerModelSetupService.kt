@@ -61,7 +61,11 @@ class WorkManagerModelSetupService(
         }
     }
 
-    override suspend fun prepare() {
+    override suspend fun prepare() = enqueueModelSetup(allowMetered = false)
+
+    override suspend fun downloadOverMobileData() = enqueueModelSetup(allowMetered = true)
+
+    private suspend fun enqueueModelSetup(allowMetered: Boolean) {
         val models: TierModels
         val modelsPresent: Boolean
         try {
@@ -77,7 +81,6 @@ class WorkManagerModelSetupService(
         } catch (error: Exception) {
             mutableState.value = ModelSetupState(
                 phase = ModelSetupPhase.FAILED,
-                failedDuring = ModelSetupPhase.CHOOSING_MODEL,
                 failureReason = when {
                     error is ModelStorageException || error is IOException -> ModelSetupFailureReason.STORAGE
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
@@ -94,19 +97,27 @@ class WorkManagerModelSetupService(
                 progress = 1f,
                 voiceModelName = models.voice.displayName,
                 llmModelName = models.llm.displayName,
-                animateTransitions = false,
             )
             return
         }
         if (state.value.phase == ModelSetupPhase.FAILED) mutableState.value = ModelSetupState()
 
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build())
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(
+                        if (allowMetered) NetworkType.CONNECTED else NetworkType.UNMETERED,
+                    )
+                    .build(),
+            )
+            .apply {
+                if (allowMetered) addTag(ModelDownloadWork.METERED_OVERRIDE_TAG)
+            }
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         val operation = workManager.enqueueUniqueWork(
             ModelDownloadWork.UNIQUE_WORK_NAME,
-            ExistingWorkPolicy.KEEP,
+            if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             request,
         )
         val infos = withContext(Dispatchers.IO) {
