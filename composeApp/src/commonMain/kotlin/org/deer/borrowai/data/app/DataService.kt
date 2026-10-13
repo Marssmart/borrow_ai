@@ -91,7 +91,10 @@ data class ServiceVariantLaunchSelection(
     val persistExplicitSelection: Boolean,
 )
 
-/** Only a debug launch from the trusted shell/IDE path may override the persisted variant with an extra. */
+/**
+ * A known caller must be the shell/IDE path. Legacy Android and older onNewIntent callbacks may not expose a caller;
+ * those extras are accepted only in debuggable builds, never in release.
+ */
 fun resolveServiceVariantLaunch(
     hasExplicitId: Boolean,
     explicitId: String?,
@@ -102,7 +105,7 @@ fun resolveServiceVariantLaunch(
 ): ServiceVariantLaunchSelection {
     val trustedExplicitId = hasExplicitId &&
         isDebuggable &&
-        callerUid == trustedCallerUid
+        (callerUid == null || callerUid == trustedCallerUid)
     return ServiceVariantLaunchSelection(
         variant = resolveServiceVariant(
             hasExplicitId = trustedExplicitId,
