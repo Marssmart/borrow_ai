@@ -189,6 +189,42 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun fullSizePartialWithValidDigestIsCommittedWithoutRangeRequest() = runTest {
+        val fileSystem = FakeFileSystem()
+        fileSystem.createDirectories(modelDirectory)
+        writeBytes(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), ByteArray(voice.sizeBytes.toInt()))
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope)
+
+        setup.prepare()
+
+        assertEquals(listOf(llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
+        assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+    }
+
+    @Test
+    fun fullSizePartialWithInvalidDigestIsDiscardedAndDownloadedAgain() = runTest {
+        val fileSystem = FakeFileSystem()
+        fileSystem.createDirectories(modelDirectory)
+        writeBytes(
+            fileSystem,
+            modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"),
+            ByteArray(voice.sizeBytes.toInt()) { 1 },
+        )
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope)
+
+        setup.prepare()
+
+        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
+        assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+    }
+
+    @Test
     fun finalFileWithWrongSizeIsReplaced() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
