@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.4]
+
+- Added a basic GitHub Actions Gradle job that runs Android unit tests and assembles the debug app.
+- Bumped Android and iOS app versions to 1.0.4 (build 5).
+
 ## [1.0.3]
 
 - Added model setup, memory CRUD, and media-session service contracts with in-memory demo providers and service tests.
