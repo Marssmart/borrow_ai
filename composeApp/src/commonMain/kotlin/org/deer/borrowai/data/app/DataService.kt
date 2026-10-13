@@ -69,3 +69,19 @@ object ServiceVariants {
         return all.firstOrNull { it.id == normalized } ?: throw UnknownServiceVariantException(id)
     }
 }
+
+/** Resolves startup selection without silently replacing an explicit or persisted invalid id. */
+fun resolveServiceVariant(
+    hasExplicitId: Boolean,
+    explicitId: String?,
+    savedId: String?,
+    isDebuggable: Boolean,
+): ServiceVariant {
+    val requestedId = when {
+        hasExplicitId -> explicitId
+        savedId != null -> savedId
+        isDebuggable -> ServiceVariants.DEMO.id
+        else -> null
+    }
+    return ServiceVariants.fromId(requestedId)
+}
