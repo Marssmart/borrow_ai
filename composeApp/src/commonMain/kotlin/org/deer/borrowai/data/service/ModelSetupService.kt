@@ -12,13 +12,15 @@ enum class ModelSetupPhase {
     FAILED,
 }
 
-/** Names are null until the device tier has been chosen. [failedDuring] keeps the step that failed visible. */
+/** Names are null until the device tier has been chosen. [failedDuring] keeps the step that failed visible. Byte counts are set only while a model downloads. */
 data class ModelSetupState(
     val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
     val progress: Float = 0f,
     val voiceModelName: String? = null,
     val llmModelName: String? = null,
     val failedDuring: ModelSetupPhase? = null,
+    val bytesDownloaded: Long = 0L,
+    val bytesTotal: Long = 0L,
 )
 
 interface ModelSetupService {

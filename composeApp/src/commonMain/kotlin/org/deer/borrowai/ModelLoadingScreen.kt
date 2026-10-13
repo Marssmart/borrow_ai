@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupService
@@ -44,9 +45,11 @@ import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.model_app_name
 import borrowai.composeapp.generated.resources.model_choosing
 import borrowai.composeapp.generated.resources.model_downloading
+import borrowai.composeapp.generated.resources.model_download_progress
 import borrowai.composeapp.generated.resources.model_failed
 import borrowai.composeapp.generated.resources.model_loading
 import borrowai.composeapp.generated.resources.model_ready
+import org.deer.borrowai.data.service.model.ModelDownloadFormat
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -120,6 +123,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                         completed = animatedProgress >= 1f / ModelLoadingUiStateHolder.SETUP_STEP_COUNT,
                         active = isCurrentStep(uiState.phase, 0),
                         labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, 0),
+                        trailingText = null,
                     )
                     repeat(ModelLoadingUiStateHolder.SETUP_STEP_COUNT) { segment ->
                         ProgressLineSegment(
@@ -138,6 +142,7 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             completed = completed,
                             active = isCurrentStep(uiState.phase, nextStep),
                             labelVisible = isStepLabelVisible(uiState.phase, uiState.failedDuring, nextStep),
+                            trailingText = downloadProgressText(uiState, nextStep),
                         )
                     }
                     if (uiState.phase == ModelSetupPhase.FAILED) {
@@ -187,6 +192,7 @@ private fun ModelBullet(
     completed: Boolean,
     active: Boolean,
     labelVisible: Boolean,
+    trailingText: String?,
 ) {
     val completionProgress by animateFloatAsState(
         targetValue = if (completed) 1f else 0f,
@@ -268,7 +274,10 @@ private fun ModelBullet(
         )
         Text(
             text = name,
-            modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
+            modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING)
+                .then(if (trailingText != null) Modifier.weight(1f) else Modifier),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             color = when {
                 !labelVisible -> Color.Transparent
                 active || completed -> MaterialTheme.colorScheme.onSurface
@@ -277,8 +286,34 @@ private fun ModelBullet(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (active || completed) FontWeight.SemiBold else FontWeight.Normal,
         )
+        if (trailingText != null) {
+            Text(
+                text = trailingText,
+                modifier = Modifier.padding(start = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
+                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
+
+/** "{downloaded} / {total} MB" for the download row that is active; null for every other row. */
+@Composable
+private fun downloadProgressText(uiState: ModelLoadingUiStateHolder.UiState, step: Int): String? {
+    val downloading = (step == VOICE_DOWNLOAD_STEP && uiState.phase == ModelSetupPhase.DOWNLOADING_VOICE) ||
+        (step == LLM_DOWNLOAD_STEP && uiState.phase == ModelSetupPhase.DOWNLOADING_LLM)
+    if (!downloading || uiState.bytesTotal <= 0L) return null
+    return stringResource(
+        Res.string.model_download_progress,
+        ModelDownloadFormat.megabytes(uiState.bytesDownloaded),
+        ModelDownloadFormat.megabytes(uiState.bytesTotal),
+    )
+}
+
+private const val VOICE_DOWNLOAD_STEP = 1
+private const val LLM_DOWNLOAD_STEP = 3
 
 /** Index of the Ready row, the last row of the loader. */
 internal const val READY_STEP_INDEX = 4

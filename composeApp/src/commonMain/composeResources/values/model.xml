@@ -5,4 +5,5 @@
     <string name="model_loading">Loading model %1$s</string>
     <string name="model_ready">Ready</string>
     <string name="model_failed">Model setup failed. Restart BorrowAI to try again.</string>
+    <string name="model_download_progress">%1$s / %2$s MB</string>
 </resources>
