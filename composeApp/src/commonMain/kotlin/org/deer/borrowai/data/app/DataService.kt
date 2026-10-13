@@ -85,3 +85,31 @@ fun resolveServiceVariant(
     }
     return ServiceVariants.fromId(requestedId)
 }
+
+data class ServiceVariantLaunchSelection(
+    val variant: ServiceVariant,
+    val persistExplicitSelection: Boolean,
+)
+
+/** Only a debug launch from the trusted shell/IDE path may override the persisted variant with an extra. */
+fun resolveServiceVariantLaunch(
+    hasExplicitId: Boolean,
+    explicitId: String?,
+    callerUid: Int?,
+    trustedCallerUid: Int,
+    savedId: String?,
+    isDebuggable: Boolean,
+): ServiceVariantLaunchSelection {
+    val trustedExplicitId = hasExplicitId &&
+        isDebuggable &&
+        callerUid == trustedCallerUid
+    return ServiceVariantLaunchSelection(
+        variant = resolveServiceVariant(
+            hasExplicitId = trustedExplicitId,
+            explicitId = if (trustedExplicitId) explicitId else null,
+            savedId = savedId,
+            isDebuggable = isDebuggable,
+        ),
+        persistExplicitSelection = trustedExplicitId,
+    )
+}
