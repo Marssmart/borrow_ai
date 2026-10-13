@@ -19,12 +19,18 @@ import okio.blackholeSink
 import okio.buffer
 
 /**
- * Streams [url] into [destination] and returns the lowercase hex SHA-256 of the whole destination file.
+ * Streams [url] into [destination] up to [expectedSizeBytes] and returns the lowercase hex SHA-256 of the whole
+ * destination file. A response that exceeds the expected size is discarded and fails permanently.
  * An existing partial file is continued with an HTTP Range request; if the server ignores the range the
  * download restarts from zero.
  */
 interface ModelDownloader {
-    suspend fun download(url: String, destination: Path, onProgress: (bytesDownloaded: Long) -> Unit): String
+    suspend fun download(
+        url: String,
+        destination: Path,
+        expectedSizeBytes: Long,
+        onProgress: (bytesDownloaded: Long) -> Unit,
+    ): String
 }
 
 class ModelDownloadException(
@@ -42,12 +48,17 @@ class KtorModelDownloader(
     override suspend fun download(
         url: String,
         destination: Path,
+        expectedSizeBytes: Long,
         onProgress: (bytesDownloaded: Long) -> Unit,
     ): String {
+        require(expectedSizeBytes >= 0L) { "The expected model size cannot be negative." }
         val existingBytes = fileSystem.metadataOrNull(destination)?.size ?: 0L
         return try {
-            if (existingBytes <= 0L) {
-                downloadFromStart(url, destination, onProgress)
+            if (existingBytes > expectedSizeBytes) {
+                discardPartial(destination)
+                downloadFromStart(url, destination, expectedSizeBytes, onProgress)
+            } else if (existingBytes <= 0L) {
+                downloadFromStart(url, destination, expectedSizeBytes, onProgress)
             } else {
                 val resumedDigest = client.prepareGet(url) {
                     header(HttpHeaders.Range, "bytes=$existingBytes-")
@@ -62,20 +73,34 @@ class KtorModelDownloader(
                         ) {
                             null
                         } else if (response.status == HttpStatusCode.PartialContent) {
-                            writeBody(response, destination, append = true, base = existingBytes, onProgress = onProgress)
+                            writeBody(
+                                response,
+                                destination,
+                                append = true,
+                                base = existingBytes,
+                                expectedSizeBytes = expectedSizeBytes,
+                                onProgress = onProgress,
+                            )
                             try {
                                 digestOf(destination)
                             } catch (error: IOException) {
                                 throw ModelStorageException("Unable to verify the resumed model file.", error)
                             }
                         } else {
-                            writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+                            writeBody(
+                                response,
+                                destination,
+                                append = false,
+                                base = 0L,
+                                expectedSizeBytes = expectedSizeBytes,
+                                onProgress = onProgress,
+                            )
                         }
                     }
                 }
                 resumedDigest ?: run {
                     discardPartial(destination)
-                    downloadFromStart(url, destination, onProgress)
+                    downloadFromStart(url, destination, expectedSizeBytes, onProgress)
                 }
             }
         } catch (error: CancellationException) {
@@ -92,10 +117,18 @@ class KtorModelDownloader(
     private suspend fun downloadFromStart(
         url: String,
         destination: Path,
+        expectedSizeBytes: Long,
         onProgress: (Long) -> Unit,
     ): String = client.prepareGet(url).execute { response ->
         ensureSuccessfulResponse(response)
-        writeBody(response, destination, append = false, base = 0L, onProgress = onProgress)
+        writeBody(
+            response,
+            destination,
+            append = false,
+            base = 0L,
+            expectedSizeBytes = expectedSizeBytes,
+            onProgress = onProgress,
+        )
     }
 
     private fun ensureSuccessfulResponse(response: HttpResponse) {
@@ -128,6 +161,7 @@ class KtorModelDownloader(
         destination: Path,
         append: Boolean,
         base: Long,
+        expectedSizeBytes: Long,
         onProgress: (Long) -> Unit,
     ): String {
         val channel = response.bodyAsChannel()
@@ -139,6 +173,7 @@ class KtorModelDownloader(
         }
         val hashing = HashingSink.sha256(rawSink)
         val sink = hashing.buffer()
+        var oversized = false
         try {
             var total = base
             while (true) {
@@ -148,6 +183,10 @@ class KtorModelDownloader(
                     throw ModelDownloadException("Model download was interrupted while reading the network response.", retryable = true, cause = error)
                 }
                 if (read < 0) break
+                if (read.toLong() > expectedSizeBytes - total) {
+                    oversized = true
+                    break
+                }
                 try {
                     sink.write(buffer, 0, read)
                 } catch (error: IOException) {
@@ -160,8 +199,15 @@ class KtorModelDownloader(
             try {
                 sink.close()
             } catch (error: IOException) {
+                if (oversized) discardPartial(destination)
                 throw ModelStorageException("Unable to close the partial model file.", error)
             }
+        }
+        if (oversized) {
+            discardPartial(destination)
+            throw ModelDownloadException(
+                "Model download exceeded its expected size of $expectedSizeBytes bytes.",
+            )
         }
         return hashing.hash.hex()
     }
