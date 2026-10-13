@@ -15,6 +15,8 @@ internal class ModelLoadingUiStateHolder(
     data class UiState(
         val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
         val progress: Float = 0f,
+        val voiceModelName: String? = null,
+        val llmModelName: String? = null,
     )
 
     private val mutableUiState = MutableStateFlow(modelSetupService.state.value.toUiState())
@@ -31,7 +33,12 @@ internal class ModelLoadingUiStateHolder(
         modelSetupService.prepare()
     }
 
-    private fun ModelSetupState.toUiState() = UiState(phase = phase, progress = progress)
+    private fun ModelSetupState.toUiState() = UiState(
+        phase = phase,
+        progress = progress,
+        voiceModelName = voiceModelName,
+        llmModelName = llmModelName,
+    )
 
     internal companion object {
         const val PROGRESS_ANIMATION_MILLIS = 100

@@ -4,16 +4,20 @@ import kotlinx.coroutines.flow.StateFlow
 
 enum class ModelSetupPhase {
     NOT_STARTED,
-    DOWNLOADING_TRANSCRIPTION,
-    LOADING_TRANSCRIPTION,
-    DOWNLOADING_SUMMARIZATION,
-    LOADING_SUMMARIZATION,
+    CHOOSING_MODEL,
+    DOWNLOADING_VOICE,
+    LOADING_VOICE,
+    DOWNLOADING_LLM,
     READY,
+    FAILED,
 }
 
+/** Names are null until the device tier has been chosen. */
 data class ModelSetupState(
     val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
     val progress: Float = 0f,
+    val voiceModelName: String? = null,
+    val llmModelName: String? = null,
 )
 
 interface ModelSetupService {

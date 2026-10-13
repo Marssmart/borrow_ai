@@ -42,10 +42,10 @@ import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupPhase
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.model_app_name
-import borrowai.composeapp.generated.resources.model_downloading_summarization
-import borrowai.composeapp.generated.resources.model_downloading_transcription
-import borrowai.composeapp.generated.resources.model_loading_summarization
-import borrowai.composeapp.generated.resources.model_loading_transcription
+import borrowai.composeapp.generated.resources.model_choosing
+import borrowai.composeapp.generated.resources.model_downloading
+import borrowai.composeapp.generated.resources.model_failed
+import borrowai.composeapp.generated.resources.model_loading
 import borrowai.composeapp.generated.resources.model_ready
 import org.jetbrains.compose.resources.stringResource
 
@@ -62,10 +62,10 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
         stateHolder.prepare()
     }
     val setupSteps = listOf(
-        stringResource(Res.string.model_downloading_transcription),
-        stringResource(Res.string.model_loading_transcription),
-        stringResource(Res.string.model_downloading_summarization),
-        stringResource(Res.string.model_loading_summarization),
+        stringResource(Res.string.model_choosing),
+        stringResource(Res.string.model_downloading, uiState.voiceModelName.orEmpty()),
+        stringResource(Res.string.model_loading, uiState.voiceModelName.orEmpty()),
+        stringResource(Res.string.model_downloading, uiState.llmModelName.orEmpty()),
         stringResource(Res.string.model_ready),
     )
     val animatedProgress by animateFloatAsState(
@@ -136,6 +136,14 @@ internal fun ModelLoadingScreen(modelSetupService: ModelSetupService) {
                             name = setupSteps[nextStep],
                             completed = completed,
                             active = isCurrentStep(uiState.phase, nextStep),
+                        )
+                    }
+                    if (uiState.phase == ModelSetupPhase.FAILED) {
+                        Text(
+                            stringResource(Res.string.model_failed),
+                            modifier = Modifier.padding(top = ModelLoadingUiStateHolder.BULLET_LABEL_PADDING),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
@@ -267,11 +275,16 @@ private fun ModelBullet(
 }
 
 private fun isCurrentStep(phase: ModelSetupPhase, step: Int): Boolean =
+    activeStepIndex(phase) == step
+
+/** The loader row that is active for [phase], or null once every row has completed or the setup failed. */
+private fun activeStepIndex(phase: ModelSetupPhase): Int? =
     when (phase) {
         ModelSetupPhase.NOT_STARTED,
-        ModelSetupPhase.DOWNLOADING_TRANSCRIPTION -> step == 0
-        ModelSetupPhase.LOADING_TRANSCRIPTION -> step == 1
-        ModelSetupPhase.DOWNLOADING_SUMMARIZATION -> step == 2
-        ModelSetupPhase.LOADING_SUMMARIZATION -> step == 3
-        ModelSetupPhase.READY -> false
+        ModelSetupPhase.CHOOSING_MODEL -> 0
+        ModelSetupPhase.DOWNLOADING_VOICE -> 1
+        ModelSetupPhase.LOADING_VOICE -> 2
+        ModelSetupPhase.DOWNLOADING_LLM -> 3
+        ModelSetupPhase.READY,
+        ModelSetupPhase.FAILED -> null
     }
