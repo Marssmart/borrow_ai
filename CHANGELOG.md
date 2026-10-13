@@ -2,6 +2,15 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.5]
+
+- Added a RAM-based model tier choice for voice-to-text and summarization: devices under 5 GiB get Whisper Tiny and Gemma 2B, 5 GiB to under 10 GiB get Whisper Base and Gemma 7B, and 10 GiB or more get Whisper Large v3 and Gemma 9B.
+- Added a real model download service that downloads the tier's models to static files under the app's models folder, verifies their sizes, and skips the download on later launches when the files are already present.
+- Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; `demo` is the debug default, and unknown or missing values fail fast.
+- Changed the loader to "Choosing correct model for your device", then "Downloading model {name}", "Loading model {name}", "Downloading model {name}", and "Ready". Step labels appear only once their step is completed or active.
+- Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
+- Updated Android and iOS versioning to 1.0.5 (build 5). Memories, media sessions, transcription, and summarization remain demo-only.
+
 ## [1.0.3]
 
 - Added model setup, memory CRUD, and media-session service contracts with in-memory demo providers and service tests.
