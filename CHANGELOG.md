@@ -9,7 +9,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; `demo` is the debug default, and unknown or missing values fail fast.
 - Changed the loader to "Choosing correct model for your device", then "Downloading model {name}", "Loading model {name}", "Downloading model {name}", and "Ready". Step labels appear only once their step is completed or active.
 - Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
-- Updated Android and iOS versioning to 1.0.5 (build 5). Memories, media sessions, transcription, and summarization remain demo-only.
+- Updated Android and iOS versioning to 1.0.5 (build 6). Memories, media sessions, transcription, and summarization remain demo-only.
 
 ## [1.0.4]
 
