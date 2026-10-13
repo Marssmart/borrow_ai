@@ -1,8 +1,14 @@
 package org.deer.borrowai
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
 import okio.Path
 import org.deer.borrowai.data.app.DeviceEnvironment
+import org.deer.borrowai.data.app.RealModelSetup
+import org.deer.borrowai.data.service.model.DownloadingModelSetupService
+import org.deer.borrowai.data.service.model.KtorModelDownloader
+import org.deer.borrowai.data.service.model.ModelFileStore
+import org.deer.borrowai.data.service.model.createPlatformModelHttpClient
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSFileManager
@@ -19,6 +25,19 @@ class IosDeviceEnvironment : DeviceEnvironment {
 
     override val modelDirectory: Path = modelDirectoryUnder(applicationSupportPath()).also { path ->
         excludeFromBackup(path.toString())
+    }
+
+    override fun createRealModelSetup(scope: CoroutineScope): RealModelSetup {
+        val client = createPlatformModelHttpClient()
+        return RealModelSetup(
+            service = DownloadingModelSetupService(
+                totalRamBytes = totalMemoryBytes,
+                store = ModelFileStore(modelDirectory),
+                downloader = KtorModelDownloader(client),
+                scope = scope,
+            ),
+            onClose = { client.close() },
+        )
     }
 
     private fun applicationSupportPath(): String =

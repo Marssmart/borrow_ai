@@ -6,9 +6,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
+import kotlinx.coroutines.CoroutineScope
 import okio.Path
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.DeviceEnvironment
+import org.deer.borrowai.data.app.RealModelSetup
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.model.ModelTierSelector
@@ -23,6 +25,8 @@ class AppServicesViewModelTest {
             device = object : DeviceEnvironment {
                 override val totalMemoryBytes: Long = 8L * ModelTierSelector.BYTES_PER_GIB
                 override val modelDirectory: Path = "/unused-models".toPath()
+                override fun createRealModelSetup(scope: CoroutineScope): RealModelSetup =
+                    error("Real model setup is not used by this test.")
             },
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)
