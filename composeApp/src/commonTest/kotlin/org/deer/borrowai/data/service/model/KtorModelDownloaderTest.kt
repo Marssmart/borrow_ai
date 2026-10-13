@@ -5,6 +5,7 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
+import okio.Buffer
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
@@ -16,6 +17,8 @@ class KtorModelDownloaderTest {
     private val url = "https://example.test/model.bin"
     private val destination = "/app/models/voice-model.bin.part".toPath()
 
+    private fun sha256Hex(bytes: ByteArray): String = Buffer().write(bytes).readByteString().sha256().hex()
+
     @Test
     fun streamsTheBodyToDestinationAndReportsCumulativeProgress() = runTest {
         val fileSystem = FakeFileSystem()
@@ -24,9 +27,10 @@ class KtorModelDownloaderTest {
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
         val progress = mutableListOf<Long>()
 
-        KtorModelDownloader(client, fileSystem).download(url, destination) { progress += it }
+        val digest = KtorModelDownloader(client, fileSystem).download(url, destination) { progress += it }
 
         assertEquals(body.size.toLong(), fileSystem.metadata(destination).size)
+        assertEquals(sha256Hex(body), digest)
         assertEquals(body.size.toLong(), progress.last())
         assertEquals(progress.sorted(), progress)
         assertFalse(progress.isEmpty())
