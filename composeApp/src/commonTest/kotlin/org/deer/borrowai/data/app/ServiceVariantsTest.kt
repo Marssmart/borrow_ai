@@ -132,7 +132,7 @@ class ServiceVariantsTest {
     }
 
     @Test
-    fun untrustedExtraOnFreshDebugInstallFallsBackToDemo() {
+    fun legacyDebugLaunchWithoutCallerInfoCanSelectAndPersistVariant() {
         val selection = resolveServiceVariantLaunch(
             hasExplicitId = true,
             explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
@@ -142,8 +142,22 @@ class ServiceVariantsTest {
             isDebuggable = true,
         )
 
-        assertEquals(ServiceVariants.DEMO, selection.variant)
-        assertFalse(selection.persistExplicitSelection)
+        assertEquals(ServiceVariants.REAL_MODEL_SETUP, selection.variant)
+        assertTrue(selection.persistExplicitSelection)
+    }
+
+    @Test
+    fun releaseBuildRejectsExplicitVariantWhenCallerIdentityIsUnavailable() {
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariantLaunch(
+                hasExplicitId = true,
+                explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+                callerUid = null,
+                trustedCallerUid = TRUSTED_CALLER_UID,
+                savedId = null,
+                isDebuggable = false,
+            )
+        }
     }
 
     @Test
