@@ -65,4 +65,20 @@ class ModelCatalogTest {
         }
         assertNotEquals(ModelCatalog.VOICE_FILE_NAME, ModelCatalog.LLM_FILE_NAME)
     }
+
+    @Test
+    fun everyModelIsPinnedToAnImmutableRevisionWithAVerifiableDigest() {
+        val hex = Regex("[0-9a-f]+")
+        ModelTier.entries.forEach { tier ->
+            val models = ModelCatalog.modelsFor(tier)
+            listOf(models.voice, models.llm).forEach { model ->
+                assertEquals(40, model.revision.length, model.displayName)
+                assertTrue(hex.matches(model.revision), model.displayName)
+                assertEquals(64, model.sha256.length, model.displayName)
+                assertTrue(hex.matches(model.sha256), model.displayName)
+                assertTrue(model.downloadUrl.startsWith("https://huggingface.co/"), model.displayName)
+                assertTrue(model.downloadUrl.contains("/resolve/${model.revision}/"), model.displayName)
+            }
+        }
+    }
 }

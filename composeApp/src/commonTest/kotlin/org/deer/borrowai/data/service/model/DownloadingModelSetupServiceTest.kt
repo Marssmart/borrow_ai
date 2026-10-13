@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import okio.Buffer
 import okio.FileSystem
+import okio.HashingSink
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
@@ -20,22 +22,43 @@ import org.deer.borrowai.data.service.ModelSetupPhase
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DownloadingModelSetupServiceTest {
-    private val voice = ModelSpec(
+    private val voice = spec(
         displayName = "Test Voice",
         role = ModelRole.VOICE,
         fileName = ModelCatalog.VOICE_FILE_NAME,
-        downloadUrl = "https://example.test/voice.bin",
+        url = "https://example.test/voice.bin",
         sizeBytes = 40_000L,
     )
-    private val llm = ModelSpec(
+    private val llm = spec(
         displayName = "Test LLM",
         role = ModelRole.LLM,
         fileName = ModelCatalog.LLM_FILE_NAME,
-        downloadUrl = "https://example.test/llm.gguf",
+        url = "https://example.test/llm.gguf",
         sizeBytes = 90_000L,
     )
     private val tierModels = TierModels(ModelTier.LEGACY, voice, llm)
     private val modelDirectory: Path = "/app/models".toPath()
+
+    private fun spec(
+        displayName: String,
+        role: ModelRole,
+        fileName: String,
+        url: String,
+        sizeBytes: Long,
+        sha256: String = zeroDigest(sizeBytes),
+    ) = ModelSpec(
+        displayName = displayName,
+        role = role,
+        fileName = fileName,
+        downloadUrl = url,
+        revision = "test-revision",
+        sizeBytes = sizeBytes,
+        sha256 = sha256,
+    )
+
+    private fun zeroDigest(size: Long): String = sha256Hex(ByteArray(size.toInt()))
+
+    private fun sha256Hex(bytes: ByteArray): String = Buffer().write(bytes).readByteString().sha256().hex()
 
     private fun store(fileSystem: FileSystem) = ModelFileStore(modelDirectory, fileSystem)
 
@@ -43,6 +66,7 @@ class DownloadingModelSetupServiceTest {
         fileSystem: FileSystem,
         downloader: ModelDownloader,
         scope: CoroutineScope,
+        models: TierModels = tierModels,
     ) = DownloadingModelSetupService(
         totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
         store = store(fileSystem),
@@ -50,7 +74,7 @@ class DownloadingModelSetupServiceTest {
         scope = scope,
         choosingHoldMillis = 0L,
         loadingHoldMillis = 0L,
-        modelsForRam = { tierModels },
+        modelsForRam = { models },
     )
 
     @Test
@@ -137,6 +161,39 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun finalFileWithCorrectSizeButWrongContentIsNotSkipped() = runTest {
+        val fileSystem = FakeFileSystem()
+        fileSystem.createDirectories(modelDirectory)
+        writeBytes(fileSystem, modelDirectory / ModelCatalog.VOICE_FILE_NAME, ByteArray(40_000) { 1 })
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+
+        val setup = service(fileSystem, downloader, backgroundScope)
+        setup.prepare()
+
+        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+    }
+
+    @Test
+    fun downloadWithWrongDigestFailsWithoutLeavingAFinalOrPartialFile() = runTest {
+        val fileSystem = FakeFileSystem()
+        val badVoice = voice.copy(sha256 = "0".repeat(64))
+        val setup = service(
+            fileSystem,
+            RecordingDownloader(fileSystem, listOf(badVoice, llm)),
+            backgroundScope,
+            models = TierModels(ModelTier.LEGACY, badVoice, llm),
+        )
+
+        setup.prepare()
+
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
+        assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
+        assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
+    }
+
+    @Test
     fun incompleteDownloadFailsWithoutLeavingAFinalFile() = runTest {
         val fileSystem = FakeFileSystem()
         val setup = service(fileSystem, RecordingDownloader(fileSystem, listOf(voice, llm), shortBy = 1L), backgroundScope)
@@ -144,6 +201,7 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.failedDuring)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
     }
@@ -152,7 +210,7 @@ class DownloadingModelSetupServiceTest {
     fun httpFailureMovesSetupToFailed() = runTest {
         val fileSystem = FakeFileSystem()
         val downloader = object : ModelDownloader {
-            override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit) {
+            override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit): String {
                 throw ModelDownloadException("Model download failed with HTTP 500.")
             }
         }
@@ -207,6 +265,15 @@ class DownloadingModelSetupServiceTest {
         }
     }
 
+    private fun writeBytes(fileSystem: FileSystem, path: Path, bytes: ByteArray) {
+        val sink = fileSystem.sink(path).buffer()
+        try {
+            sink.write(bytes)
+        } finally {
+            sink.close()
+        }
+    }
+
     private class RecordingDownloader(
         private val fileSystem: FileSystem,
         private val specs: List<ModelSpec>,
@@ -215,10 +282,11 @@ class DownloadingModelSetupServiceTest {
     ) : ModelDownloader {
         val requestedUrls = mutableListOf<String>()
 
-        override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit) {
+        override suspend fun download(url: String, destination: Path, onProgress: (Long) -> Unit): String {
             requestedUrls += url
             val target = specs.first { it.downloadUrl == url }.sizeBytes - shortBy
-            val sink = fileSystem.sink(destination).buffer()
+            val hashing = HashingSink.sha256(fileSystem.sink(destination))
+            val sink = hashing.buffer()
             try {
                 var written = 0L
                 while (written < target) {
@@ -230,6 +298,7 @@ class DownloadingModelSetupServiceTest {
             } finally {
                 sink.close()
             }
+            return hashing.hash.hex()
         }
     }
 }
