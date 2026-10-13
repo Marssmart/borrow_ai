@@ -1,14 +1,17 @@
 package org.deer.borrowai
 
 import android.Manifest
+import android.app.ComponentCaller
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.collectAsState
@@ -18,6 +21,7 @@ import org.deer.borrowai.data.app.DataService
 import org.deer.borrowai.data.app.ServiceMode
 import org.deer.borrowai.data.app.ServiceVariant
 import org.deer.borrowai.data.app.resolveServiceVariant
+import org.deer.borrowai.data.app.resolveServiceVariantLaunch
 import org.deer.borrowai.data.domain.EpochClock
 
 class MainActivity : ComponentActivity() {
@@ -29,7 +33,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val serviceVariant = resolveLaunchVariant(intent)
+        val serviceVariant = resolveLaunchVariant(intent, initialCallerUid())
         appServicesViewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(
@@ -50,8 +54,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (Build.VERSION.SDK_INT >= 35) return
         setIntent(intent)
-        applyServiceVariant(resolveLaunchVariant(intent))
+        applyServiceVariant(resolveLaunchVariant(intent, callerUid = null))
+    }
+
+    @RequiresApi(35)
+    override fun onNewIntent(intent: Intent, caller: ComponentCaller) {
+        super.onNewIntent(intent, caller)
+        setIntent(intent, caller)
+        applyServiceVariant(resolveLaunchVariant(intent, caller.uid))
     }
 
     override fun onResume() {
@@ -74,29 +86,37 @@ class MainActivity : ComponentActivity() {
         requestModelDownloadNotificationPermission(serviceVariant)
     }
 
-    private fun resolveLaunchVariant(launchIntent: Intent): ServiceVariant {
+    private fun resolveLaunchVariant(launchIntent: Intent, callerUid: Int?): ServiceVariant {
         val hasExplicitId = launchIntent.hasExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA)
         val preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
-        val serviceVariant = resolveServiceVariant(
+        val selection = resolveServiceVariantLaunch(
             hasExplicitId = hasExplicitId,
             explicitId = if (hasExplicitId) {
                 launchIntent.getStringExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA)
             } else {
                 null
             },
-            savedId = if (hasExplicitId) null else preferences.getString(SERVICE_VARIANT_SELECTION, null),
+            callerUid = callerUid,
+            trustedCallerUid = Process.SHELL_UID,
+            savedId = preferences.getString(SERVICE_VARIANT_SELECTION, null),
             isDebuggable = isDebuggable(),
         )
-        if (hasExplicitId) {
-            check(preferences.edit().putString(SERVICE_VARIANT_SELECTION, serviceVariant.id).commit()) {
+        if (selection.persistExplicitSelection) {
+            check(preferences.edit().putString(SERVICE_VARIANT_SELECTION, selection.variant.id).commit()) {
                 "Unable to persist the selected data-service variant."
             }
         }
-        return serviceVariant
+        return selection.variant
     }
 
     private fun isDebuggable(): Boolean =
         (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    private fun initialCallerUid(): Int? = when {
+        Build.VERSION.SDK_INT >= 35 -> initialCaller?.uid
+        Build.VERSION.SDK_INT >= 34 -> launchedFromUid
+        else -> null
+    }
 
     private fun createServices(serviceVariant: ServiceVariant): AppServices =
         AppServices.createFromServiceVariant(

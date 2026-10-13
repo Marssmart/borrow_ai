@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupState
-import org.deer.borrowai.data.app.ServiceVariants
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
 import org.deer.borrowai.data.service.model.ModelFileStore
@@ -187,8 +186,7 @@ private fun notification(context: Context, state: ModelSetupState): Notification
         state.phase == ModelSetupPhase.WAITING_FOR_NETWORK ||
         state.phase == ModelSetupPhase.WAITING_FOR_RETRY
     val contentIntent = Intent(context, MainActivity::class.java).apply {
-        putExtra(ModelDownloadWork.SERVICE_VARIANT_EXTRA, ServiceVariants.REAL_MODEL_SETUP.id)
-        // Reuse the app task but recreate MainActivity so it consumes the real-model-setup extra in onCreate.
+        // Reuse the app task; the selected variant is restored from app-private preferences.
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
