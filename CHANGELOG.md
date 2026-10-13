@@ -2,6 +2,12 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.4]
+
+- Added GitHub Actions checks for Gradle tests, Android build and lint, Android emulator UI smoke testing, and iOS Simulator tests and app launch verification.
+- CI uploads the Android debug APK and iOS Simulator app as build artifacts.
+- Bumped Android and iOS app versions to 1.0.4 (build 5).
+
 ## [1.0.3]
 
 - Added model setup, memory CRUD, and media-session service contracts with in-memory demo providers and service tests.
