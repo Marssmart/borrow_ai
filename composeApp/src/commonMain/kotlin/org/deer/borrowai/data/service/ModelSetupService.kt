@@ -20,7 +20,7 @@ enum class ModelSetupFailureReason {
     MODEL,
 }
 
-/** Names are null until the device tier has been chosen. */
+/** Model names are set after tier selection; byte counts are set only during downloads. */
 data class ModelSetupState(
     val phase: ModelSetupPhase = ModelSetupPhase.NOT_STARTED,
     val progress: Float = 0f,

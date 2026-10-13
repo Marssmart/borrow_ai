@@ -89,7 +89,7 @@ class DownloadingModelSetupService(
         endProgress: Float,
     ) {
         if (store.isPresent(spec)) {
-            mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress)
+            mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return
         }
         val downloadedSha256 = downloader.download(spec.downloadUrl, store.partialPath(spec)) { bytes ->
@@ -97,10 +97,12 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(
                 phase = phase,
                 progress = startProgress + (endProgress - startProgress) * fraction,
+                bytesDownloaded = bytes,
+                bytesTotal = spec.sizeBytes,
             )
         }
         store.commit(spec, downloadedSha256)
-        mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress)
+        mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
     }
 
     private companion object {

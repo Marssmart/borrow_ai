@@ -19,6 +19,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.ModelSetupPhase
+import org.deer.borrowai.data.service.ModelSetupState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DownloadingModelSetupServiceTest {
@@ -254,6 +255,30 @@ class DownloadingModelSetupServiceTest {
             phases,
         )
         assertTrue(progress.zipWithNext().all { (previous, next) -> next >= previous })
+    }
+
+    @Test
+    fun activeDownloadReportsByteCountsAndClearsThemWhenItFinishes() = runTest {
+        val fileSystem = FakeFileSystem()
+        val observed = mutableListOf<ModelSetupState>()
+        val setup = service(
+            fileSystem,
+            RecordingDownloader(fileSystem, listOf(voice, llm), chunkBytes = 10_000L),
+            backgroundScope,
+        )
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            setup.state.collect { observed += it }
+        }
+
+        setup.prepare()
+        collector.cancel()
+
+        val voiceDownloads = observed.filter { it.phase == ModelSetupPhase.DOWNLOADING_VOICE && it.bytesTotal > 0L }
+        assertTrue(voiceDownloads.isNotEmpty())
+        assertTrue(voiceDownloads.all { it.bytesTotal == 40_000L })
+        assertEquals(40_000L, voiceDownloads.maxOf { it.bytesDownloaded })
+        assertEquals(0L, observed.first { it.phase == ModelSetupPhase.LOADING_VOICE }.bytesTotal)
+        assertEquals(0L, setup.state.value.bytesTotal)
     }
 
     private fun writeText(fileSystem: FileSystem, path: Path, text: String) {

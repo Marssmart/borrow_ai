@@ -26,12 +26,15 @@ object ModelDownloadWork {
     const val UNIQUE_WORK_NAME = "borrowai-model-download"
     const val NOTIFICATION_CHANNEL_ID = "model-download"
     const val NOTIFICATION_ID = 1051
+    const val MAX_ATTEMPTS = 5
 
     const val KEY_PHASE = "phase"
     const val KEY_PROGRESS = "progress"
     const val KEY_VOICE_NAME = "voiceModelName"
     const val KEY_LLM_NAME = "llmModelName"
     const val KEY_FAILED_DURING = "failedDuring"
+    const val KEY_BYTES_DOWNLOADED = "bytesDownloaded"
+    const val KEY_BYTES_TOTAL = "bytesTotal"
 }
 
 /**
@@ -42,6 +45,12 @@ class ModelDownloadWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
+    /** Expedited work needs its foreground notification before doWork starts on older Android versions. */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        ensureNotificationChannel(applicationContext)
+        return foregroundInfo(applicationContext, ModelSetupState())
+    }
+
     override suspend fun doWork(): Result {
         ensureNotificationChannel(applicationContext)
         val device = AndroidDeviceEnvironment(applicationContext)
@@ -69,10 +78,11 @@ class ModelDownloadWorker(
                 setup.prepare()
                 publisher.cancel()
                 val finished = setup.state.value
-                if (finished.phase == ModelSetupPhase.READY) {
-                    Result.success(finished.toWorkData())
-                } else {
-                    Result.failure(finished.toWorkData())
+                when {
+                    finished.phase == ModelSetupPhase.READY -> Result.success(finished.toWorkData())
+                    // A failed attempt keeps its .part file, so the next attempt resumes instead of restarting.
+                    runAttemptCount < ModelDownloadWork.MAX_ATTEMPTS -> Result.retry()
+                    else -> Result.failure(finished.toWorkData())
                 }
             }
         } finally {
@@ -87,6 +97,8 @@ fun ModelSetupState.toWorkData(): Data = workDataOf(
     ModelDownloadWork.KEY_VOICE_NAME to voiceModelName.orEmpty(),
     ModelDownloadWork.KEY_LLM_NAME to llmModelName.orEmpty(),
     ModelDownloadWork.KEY_FAILED_DURING to failedDuring?.name.orEmpty(),
+    ModelDownloadWork.KEY_BYTES_DOWNLOADED to bytesDownloaded,
+    ModelDownloadWork.KEY_BYTES_TOTAL to bytesTotal,
 )
 
 /** Maps a unique-work record to the loader state. Finished work reports its output; running work reports progress. */
@@ -110,6 +122,8 @@ private fun Data.toModelSetupState(defaultPhase: ModelSetupPhase): ModelSetupSta
         progress = getFloat(ModelDownloadWork.KEY_PROGRESS, if (phase == ModelSetupPhase.READY) 1f else 0f),
         voiceModelName = getString(ModelDownloadWork.KEY_VOICE_NAME)?.takeIf { it.isNotEmpty() },
         llmModelName = getString(ModelDownloadWork.KEY_LLM_NAME)?.takeIf { it.isNotEmpty() },
+        bytesDownloaded = getLong(ModelDownloadWork.KEY_BYTES_DOWNLOADED, 0L),
+        bytesTotal = getLong(ModelDownloadWork.KEY_BYTES_TOTAL, 0L),
         failedDuring = getString(ModelDownloadWork.KEY_FAILED_DURING)
             ?.let { name -> ModelSetupPhase.entries.firstOrNull { it.name == name } },
     )
