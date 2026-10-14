@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.9]
+
+- `DownloadingModelSetupService` now uses `MutableJob` for its setup download, removing manual job tracking. `MutableJob` gained `isActive()` and `join()` so `prepare()` can join a running download instead of starting another.
+- Updated Android and iOS versioning to 1.0.9 (build 10).
+
 ## [1.0.8]
 
 - Added `MutableMediaSessionState`, a wrapper around the media session state with `transitionIdle`, `transitionRecording`, and `transitionPlaying` helpers, plus `ifRecording` and `ifPlaying` to run code only in a given state. `DemoMediaSessionService` now uses it instead of raw state checks and copies.
