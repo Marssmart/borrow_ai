@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.7]
+
+- Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, removing manual cancel/null/launch boilerplate.
+- Updated Android and iOS versioning to 1.0.7 (build 8).
+
 ## [1.0.6]
 
 - Added the real tier-based model download service for Whisper and Gemma models, with resumable HTTP transfers, pinned revisions, SHA-256 verification, and persistent verified storage.

@@ -1,13 +1,11 @@
 package org.deer.borrowai.data.service.demo
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
@@ -25,8 +23,8 @@ class DemoMediaSessionService(
     private val mutableIdleTranscription = MutableStateFlow(INITIAL_TRANSCRIPTION)
     private val sessionGeneration = MutableStateFlow(0L)
     private val closed = MutableStateFlow(false)
-    private var tickerJob: Job? = null
-    private var transcriptionJob: Job? = null
+    private val tickerJob = MutableJob(scope)
+    private val transcriptionJob = MutableJob(scope)
 
     override val state = mutableState.asStateFlow()
     override val idleTranscription = mutableIdleTranscription.asStateFlow()
@@ -34,8 +32,6 @@ class DemoMediaSessionService(
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()
         val generation = advanceGeneration()
-        tickerJob?.cancel()
-        transcriptionJob?.cancel()
         mutableState.value = MediaSessionState.Recording(
             elapsedMillis = 0L,
             transcription = "",
@@ -49,10 +45,8 @@ class DemoMediaSessionService(
         ensureOpen()
         if (mutableState.value !is MediaSessionState.Recording) return null
         advanceGeneration()
-        tickerJob?.cancel()
-        tickerJob = null
-        transcriptionJob?.cancel()
-        transcriptionJob = null
+        tickerJob.cancel()
+        transcriptionJob.cancel()
         val recording = mutableState.value as? MediaSessionState.Recording ?: return null
         mutableIdleTranscription.value = recording.transcription
         mutableState.value = MediaSessionState.Idle
@@ -104,8 +98,7 @@ class DemoMediaSessionService(
         ensureOpen()
         if (mutableState.value is MediaSessionState.Playing) {
             advanceGeneration()
-            tickerJob?.cancel()
-            tickerJob = null
+            tickerJob.cancel()
             mutableState.value = MediaSessionState.Idle
         }
     }
@@ -113,10 +106,8 @@ class DemoMediaSessionService(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         advanceGeneration()
-        tickerJob?.cancel()
-        tickerJob = null
-        transcriptionJob?.cancel()
-        transcriptionJob = null
+        tickerJob.cancel()
+        transcriptionJob.cancel()
         (mutableState.value as? MediaSessionState.Recording)?.let { recording ->
             mutableIdleTranscription.value = recording.transcription
         }
@@ -125,9 +116,8 @@ class DemoMediaSessionService(
 
     private fun startPlayback(target: PlaybackTarget, memory: Memory) {
         val generation = advanceGeneration()
-        tickerJob?.cancel()
-        transcriptionJob?.cancel()
-        transcriptionJob = null
+        tickerJob.cancel()
+        transcriptionJob.cancel()
         (mutableState.value as? MediaSessionState.Recording)?.let { recording ->
             mutableIdleTranscription.value = recording.transcription
         }
@@ -145,7 +135,7 @@ class DemoMediaSessionService(
     }
 
     private fun startTicker(generation: Long) {
-        tickerJob = scope.launch {
+        tickerJob.launch {
             while (isActive && sessionGeneration.value == generation) {
                 delay(SESSION_TICK_INTERVAL_MILLIS)
                 if (!isActive || sessionGeneration.value != generation) return@launch
@@ -158,7 +148,7 @@ class DemoMediaSessionService(
     }
 
     private fun startTranscription(generation: Long) {
-        transcriptionJob = scope.launch {
+        transcriptionJob.launch {
             var sampleIndex = 0
             while (isActive && sessionGeneration.value == generation) {
                 val sample = "${TRANSCRIPTION_SAMPLES[sampleIndex % TRANSCRIPTION_SAMPLES.size]} "
