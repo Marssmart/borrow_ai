@@ -1,5 +1,6 @@
 package org.deer.borrowai.data.service.model
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -388,6 +389,28 @@ class DownloadingModelSetupServiceTest {
         assertEquals(0L, setup.state.value.bytesTotal)
     }
 
+    @Test
+    fun cancelledPrepareCallerLeavesTheSharedDownloadRunningOnce() = runTest {
+        val fileSystem = FakeFileSystem()
+        val gate = CompletableDeferred<Unit>()
+        val downloader = GatedDownloader(fileSystem, listOf(voice, llm), gate)
+        val setup = service(fileSystem, downloader, backgroundScope)
+
+        val first = launch { setup.prepare() }
+        val second = launch { setup.prepare() }
+        runCurrent()
+        first.cancel()
+        runCurrent()
+
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+        gate.complete(Unit)
+        second.join()
+
+        assertTrue(first.isCancelled)
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(mapOf(voice.downloadUrl to 1, llm.downloadUrl to 1), downloader.downloadCounts)
+    }
+
     private fun writeText(fileSystem: FileSystem, path: Path, text: String) {
         val sink = fileSystem.sink(path).buffer()
         try {
@@ -412,6 +435,29 @@ class DownloadingModelSetupServiceTest {
             return sha256Hex(source.readByteArray())
         } finally {
             source.close()
+        }
+    }
+
+    private inner class GatedDownloader(
+        private val fileSystem: FileSystem,
+        private val specs: List<ModelSpec>,
+        private val gate: CompletableDeferred<Unit>,
+    ) : ModelDownloader {
+        val downloadCounts = mutableMapOf<String, Int>()
+
+        override suspend fun download(
+            url: String,
+            destination: Path,
+            expectedSizeBytes: Long,
+            onProgress: (Long) -> Unit,
+        ): String {
+            downloadCounts[url] = (downloadCounts[url] ?: 0) + 1
+            val model = specs.first { it.downloadUrl == url }
+            gate.await()
+            val bytes = ByteArray(model.sizeBytes.toInt())
+            writeBytes(fileSystem, destination, bytes)
+            onProgress(model.sizeBytes)
+            return sha256Hex(bytes)
         }
     }
 

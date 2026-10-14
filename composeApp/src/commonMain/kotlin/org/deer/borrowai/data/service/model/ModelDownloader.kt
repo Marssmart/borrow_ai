@@ -172,8 +172,8 @@ class KtorModelDownloader(
         } catch (error: OkioIOException) {
             throw ModelStorageException("Unable to open the partial model file for writing.", error)
         }
-        val hashing = HashingSink.sha256(rawSink)
-        val sink = hashing.buffer()
+        val target = if (append) rawSink else HashingSink.sha256(rawSink)
+        val sink = target.buffer()
         var oversized = false
         try {
             var total = base
@@ -210,7 +210,7 @@ class KtorModelDownloader(
                 "Model download exceeded its expected size of $expectedSizeBytes bytes.",
             )
         }
-        return hashing.hash.hex()
+        return (target as? HashingSink)?.hash?.hex().orEmpty()
     }
 
     /** Re-reads the whole file so a resumed download is verified over the existing prefix and new bytes. */
