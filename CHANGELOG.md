@@ -6,6 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Removed the standalone model-loading route and moved setup status and progress onto the capture screen and recording button.
 - Simulated model selection, voice-model download and loading, and summarization-model download in the demo service so setup visuals are shown when the app launches.
+- Added the real tier-based model download stack with resumable HTTP transfers, pinned model revisions, SHA-256 verification, and persistent verified storage.
 - Updated Android and iOS versioning to 1.0.5 (build 6). Model setup, recording, transcription, and summarization remain simulated.
 
 ## [1.0.4]
