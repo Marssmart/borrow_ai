@@ -67,6 +67,7 @@ class DownloadingModelSetupService(
                 ModelSetupPhase.DOWNLOADING_VOICE,
                 ModelSetupMilestones.CHOOSING_END,
                 ModelSetupMilestones.VOICE_DOWNLOAD_END,
+                alreadyPresent = voicePresent,
             )
 
             publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
@@ -78,6 +79,7 @@ class DownloadingModelSetupService(
                 ModelSetupPhase.DOWNLOADING_LLM,
                 ModelSetupMilestones.VOICE_LOAD_END,
                 ModelSetupMilestones.LLM_DOWNLOAD_END,
+                alreadyPresent = llmPresent,
             )
 
             publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END)
@@ -119,8 +121,9 @@ class DownloadingModelSetupService(
         phase: ModelSetupPhase,
         startProgress: Float,
         endProgress: Float,
+        alreadyPresent: Boolean,
     ): Boolean {
-        if (store.isPresent(spec)) {
+        if (alreadyPresent) {
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return false
         }

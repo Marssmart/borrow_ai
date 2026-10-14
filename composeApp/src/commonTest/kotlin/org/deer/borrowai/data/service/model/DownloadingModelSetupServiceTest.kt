@@ -196,6 +196,7 @@ class DownloadingModelSetupServiceTest {
     fun fullSizePartialWithInvalidDigestIsDiscardedAndDownloadedAgain() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
+        store(fileSystem).preparePartial(voice)
         writeBytes(
             fileSystem,
             modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"),
@@ -229,14 +230,29 @@ class DownloadingModelSetupServiceTest {
     fun finalFileWithCorrectSizeButWrongContentIsNotSkipped() = runTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
-        writeBytes(fileSystem, modelDirectory / ModelCatalog.VOICE_FILE_NAME, ByteArray(40_000) { 1 })
+        val voicePath = modelDirectory / ModelCatalog.VOICE_FILE_NAME
+        writeBytes(fileSystem, voicePath, ByteArray(40_000) { 1 })
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        var voiceHashCount = 0
+        val store = ModelFileStore(modelDirectory, fileSystem) { path ->
+            if (path == voicePath) voiceHashCount++
+            sha256File(fileSystem, path)
+        }
 
-        val setup = service(fileSystem, downloader, backgroundScope)
+        val setup = DownloadingModelSetupService(
+            totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
+            store = store,
+            downloader = downloader,
+            scope = backgroundScope,
+            choosingHoldMillis = 0L,
+            loadingHoldMillis = 0L,
+            modelsForRam = { tierModels },
+        )
         setup.prepare()
 
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(1, voiceHashCount)
     }
 
     @Test
@@ -387,6 +403,15 @@ class DownloadingModelSetupServiceTest {
             sink.write(bytes)
         } finally {
             sink.close()
+        }
+    }
+
+    private fun sha256File(fileSystem: FileSystem, path: Path): String {
+        val source = fileSystem.source(path).buffer()
+        try {
+            return sha256Hex(source.readByteArray())
+        } finally {
+            source.close()
         }
     }
 
