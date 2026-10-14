@@ -23,6 +23,13 @@ class MutableJob(private val scope: CoroutineScope) {
         next.start()
     }
 
+    val isActive: Boolean
+        get() = job.load()?.isActive == true
+
+    suspend fun join() {
+        job.load()?.join()
+    }
+
     fun cancel() {
         job.exchange(null)?.cancel()
     }

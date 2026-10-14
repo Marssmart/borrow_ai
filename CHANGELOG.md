@@ -12,7 +12,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.0.7]
 
-- Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, removing manual cancel/null/launch boilerplate.
+- Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, and `DownloadingModelSetupService` uses it for the setup download, removing manual cancel/null/launch boilerplate. `MutableJob` also exposes `isActive` and `join()` so callers can join a running job instead of starting another.
 - Updated Android and iOS versioning to 1.0.7 (build 8).
 
 ## [1.0.6]

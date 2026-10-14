@@ -2,13 +2,11 @@ package org.deer.borrowai.data.service.model
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.service.ModelSetupMilestones
@@ -16,6 +14,7 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.demo.MutableJob
 
 /**
  * Chooses the tier models from the device RAM and downloads them to static files.
@@ -33,7 +32,7 @@ class DownloadingModelSetupService(
 ) : ModelSetupService {
     private val setupMutex = Mutex()
     private val mutableState = MutableStateFlow(ModelSetupState())
-    private var activeSetup: Job? = null
+    private val setupJob = MutableJob(scope)
 
     override val state = mutableState.asStateFlow()
 
@@ -46,12 +45,11 @@ class DownloadingModelSetupService(
     }
 
     override suspend fun prepare() {
-        val setup = setupMutex.withLock {
+        setupMutex.withLock {
             if (mutableState.value.phase == ModelSetupPhase.READY) return
-            activeSetup?.takeIf { it.isActive }
-                ?: scope.launch { runSetup() }.also { activeSetup = it }
+            if (!setupJob.isActive) setupJob.launch { runSetup() }
         }
-        setup.join()
+        setupJob.join()
     }
 
     private suspend fun runSetup() {
