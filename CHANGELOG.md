@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.6]
+
+- Added the real tier-based model download service for Whisper and Gemma models, with resumable HTTP transfers, pinned revisions, SHA-256 verification, and persistent verified storage.
+- Updated Android and iOS versioning to 1.0.6 (build 7). App startup still uses the demo service until real-service wiring is added.
+
 ## [1.0.5]
 
 - Removed the standalone model-loading route and moved setup status and progress onto the capture screen and recording button.
