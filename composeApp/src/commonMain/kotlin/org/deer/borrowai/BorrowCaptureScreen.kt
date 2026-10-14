@@ -35,7 +35,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,6 +96,7 @@ import kotlinx.coroutines.launch
 internal fun BorrowCaptureScreen(
     mediaSessionService: MediaSessionService,
     modelSetupService: ModelSetupService,
+    onDownloadOverMobileData: () -> Unit,
 ) {
     val stateHolder = remember(mediaSessionService, modelSetupService) {
         CaptureUiStateHolder(
@@ -106,7 +106,6 @@ internal fun BorrowCaptureScreen(
     }
     val uiState by stateHolder.uiState.collectAsState()
     val setupState by modelSetupService.state.collectAsState()
-    val scope = rememberCoroutineScope()
     val modelReady = setupState.phase == ModelSetupPhase.READY
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
@@ -116,7 +115,6 @@ internal fun BorrowCaptureScreen(
         launch {
             modelSetupService.state.collect { stateHolder.setModelReady(it.phase == ModelSetupPhase.READY) }
         }
-        modelSetupService.prepare()
     }
 
     BoxWithConstraints(
@@ -152,9 +150,9 @@ internal fun BorrowCaptureScreen(
                 buttonSize = microphoneSize,
                 isRecording = uiState.isRecording,
                 isHoldRecording = uiState.isHoldRecording,
-                isEnabled = modelReady,
+                isEnabled = modelReady || uiState.isRecording,
                 elapsedSeconds = uiState.elapsedSeconds,
-                statusLabel = modelStatus,
+                statusLabel = modelStatus.takeUnless { uiState.isRecording },
                 onToggleRecording = stateHolder::toggleRecording,
                 onStartHoldRecording = stateHolder::startHoldRecording,
                 onStopHoldRecording = stateHolder::stopHoldRecording,
@@ -170,7 +168,7 @@ internal fun BorrowCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
             ) {
-                if (modelReady) {
+                if (modelReady || uiState.isRecording) {
                     Text(
                         text = if (uiState.isRecording) {
                             if (uiState.isHoldRecording) {
@@ -189,7 +187,7 @@ internal fun BorrowCaptureScreen(
                         else MaterialTheme.colorScheme.onSurface,
                     )
                 } else if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
-                    Button(onClick = { scope.launch { modelSetupService.downloadOverMobileData() } }) {
+                    Button(onClick = onDownloadOverMobileData) {
                         Text(stringResource(Res.string.capture_download_over_mobile_data))
                     }
                 }
