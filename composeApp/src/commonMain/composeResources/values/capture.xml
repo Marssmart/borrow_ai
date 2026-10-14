@@ -8,4 +8,20 @@
     <string name="capture_recording_label">RECORDING</string>
     <string name="capture_tap_or_hold">TAP OR HOLD</string>
     <string name="capture_elapsed_duration">%1$s:%2$s</string>
+    <string name="capture_models_unavailable">Recording unavailable until model setup is complete</string>
+    <string name="capture_model_choosing">Choosing model for your device</string>
+    <string name="capture_model_downloading_transcription">Downloading transcription model</string>
+    <string name="capture_model_progress_transcription">Transcription %1$s / %2$s MB</string>
+    <string name="capture_model_loading_transcription">Preparing transcription model</string>
+    <string name="capture_model_downloading_summarization">Downloading summarization model</string>
+    <string name="capture_model_progress_summarization">Summarization %1$s / %2$s MB</string>
+    <string name="capture_model_waiting_for_unmetered_network">Waiting for unmetered Wi-Fi</string>
+    <string name="capture_model_waiting_for_network">Waiting for network</string>
+    <string name="capture_download_over_mobile_data">Download over mobile data</string>
+    <string name="capture_model_failed_network">Download failed. Check Wi-Fi, then relaunch to retry.</string>
+    <string name="capture_model_failed_storage">Check device storage, then relaunch BorrowAI.</string>
+    <string name="capture_model_failed_model">Model verification failed. Relaunch BorrowAI to retry.</string>
+    <string name="capture_model_failed_network_detail">The download could not complete because of a network problem. Check Wi-Fi, then relaunch BorrowAI to retry.</string>
+    <string name="capture_model_failed_storage_detail">Model files could not be accessed. Check available device storage, then relaunch BorrowAI.</string>
+    <string name="capture_model_failed_model_detail">The requested model could not be downloaded or verified. Relaunch BorrowAI to retry.</string>
 </resources>

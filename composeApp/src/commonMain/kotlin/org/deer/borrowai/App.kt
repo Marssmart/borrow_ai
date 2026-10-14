@@ -1,12 +1,5 @@
 package org.deer.borrowai
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -36,9 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.app.AppServices
-import org.deer.borrowai.data.service.ModelSetupPhase
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.app_demo_data_indicator
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 private val BorrowColors = lightColorScheme(
@@ -80,9 +74,9 @@ fun App(services: AppServices) {
         AppShellStateHolder(mainPagerState, scope)
     }
     val appUiState by appStateHolder.uiState.collectAsState()
-    val modelSetupState by services.modelSetup.state.collectAsState()
-    val showLoading = modelSetupState.phase != ModelSetupPhase.READY
-
+    LaunchedEffect(services.modelSetup) {
+        services.modelSetup.prepare()
+    }
     MaterialTheme(colorScheme = BorrowColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -121,44 +115,25 @@ fun App(services: AppServices) {
                             ),
                         ),
                 )
-                AnimatedContent(
-                    targetState = showLoading,
+                HorizontalPager(
+                    state = appStateHolder.mainPagerState,
                     modifier = Modifier.fillMaxSize(),
-                    transitionSpec = {
-                        if (initialState && !targetState) {
-                            slideInHorizontally(tween(AppShellStateHolder.PAGE_TRANSITION_MILLIS)) { width -> width } +
-                                fadeIn(tween(AppShellStateHolder.FADE_TRANSITION_MILLIS)) togetherWith
-                                slideOutHorizontally(tween(AppShellStateHolder.PAGE_TRANSITION_MILLIS)) { width -> -width } +
-                                fadeOut(tween(AppShellStateHolder.FADE_TRANSITION_MILLIS))
-                        } else {
-                            slideInHorizontally(tween(AppShellStateHolder.PAGE_TRANSITION_MILLIS)) { width -> -width } +
-                                fadeIn(tween(AppShellStateHolder.FADE_TRANSITION_MILLIS)) togetherWith
-                                slideOutHorizontally(tween(AppShellStateHolder.PAGE_TRANSITION_MILLIS)) { width -> width } +
-                                fadeOut(tween(AppShellStateHolder.FADE_TRANSITION_MILLIS))
-                        }
-                    },
-                    label = "onboarding-transition",
-                ) { currentPage ->
-                    if (currentPage) {
-                        ModelLoadingScreen(modelSetupService = services.modelSetup)
-                    } else {
-                        HorizontalPager(
-                            state = appStateHolder.mainPagerState,
-                            modifier = Modifier.fillMaxSize(),
-                            userScrollEnabled = !appUiState.isMemoryDetailVisible,
-                        ) { page ->
-                            when (page) {
-                                AppShellStateHolder.CAPTURE_PAGE -> BorrowCaptureScreen(
-                                    mediaSessionService = services.mediaSession,
-                                )
+                    userScrollEnabled = !appUiState.isMemoryDetailVisible,
+                ) { page ->
+                    when (page) {
+                        AppShellStateHolder.CAPTURE_PAGE -> BorrowCaptureScreen(
+                            mediaSessionService = services.mediaSession,
+                            modelSetupService = services.modelSetup,
+                            onDownloadOverMobileData = {
+                                scope.launch { services.modelSetup.downloadOverMobileData() }
+                            },
+                        )
 
-                                AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
-                                    services = services,
-                                    onReturnToCapture = appStateHolder::returnToCapture,
-                                    onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
-                                )
-                            }
-                        }
+                        AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
+                            services = services,
+                            onReturnToCapture = appStateHolder::returnToCapture,
+                            onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
+                        )
                     }
                 }
                 if (services.mode == AppMode.DEMO) {

@@ -9,46 +9,70 @@ import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
 
-class DemoModelSetupService(
-    private val stepDelayMillis: Long = DEFAULT_STEP_DELAY_MILLIS,
-) : ModelSetupService {
+class DemoModelSetupService : ModelSetupService {
     private val setupMutex = Mutex()
     private val mutableState = MutableStateFlow(ModelSetupState())
-    private var completedSteps = 0
 
     override val state = mutableState.asStateFlow()
-
-    init {
-        require(stepDelayMillis >= 0L) { "The model setup delay cannot be negative." }
-    }
 
     override suspend fun prepare() {
         setupMutex.withLock {
             if (mutableState.value.phase == ModelSetupPhase.READY) return
 
-            for (step in completedSteps until SETUP_PROGRESS_STEPS) {
-                val progress = (step + 1).toFloat() / SETUP_PROGRESS_STEPS
-                mutableState.value = ModelSetupState(
-                    phase = SETUP_PHASES[
-                        ((step + 1) * SETUP_PHASES.size - 1) / SETUP_PROGRESS_STEPS
-                    ],
-                    progress = progress,
-                )
-                if (stepDelayMillis > 0L) delay(stepDelayMillis)
-                completedSteps = step + 1
-            }
-            mutableState.value = ModelSetupState(ModelSetupPhase.READY, 1f)
+            mutableState.value = ModelSetupState(phase = ModelSetupPhase.CHOOSING_MODEL)
+            delay(CHOOSING_DELAY_MILLIS)
+
+            updateDownloadProgress(
+                phase = ModelSetupPhase.DOWNLOADING_VOICE,
+                bytesTotal = VOICE_MODEL_BYTES,
+            )
+            mutableState.value = ModelSetupState(
+                phase = ModelSetupPhase.LOADING_VOICE,
+                progress = VOICE_DOWNLOAD_END,
+            )
+            delay(LOADING_DELAY_MILLIS)
+
+            updateDownloadProgress(
+                phase = ModelSetupPhase.DOWNLOADING_LLM,
+                bytesTotal = LLM_MODEL_BYTES,
+                progressStart = VOICE_DOWNLOAD_END,
+                progressEnd = 1f,
+            )
+            mutableState.value = ModelSetupState(
+                phase = ModelSetupPhase.READY,
+                progress = 1f,
+            )
+        }
+    }
+
+    override suspend fun downloadOverMobileData() = Unit
+
+    private suspend fun updateDownloadProgress(
+        phase: ModelSetupPhase,
+        bytesTotal: Long,
+        progressStart: Float = 0f,
+        progressEnd: Float = VOICE_DOWNLOAD_END,
+    ) {
+        repeat(DOWNLOAD_STEPS) { step ->
+            delay(DOWNLOAD_STEP_DELAY_MILLIS)
+            val bytesDownloaded = bytesTotal * (step + 1) / DOWNLOAD_STEPS
+            mutableState.value = ModelSetupState(
+                phase = phase,
+                progress = progressStart +
+                    (progressEnd - progressStart) * (step + 1) / DOWNLOAD_STEPS,
+                bytesDownloaded = bytesDownloaded,
+                bytesTotal = bytesTotal,
+            )
         }
     }
 
     private companion object {
-        const val DEFAULT_STEP_DELAY_MILLIS = 100L
-        const val SETUP_PROGRESS_STEPS = 50
-        val SETUP_PHASES = listOf(
-            ModelSetupPhase.DOWNLOADING_TRANSCRIPTION,
-            ModelSetupPhase.LOADING_TRANSCRIPTION,
-            ModelSetupPhase.DOWNLOADING_SUMMARIZATION,
-            ModelSetupPhase.LOADING_SUMMARIZATION,
-        )
+        const val DOWNLOAD_STEPS = 15
+        const val CHOOSING_DELAY_MILLIS = 300L
+        const val LOADING_DELAY_MILLIS = 500L
+        const val DOWNLOAD_STEP_DELAY_MILLIS = 100L
+        const val VOICE_DOWNLOAD_END = 0.5f
+        const val VOICE_MODEL_BYTES = 4_534_000_000L
+        const val LLM_MODEL_BYTES = 5_761_000_000L
     }
 }

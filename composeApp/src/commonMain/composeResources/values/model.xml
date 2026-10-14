@@ -1,8 +1,0 @@
-<resources>
-    <string name="model_app_name">BorrowAI</string>
-    <string name="model_downloading_transcription">Downloading voice-to-text model</string>
-    <string name="model_loading_transcription">Loading voice-to-text model</string>
-    <string name="model_downloading_summarization">Downloading summarization model</string>
-    <string name="model_loading_summarization">Loading summarization model</string>
-    <string name="model_ready">Ready</string>
-</resources>

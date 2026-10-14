@@ -1,58 +1,72 @@
 package org.deer.borrowai.data.service.demo
 
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.ModelSetupPhase
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DemoModelSetupServiceTest {
     @Test
-    fun setupRetainsTheExistingFiveSecondProgressDuration() = runTest {
+    fun setupSimulatesProgressBeforeBecomingReady() = runTest {
         val service = DemoModelSetupService()
         val setup = backgroundScope.launch { service.prepare() }
 
         runCurrent()
-        assertNotEquals(ModelSetupPhase.READY, service.state.value.phase)
-        advanceTimeBy(4_999)
-        runCurrent()
-        assertNotEquals(ModelSetupPhase.READY, service.state.value.phase)
+        assertEquals(ModelSetupPhase.CHOOSING_MODEL, service.state.value.phase)
 
-        advanceTimeBy(1)
+        advanceTimeBy(400)
+        runCurrent()
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, service.state.value.phase)
+        assertTrue(service.state.value.bytesDownloaded > 0L)
+        assertEquals(4_534_000_000L, service.state.value.bytesTotal)
+        assertTrue(service.state.value.bytesTotal > service.state.value.bytesDownloaded)
+
+        advanceTimeBy(1_600)
+        runCurrent()
+        assertEquals(ModelSetupPhase.LOADING_VOICE, service.state.value.phase)
+
+        advanceTimeBy(600)
+        runCurrent()
+        assertEquals(ModelSetupPhase.DOWNLOADING_LLM, service.state.value.phase)
+        assertTrue(service.state.value.bytesDownloaded > 0L)
+        assertEquals(5_761_000_000L, service.state.value.bytesTotal)
+
+        advanceTimeBy(1_600)
         runCurrent()
         assertEquals(ModelSetupPhase.READY, service.state.value.phase)
+        assertEquals(1f, service.state.value.progress)
         setup.cancel()
     }
 
     @Test
-    fun cancelledSetupResumesFromItsCurrentProgress() = runTest {
-        val service = DemoModelSetupService(stepDelayMillis = 100)
-        val setup = backgroundScope.launch { service.prepare() }
+    fun interruptedSetupCanBePreparedAgain() = runTest {
+        val service = DemoModelSetupService()
 
+        val setup = backgroundScope.launch { service.prepare() }
         runCurrent()
-        advanceTimeBy(300)
+        advanceTimeBy(600)
         runCurrent()
         setup.cancel()
-        runCurrent()
-        val progressBeforeResume = service.state.value.progress
-        assertTrue(progressBeforeResume > 0f)
 
-        val resumedSetup = backgroundScope.launch { service.prepare() }
-        runCurrent()
-        assertEquals(progressBeforeResume, service.state.value.progress)
-        advanceTimeBy(100)
-        runCurrent()
-        assertTrue(service.state.value.progress > progressBeforeResume)
+        service.prepare()
 
-        advanceTimeBy(4_900)
-        runCurrent()
         assertEquals(ModelSetupPhase.READY, service.state.value.phase)
-        resumedSetup.cancel()
+    }
+
+    @Test
+    fun repeatedPreparationRemainsReady() = runTest {
+        val service = DemoModelSetupService()
+
+        service.prepare()
+        val readyState = service.state.value
+        service.prepare()
+
+        assertEquals(readyState, service.state.value)
     }
 }
