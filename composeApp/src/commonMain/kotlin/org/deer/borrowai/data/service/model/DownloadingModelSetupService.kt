@@ -143,6 +143,7 @@ class DownloadingModelSetupService(
             return false
         }
         awaitTransferAllowed(startProgress)
+        mutableState.value = mutableState.value.copy(phase = phase, progress = startProgress, bytesDownloaded = 0L, bytesTotal = 0L)
         val downloadedSha256 = downloader.download(
             spec.downloadUrl,
             store.partialPath(spec),
