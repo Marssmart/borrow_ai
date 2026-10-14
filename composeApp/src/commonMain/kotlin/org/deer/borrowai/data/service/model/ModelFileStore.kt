@@ -103,7 +103,6 @@ class ModelFileStore(
             discardPartial(spec)
             error("The ${spec.displayName} download failed checksum verification.")
         }
-        fileSystem.delete(finalPath(spec), mustExist = false)
         fileSystem.atomicMove(partialPath(spec), finalPath(spec))
         fileSystem.delete(partialIdentityPath(spec), mustExist = false)
         fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
