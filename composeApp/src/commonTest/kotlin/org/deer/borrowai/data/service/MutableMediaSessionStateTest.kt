@@ -53,6 +53,18 @@ class MutableMediaSessionStateTest {
     }
 
     @Test
+    fun ifRecordingReadsStateAfterPrepare() {
+        val state = MutableMediaSessionState()
+        state.transitionRecording(elapsedMillis = 1L, transcription = "old")
+
+        val result = state.ifRecording(
+            before = { state.transitionRecording(elapsedMillis = 2L, transcription = "new") },
+        ) { recording -> recording.transcription }
+
+        assertEquals("new", result)
+    }
+
+    @Test
     fun ifPlayingRunsOnlyInPlayingState() {
         val state = MutableMediaSessionState()
         state.transitionPlaying(target = target, durationMillis = 4_000L)

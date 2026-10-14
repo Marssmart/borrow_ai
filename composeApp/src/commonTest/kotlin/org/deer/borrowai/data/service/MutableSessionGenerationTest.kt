@@ -16,7 +16,7 @@ class MutableSessionGenerationTest {
     }
 
     @Test
-    fun saveSetSucceedsOnlyWhenCurrentMatches() {
+    fun safeSetSucceedsOnlyWhenCurrentMatches() {
         val generation = MutableSessionGeneration()
 
         assertTrue(generation.safeSet(current = 0L, next = 5L))

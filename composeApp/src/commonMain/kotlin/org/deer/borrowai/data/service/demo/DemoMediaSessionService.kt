@@ -39,10 +39,13 @@ class DemoMediaSessionService(
 
     override fun stopRecording(): RecordingResult? {
         ensureOpen()
-        return mutableState.ifRecording { recording ->
-            sessionGeneration.advance()
-            tickerJob.cancel()
-            transcriptionJob.cancel()
+        return mutableState.ifRecording(
+            before = {
+                sessionGeneration.advance()
+                tickerJob.cancel()
+                transcriptionJob.cancel()
+            },
+        ) { recording ->
             mutableIdleTranscription.value = recording.transcription
             mutableState.transitionIdle()
             RecordingResult(recording.elapsedMillis, recording.transcription)

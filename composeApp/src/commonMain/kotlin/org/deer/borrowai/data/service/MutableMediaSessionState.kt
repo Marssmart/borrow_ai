@@ -43,7 +43,16 @@ class MutableMediaSessionState {
         )
     }
 
-    fun <R> ifRecording(block: (MediaSessionState.Recording) -> R): R? {
+    /**
+     * Runs [before] only if the session is recording, then reads the latest recording
+     * so that updates made during [before] (e.g. cancelling jobs) are visible to [block].
+     */
+    fun <R> ifRecording(
+        before: () -> Unit = {},
+        block: (MediaSessionState.Recording) -> R,
+    ): R? {
+        mutableState.value as? MediaSessionState.Recording ?: return null
+        before()
         val recording = mutableState.value as? MediaSessionState.Recording ?: return null
         return block(recording)
     }
