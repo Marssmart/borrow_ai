@@ -33,5 +33,5 @@ interface ModelSetupService {
 
     suspend fun prepare()
 
-    suspend fun downloadOverMobileData() = Unit
+    suspend fun downloadOverMobileData()
 }

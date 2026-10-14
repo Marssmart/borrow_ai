@@ -2,6 +2,12 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.5]
+
+- Removed the standalone model-loading route and moved setup status and progress onto the capture screen and recording button.
+- Simulated model selection, voice-model download and loading, and summarization-model download in the demo service so setup visuals are shown when the app launches.
+- Updated Android and iOS versioning to 1.0.5 (build 6). Model setup, recording, transcription, and summarization remain simulated.
+
 ## [1.0.4]
 
 - Added a basic GitHub Actions Gradle job that runs Android unit tests and assembles the debug app.

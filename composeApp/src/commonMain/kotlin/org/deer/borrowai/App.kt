@@ -16,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.app.AppServices
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.app_demo_data_indicator
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 private val BorrowColors = lightColorScheme(
@@ -72,6 +74,9 @@ fun App(services: AppServices) {
         AppShellStateHolder(mainPagerState, scope)
     }
     val appUiState by appStateHolder.uiState.collectAsState()
+    LaunchedEffect(services.modelSetup) {
+        services.modelSetup.prepare()
+    }
     MaterialTheme(colorScheme = BorrowColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -119,6 +124,9 @@ fun App(services: AppServices) {
                         AppShellStateHolder.CAPTURE_PAGE -> BorrowCaptureScreen(
                             mediaSessionService = services.mediaSession,
                             modelSetupService = services.modelSetup,
+                            onDownloadOverMobileData = {
+                                scope.launch { services.modelSetup.downloadOverMobileData() }
+                            },
                         )
 
                         AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
