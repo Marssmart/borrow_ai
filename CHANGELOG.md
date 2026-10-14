@@ -2,22 +2,20 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.6]
+
+- Added RAM-based model tiers for transcription and summarization, selected from device-reported memory and mapped to pinned model catalog entries.
+- Added verified model downloads to static app-private files, with SHA-256 and expected-size checks, resumable `.part` files bound to their model identity, and cached verification sidecars. Oversized responses are stopped before they can exceed the catalog size; short downloads remain resumable.
+- Added Android foreground WorkManager downloads with progress notifications, unmetered-network defaults, an explicit per-download mobile-data override, retry/backoff state, and notification tap-through to the saved app variant.
+- Moved setup status and numeric MB progress to the capture screen; recording remains disabled until models are ready. Cached models become ready without artificial waits, and demo setup is immediately ready.
+- Persisted authenticated data-service variants. Debug run-config extras work through the trusted shell launch path; exported callers cannot force or persist real setup, and notification launches restore the saved variant.
+- Updated Android and iOS app versions to 1.0.6 (build 7).
+
 ## [1.0.5]
 
 - Removed the standalone model-loading route and moved setup status and progress onto the capture screen and recording button.
-- Added RAM-based model tiers and real downloads for voice-to-text and summarization, with verified static model files and cached readiness.
-- Added resumable downloads, SHA-256 verification, model identity sidecars, WorkManager foreground downloads, retry and network handling, and numeric setup progress.
-- Added a one-download mobile-data override, while defaulting real Android downloads to unmetered Wi-Fi.
-- Persisted authenticated data-service variants and made the notification return to the saved variant.
-- The capture and memories pager remains available while setup runs; recording is disabled until models are ready.
-- Demo model setup simulates selection, voice-model download and loading, and summarization-model download on the capture screen.
-- Added a RAM-based model tier choice for voice-to-text and summarization: devices under 5 GiB get Whisper Tiny and Gemma 2B, 5 GiB to under 10 GiB get Whisper Base and Gemma 7B, and 10 GiB or more get Whisper Large v3 and Gemma 9B.
-- Added a real model download service that downloads the tier's models from pinned Hugging Face revisions to static files under the app's models folder. Each file is checked against its size and SHA-256 before it is used, interrupted downloads resume with an HTTP Range request or commit an already-complete valid partial file, and later launches use a size/mtime/digest sidecar to skip re-hashing unchanged files. When both verified files are present, setup reaches Ready without artificial waits or step animations.
-- The capture and memories pager is available while model setup runs. The microphone remains disabled until Ready and shows transcription or summarization download progress numerically in megabytes. Android setup uses expedited WorkManager work on unmetered Wi-Fi in a dataSync foreground service with a progress notification; users can explicitly allow mobile data for the current download. Only transient network failures retry, up to five total attempts, resuming from the partial file; permanent model and storage errors show concise guidance. Notification permission is requested once on Android 13 and later only for real model setup; denying it still lets the download run. Verified local models become Ready offline without artificial waits. iOS downloads are not background-capable in this release.
-- Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; `demo` is the debug default, and unknown or missing values fail fast.
-- Demo model setup now reaches Ready immediately, without simulating a download timeline.
-- Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
-- Updated Android and iOS versioning to 1.0.5 (build 6). Memories, media sessions, transcription, and summarization remain demo-only.
+- Simulated model selection, voice-model download and loading, and summarization-model download in the demo service so setup visuals are shown when the app launches.
+- Updated Android and iOS versioning to 1.0.5 (build 6). Model setup, recording, transcription, and summarization remain simulated.
 
 ## [1.0.4]
 
