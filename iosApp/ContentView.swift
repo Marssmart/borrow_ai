@@ -5,7 +5,7 @@ import SwiftUI
 struct ContentView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         MainViewControllerKt.MainViewController(
-            startupModeFlag: ProcessInfo.processInfo.environment["BORROW_AI_DATA_MODE"]
+            serviceVariantId: ProcessInfo.processInfo.environment["BORROW_AI_SERVICE_VARIANT"]
         )
     }
 

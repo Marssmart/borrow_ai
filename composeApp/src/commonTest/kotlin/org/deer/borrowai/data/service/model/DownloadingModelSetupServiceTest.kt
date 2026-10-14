@@ -140,6 +140,18 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun selectedModelNamesArePublishedAfterTierSelection() = runTest {
+        val fileSystem = FakeFileSystem()
+        val setup = service(fileSystem, RecordingDownloader(fileSystem, listOf(voice, llm)), backgroundScope)
+
+        setup.prepare()
+
+        assertEquals("Test Voice", setup.state.value.voiceModelName)
+        assertEquals("Test LLM", setup.state.value.llmModelName)
+        assertEquals(1f, setup.state.value.progress)
+    }
+
+    @Test
     fun ramDecidesWhichTierModelsAreChosen() = runTest {
         val fileSystem = FakeFileSystem()
         val chosenRam = mutableListOf<Long>()
@@ -267,6 +279,7 @@ class DownloadingModelSetupServiceTest {
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
+        assertTrue(setup.state.value.retryableFailure)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
     }
@@ -289,8 +302,8 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
         assertNull(fileSystem.metadataOrNull(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
+        assertTrue(setup.state.value.retryableFailure)
     }
 
     @Test

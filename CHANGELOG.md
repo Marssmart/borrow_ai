@@ -2,6 +2,16 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.5]
+
+- Added a RAM-based model tier choice for voice-to-text and summarization: devices under 5 GiB get Whisper Tiny and Gemma 2B, 5 GiB to under 10 GiB get Whisper Base and Gemma 7B, and 10 GiB or more get Whisper Large v3 and Gemma 9B.
+- Added a real model download service that downloads the tier's models from pinned Hugging Face revisions to static files under the app's models folder. Each file is checked against its size and SHA-256 before it is used, interrupted downloads resume with an HTTP Range request or commit an already-complete valid partial file, and later launches use a size/mtime/digest sidecar to skip re-hashing unchanged files. When both verified files are present, setup reaches Ready without artificial waits or step animations.
+- The capture and memories pager is available while model setup runs. The microphone remains disabled until Ready and shows transcription or summarization download progress numerically in megabytes. Android setup uses expedited WorkManager work on unmetered Wi-Fi in a dataSync foreground service with a progress notification; users can explicitly allow mobile data for the current download. Only transient network failures retry, up to five total attempts, resuming from the partial file; permanent model and storage errors show concise guidance. Notification permission is requested once on Android 13 and later only for real model setup; denying it still lets the download run. Verified local models become Ready offline without artificial waits. iOS downloads are not background-capable in this release.
+- Replaced the single demo/real startup switch with a data-service variant selector, `BORROW_AI_SERVICE_VARIANT`. Each variant sets demo or real mode for memories, media sessions, and model setup; a fresh debug install defaults to `demo`, explicit Android selection is accepted only from trusted debug launches and persisted, and release launches require a saved valid variant.
+- Demo model setup now reaches Ready immediately, without simulating a download timeline.
+- Added the Android run configurations "App - All demo" and "App - Real model setup", replacing "Run App" and "App".
+- Updated Android and iOS versioning to 1.0.5 (build 6). Memories, media sessions, transcription, and summarization remain demo-only.
+
 ## [1.0.4]
 
 - Added a basic GitHub Actions Gradle job that runs Android unit tests and assembles the debug app.

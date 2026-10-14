@@ -50,15 +50,16 @@ class DownloadingModelSetupService(
             val voicePresent = store.isPresent(chosen.voice)
             val llmPresent = store.isPresent(chosen.llm)
             if (voicePresent && llmPresent) {
-                publishFastReady()
+                publishFastReady(chosen)
                 return
             }
 
-            publish(ModelSetupPhase.CHOOSING_MODEL, 0f)
+            publish(ModelSetupPhase.CHOOSING_MODEL, 0f, chosen)
             delay(choosingHoldMillis)
             publish(
                 ModelSetupPhase.DOWNLOADING_VOICE,
                 ModelSetupMilestones.CHOOSING_END,
+                chosen,
             )
             val voiceDownloaded = downloadModel(
                 chosen.voice,
@@ -67,10 +68,10 @@ class DownloadingModelSetupService(
                 ModelSetupMilestones.VOICE_DOWNLOAD_END,
             )
 
-            publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
+            publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END, chosen)
             if (voiceDownloaded) delay(loadingHoldMillis)
 
-            publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END)
+            publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END, chosen)
             downloadModel(
                 chosen.llm,
                 ModelSetupPhase.DOWNLOADING_LLM,
@@ -78,12 +79,13 @@ class DownloadingModelSetupService(
                 ModelSetupMilestones.LLM_DOWNLOAD_END,
             )
 
-            publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END)
+            publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END, chosen)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             mutableState.value = mutableState.value.copy(
                 phase = ModelSetupPhase.FAILED,
+                retryableFailure = (error as? ModelDownloadException)?.retryable == true,
                 failureReason = when {
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
                     error is ModelStorageException || error is kotlinx.io.IOException ->
@@ -94,21 +96,25 @@ class DownloadingModelSetupService(
         }
     }
 
-    private fun publish(phase: ModelSetupPhase, progress: Float) {
+    private fun publish(phase: ModelSetupPhase, progress: Float, models: TierModels) {
         mutableState.value = ModelSetupState(
             phase = phase,
             progress = progress,
+            voiceModelName = models.voice.displayName,
+            llmModelName = models.llm.displayName,
         )
     }
 
-    private fun publishFastReady() {
-        publish(ModelSetupPhase.CHOOSING_MODEL, 0f)
-        publish(ModelSetupPhase.DOWNLOADING_VOICE, ModelSetupMilestones.CHOOSING_END)
-        publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
-        publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END)
+    private fun publishFastReady(models: TierModels) {
+        publish(ModelSetupPhase.CHOOSING_MODEL, 0f, models)
+        publish(ModelSetupPhase.DOWNLOADING_VOICE, ModelSetupMilestones.CHOOSING_END, models)
+        publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END, models)
+        publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END, models)
         mutableState.value = ModelSetupState(
             phase = ModelSetupPhase.READY,
             progress = 1f,
+            voiceModelName = models.voice.displayName,
+            llmModelName = models.llm.displayName,
         )
     }
 

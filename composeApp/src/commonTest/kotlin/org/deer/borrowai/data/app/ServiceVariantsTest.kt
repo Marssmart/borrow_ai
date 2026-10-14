@@ -1,0 +1,256 @@
+package org.deer.borrowai.data.app
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class ServiceVariantsTest {
+    @Test
+    fun demoVariantIsFirstAndDeclaresEveryService() {
+        assertEquals("demo", ServiceVariants.all.first().id)
+        DataService.entries.forEach { service ->
+            assertEquals(ServiceMode.DEMO, ServiceVariants.DEMO.modeOf(service))
+        }
+    }
+
+    @Test
+    fun variantIdsAreUnique() {
+        assertEquals(ServiceVariants.all.size, ServiceVariants.all.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun variantIdLookupIsExactAfterTrimming() {
+        assertEquals(ServiceVariants.DEMO, ServiceVariants.fromId(" demo "))
+        assertEquals(ServiceVariants.REAL_MODEL_SETUP, ServiceVariants.fromId("real-model-setup"))
+        assertFailsWith<UnknownServiceVariantException> { ServiceVariants.fromId("Demo") }
+        assertFailsWith<UnknownServiceVariantException> { ServiceVariants.fromId("real") }
+        assertFailsWith<UnknownServiceVariantException> { ServiceVariants.fromId("   ") }
+        assertFailsWith<UnknownServiceVariantException> { ServiceVariants.fromId(null) }
+    }
+
+    @Test
+    fun explicitLaunchVariantWinsOverSavedSelection() {
+        assertEquals(
+            ServiceVariants.REAL_MODEL_SETUP,
+            resolveServiceVariant(
+                hasExplicitId = true,
+                explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+                savedId = ServiceVariants.DEMO.id,
+                isDebuggable = true,
+            ),
+        )
+    }
+
+    @Test
+    fun savedSelectionWinsOverDebugDefaultAndCanRemainDemo() {
+        assertEquals(
+            ServiceVariants.REAL_MODEL_SETUP,
+            resolveServiceVariant(
+                hasExplicitId = false,
+                explicitId = null,
+                savedId = ServiceVariants.REAL_MODEL_SETUP.id,
+                isDebuggable = true,
+            ),
+        )
+        assertEquals(
+            ServiceVariants.DEMO,
+            resolveServiceVariant(
+                hasExplicitId = false,
+                explicitId = null,
+                savedId = ServiceVariants.DEMO.id,
+                isDebuggable = true,
+            ),
+        )
+    }
+
+    @Test
+    fun onlyFreshDebugInstallDefaultsToDemo() {
+        assertEquals(
+            ServiceVariants.DEMO,
+            resolveServiceVariant(
+                hasExplicitId = false,
+                explicitId = null,
+                savedId = null,
+                isDebuggable = true,
+            ),
+        )
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariant(
+                hasExplicitId = false,
+                explicitId = null,
+                savedId = null,
+                isDebuggable = false,
+            )
+        }
+    }
+
+    @Test
+    fun invalidExplicitOrSavedSelectionFailsFast() {
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariant(
+                hasExplicitId = true,
+                explicitId = "invalid",
+                savedId = ServiceVariants.DEMO.id,
+                isDebuggable = true,
+            )
+        }
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariant(
+                hasExplicitId = false,
+                explicitId = null,
+                savedId = "invalid",
+                isDebuggable = true,
+            )
+        }
+    }
+
+    @Test
+    fun onlyTrustedDebugCallerMayOverrideAndPersistTheExplicitId() {
+        val trusted = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = TRUSTED_CALLER_UID,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = ServiceVariants.DEMO.id,
+            isDebuggable = true,
+        )
+        assertEquals(ServiceVariants.REAL_MODEL_SETUP, trusted.variant)
+        assertTrue(trusted.persistExplicitSelection)
+
+        val untrusted = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = UNTRUSTED_CALLER_UID,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = ServiceVariants.DEMO.id,
+            isDebuggable = true,
+        )
+        assertEquals(ServiceVariants.DEMO, untrusted.variant)
+        assertFalse(untrusted.persistExplicitSelection)
+    }
+
+    @Test
+    fun legacyDebugLaunchWithoutCallerInfoCanSelectAndPersistVariant() {
+        val selection = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = null,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = null,
+            isDebuggable = true,
+        )
+
+        assertEquals(ServiceVariants.REAL_MODEL_SETUP, selection.variant)
+        assertTrue(selection.persistExplicitSelection)
+    }
+
+    @Test
+    fun releaseBuildRejectsExplicitVariantWhenCallerIdentityIsUnavailable() {
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariantLaunch(
+                hasExplicitId = true,
+                explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+                callerUid = null,
+                trustedCallerUid = TRUSTED_CALLER_UID,
+                savedId = null,
+                isDebuggable = false,
+            )
+        }
+    }
+
+    @Test
+    fun releaseBuildDoesNotAcceptAnExplicitUntrustedId() {
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariantLaunch(
+                hasExplicitId = true,
+                explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+                callerUid = TRUSTED_CALLER_UID,
+                trustedCallerUid = TRUSTED_CALLER_UID,
+                savedId = null,
+                isDebuggable = false,
+            )
+        }
+    }
+
+    @Test
+    fun variantExtraIsTrustedOnlyForShellCallerInDebugBuilds() {
+        val trustedDebugLaunch = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = TRUSTED_CALLER_UID,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = ServiceVariants.DEMO.id,
+            isDebuggable = true,
+        )
+        assertEquals(ServiceVariants.REAL_MODEL_SETUP, trustedDebugLaunch.variant)
+        assertTrue(trustedDebugLaunch.persistExplicitSelection)
+
+        val untrustedDebugLaunch = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = UNTRUSTED_CALLER_UID,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = ServiceVariants.DEMO.id,
+            isDebuggable = true,
+        )
+        assertEquals(ServiceVariants.DEMO, untrustedDebugLaunch.variant)
+        assertFalse(untrustedDebugLaunch.persistExplicitSelection)
+
+        val freshDebugLaunch = resolveServiceVariantLaunch(
+            hasExplicitId = true,
+            explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+            callerUid = UNTRUSTED_CALLER_UID,
+            trustedCallerUid = TRUSTED_CALLER_UID,
+            savedId = null,
+            isDebuggable = true,
+        )
+        assertEquals(ServiceVariants.DEMO, freshDebugLaunch.variant)
+        assertFalse(freshDebugLaunch.persistExplicitSelection)
+
+        assertFailsWith<UnknownServiceVariantException> {
+            resolveServiceVariantLaunch(
+                hasExplicitId = true,
+                explicitId = ServiceVariants.REAL_MODEL_SETUP.id,
+                callerUid = TRUSTED_CALLER_UID,
+                trustedCallerUid = TRUSTED_CALLER_UID,
+                savedId = null,
+                isDebuggable = false,
+            )
+        }
+    }
+
+    @Test
+    fun realModelSetupSwitchesOnlyModelSetup() {
+        val variant = ServiceVariants.REAL_MODEL_SETUP
+        assertEquals(ServiceMode.REAL, variant.modeOf(DataService.MODEL_SETUP))
+        assertEquals(ServiceMode.DEMO, variant.modeOf(DataService.MEMORIES))
+        assertEquals(ServiceMode.DEMO, variant.modeOf(DataService.MEDIA_SESSION))
+        assertTrue(variant.hasDemoServices)
+    }
+
+    @Test
+    fun variantMustDeclareEveryService() {
+        assertFailsWith<IllegalArgumentException> {
+            ServiceVariant(
+                id = "partial",
+                modes = mapOf(DataService.MEMORIES to ServiceMode.DEMO),
+            )
+        }
+    }
+
+    @Test
+    fun variantWithoutDemoServicesReportsNoDemo() {
+        val allReal = ServiceVariant(
+            id = "all-real",
+            modes = DataService.entries.associateWith { ServiceMode.REAL },
+        )
+        assertFalse(allReal.hasDemoServices)
+    }
+
+    private companion object {
+        const val TRUSTED_CALLER_UID = 2_000
+        const val UNTRUSTED_CALLER_UID = 10_000
+    }
+}

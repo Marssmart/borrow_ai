@@ -13,13 +13,15 @@ import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.model.ModelCatalog
 
 class AppServices private constructor(
-    val mode: AppMode,
+    val variant: ServiceVariant,
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
     private val graphJob: CompletableJob,
+    private val onCloseModelSetup: () -> Unit,
 ) {
     private val closed = MutableStateFlow(false)
 
@@ -29,49 +31,82 @@ class AppServices private constructor(
         try {
             mediaSession.close()
         } finally {
-            graphJob.cancel()
+            try {
+                graphJob.cancel()
+            } finally {
+                onCloseModelSetup()
+            }
         }
     }
 
     companion object {
-        fun createFromStartupFlag(
-            startupModeFlag: String?,
+        fun createFromServiceVariant(
+            serviceVariantId: String?,
             epochClock: EpochClock,
-        ): AppServices = createFromStartupFlag(
-            startupModeFlag = startupModeFlag,
+            device: DeviceEnvironment,
+        ): AppServices = createFromServiceVariant(
+            serviceVariantId = serviceVariantId,
             epochClock = epochClock,
+            device = device,
             dispatcher = Dispatchers.Default,
         )
 
-        internal fun createFromStartupFlag(
-            startupModeFlag: String?,
+        internal fun createFromServiceVariant(
+            serviceVariantId: String?,
             epochClock: EpochClock,
+            device: DeviceEnvironment,
             dispatcher: CoroutineDispatcher,
         ): AppServices {
-            val mode = AppMode.fromStartupFlag(startupModeFlag)
-            return when (mode) {
-                AppMode.DEMO -> {
-                    val graphJob = SupervisorJob()
-                    val graphScope = CoroutineScope(graphJob + dispatcher)
-                    val memories = InMemoryDemoMemoryService(epochClock = epochClock)
-                    AppServices(
-                        mode = mode,
-                        modelSetup = DemoModelSetupService(),
-                        memories = memories,
-                        mediaSession = DemoMediaSessionService(
-                            memoryService = memories,
-                            scope = graphScope,
-                        ),
-                        graphJob = graphJob,
-                    )
-                }
-
-                AppMode.REAL -> throw RealServicesUnavailableException()
+            val variant = ServiceVariants.fromId(serviceVariantId)
+            val graphJob = SupervisorJob()
+            val graphScope = CoroutineScope(graphJob + dispatcher)
+            return try {
+                buildGraph(variant, epochClock, device, graphScope, graphJob)
+            } catch (error: Throwable) {
+                graphJob.cancel()
+                throw error
             }
+        }
+
+        private fun buildGraph(
+            variant: ServiceVariant,
+            epochClock: EpochClock,
+            device: DeviceEnvironment,
+            graphScope: CoroutineScope,
+            graphJob: CompletableJob,
+        ): AppServices {
+            val memories = when (variant.modeOf(DataService.MEMORIES)) {
+                ServiceMode.DEMO -> InMemoryDemoMemoryService(epochClock = epochClock)
+                ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEMORIES)
+            }
+            val mediaSession = when (variant.modeOf(DataService.MEDIA_SESSION)) {
+                ServiceMode.DEMO -> DemoMediaSessionService(memoryService = memories, scope = graphScope)
+                ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEDIA_SESSION)
+            }
+            var onCloseModelSetup: () -> Unit = {}
+            val modelSetup = when (variant.modeOf(DataService.MODEL_SETUP)) {
+                ServiceMode.DEMO -> DemoModelSetupService(
+                    models = ModelCatalog.modelsForRam(device.totalMemoryBytes),
+                )
+                ServiceMode.REAL -> device.createRealModelSetup(graphScope).let { real ->
+                    onCloseModelSetup = real.onClose
+                    real.service
+                }
+            }
+            return AppServices(
+                variant = variant,
+                modelSetup = modelSetup,
+                memories = memories,
+                mediaSession = mediaSession,
+                graphJob = graphJob,
+                onCloseModelSetup = onCloseModelSetup,
+            )
         }
     }
 }
 
-class RealServicesUnavailableException : IllegalStateException(
-    "Real mode was requested, but production data services have not been implemented.",
+class RealServicesUnavailableException(
+    service: DataService,
+) : IllegalStateException(
+    "Real mode was requested for ${service.name}, but its production data service has not been implemented.",
 )

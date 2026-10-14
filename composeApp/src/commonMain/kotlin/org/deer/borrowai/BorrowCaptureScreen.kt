@@ -81,6 +81,7 @@ import borrowai.composeapp.generated.resources.capture_model_progress_summarizat
 import borrowai.composeapp.generated.resources.capture_model_progress_transcription
 import borrowai.composeapp.generated.resources.capture_model_waiting_for_network
 import borrowai.composeapp.generated.resources.capture_model_waiting_for_unmetered_network
+import borrowai.composeapp.generated.resources.capture_model_waiting_for_retry
 import borrowai.composeapp.generated.resources.capture_models_unavailable
 import borrowai.composeapp.generated.resources.capture_recording_label
 import borrowai.composeapp.generated.resources.capture_release_to_stop
@@ -477,6 +478,7 @@ private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phas
     ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ->
         stringResource(Res.string.capture_model_waiting_for_unmetered_network)
     ModelSetupPhase.WAITING_FOR_NETWORK -> stringResource(Res.string.capture_model_waiting_for_network)
+    ModelSetupPhase.WAITING_FOR_RETRY -> stringResource(Res.string.capture_model_waiting_for_retry)
     ModelSetupPhase.DOWNLOADING_VOICE -> {
         if (state.bytesTotal > 0L) {
             stringResource(
