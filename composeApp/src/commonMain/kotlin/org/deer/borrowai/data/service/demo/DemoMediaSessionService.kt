@@ -4,13 +4,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.MutableMediaSessionState
+import org.deer.borrowai.data.service.MutableSessionGeneration
 import org.deer.borrowai.data.service.MemoryService
-import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackRequestResult
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
@@ -19,38 +19,34 @@ class DemoMediaSessionService(
     private val memoryService: MemoryService,
     private val scope: CoroutineScope,
 ) : MediaSessionService {
-    private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
+    private val mutableState = MutableMediaSessionState()
     private val mutableIdleTranscription = MutableStateFlow(INITIAL_TRANSCRIPTION)
-    private val sessionGeneration = MutableStateFlow(0L)
+    private val sessionGeneration = MutableSessionGeneration()
     private val closed = MutableStateFlow(false)
     private val tickerJob = MutableJob(scope)
     private val transcriptionJob = MutableJob(scope)
 
-    override val state = mutableState.asStateFlow()
+    override val state = mutableState.state
     override val idleTranscription = mutableIdleTranscription.asStateFlow()
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()
-        val generation = advanceGeneration()
-        mutableState.value = MediaSessionState.Recording(
-            elapsedMillis = 0L,
-            transcription = "",
-            holdToRecord = holdToRecord,
-        )
+        val generation = sessionGeneration.advance()
+        mutableState.transitionRecording(holdToRecord = holdToRecord)
         startTicker(generation)
         startTranscription(generation)
     }
 
     override fun stopRecording(): RecordingResult? {
         ensureOpen()
-        if (mutableState.value !is MediaSessionState.Recording) return null
-        advanceGeneration()
-        tickerJob.cancel()
-        transcriptionJob.cancel()
-        val recording = mutableState.value as? MediaSessionState.Recording ?: return null
-        mutableIdleTranscription.value = recording.transcription
-        mutableState.value = MediaSessionState.Idle
-        return RecordingResult(recording.elapsedMillis, recording.transcription)
+        return mutableState.ifRecording { recording ->
+            sessionGeneration.advance()
+            tickerJob.cancel()
+            transcriptionJob.cancel()
+            mutableIdleTranscription.value = recording.transcription
+            mutableState.transitionIdle()
+            RecordingResult(recording.elapsedMillis, recording.transcription)
+        }
     }
 
     override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult {
@@ -58,28 +54,33 @@ class DemoMediaSessionService(
         val memory = memoryService.memories.value.firstOrNull { it.id == target.memoryId }
             ?: return PlaybackRequestResult.MemoryNotFound
 
-        return when (val current = mutableState.value) {
-            is MediaSessionState.Recording -> {
-                mutableState.value = current.copy(pendingPlayback = target)
-                PlaybackRequestResult.ConfirmationRequired(target)
-            }
-
-            else -> {
-                startPlayback(target, memory)
-                PlaybackRequestResult.Started
-            }
+        return mutableState.ifRecording { recording ->
+            mutableState.transitionRecording(
+                elapsedMillis = recording.elapsedMillis,
+                transcription = recording.transcription,
+                pendingPlayback = target,
+                holdToRecord = recording.holdToRecord,
+            )
+            PlaybackRequestResult.ConfirmationRequired(target)
+        } ?: run {
+            startPlayback(target, memory)
+            PlaybackRequestResult.Started
         }
     }
 
     override fun confirmPendingPlayback(): PlaybackRequestResult {
         ensureOpen()
-        val recording = mutableState.value as? MediaSessionState.Recording
-            ?: return PlaybackRequestResult.NoPendingConfirmation
-        val target = recording.pendingPlayback
+        val target = mutableState.ifRecording { it.pendingPlayback }
             ?: return PlaybackRequestResult.NoPendingConfirmation
         val memory = memoryService.memories.value.firstOrNull { it.id == target.memoryId }
         if (memory == null) {
-            mutableState.value = recording.copy(pendingPlayback = null)
+            mutableState.ifRecording { recording ->
+                mutableState.transitionRecording(
+                    elapsedMillis = recording.elapsedMillis,
+                    transcription = recording.transcription,
+                    holdToRecord = recording.holdToRecord,
+                )
+            }
             return PlaybackRequestResult.MemoryNotFound
         }
         startPlayback(target, memory)
@@ -88,59 +89,59 @@ class DemoMediaSessionService(
 
     override fun cancelPendingPlayback(): Boolean {
         ensureOpen()
-        val recording = mutableState.value as? MediaSessionState.Recording ?: return false
-        if (recording.pendingPlayback == null) return false
-        mutableState.value = recording.copy(pendingPlayback = null)
-        return true
+        return mutableState.ifRecording { recording ->
+            if (recording.pendingPlayback == null) {
+                false
+            } else {
+                mutableState.transitionRecording(
+                    elapsedMillis = recording.elapsedMillis,
+                    transcription = recording.transcription,
+                    holdToRecord = recording.holdToRecord,
+                )
+                true
+            }
+        } ?: false
     }
 
     override fun stopPlayback() {
         ensureOpen()
-        if (mutableState.value is MediaSessionState.Playing) {
-            advanceGeneration()
+        mutableState.ifPlaying {
+            sessionGeneration.advance()
             tickerJob.cancel()
-            mutableState.value = MediaSessionState.Idle
+            mutableState.transitionIdle()
         }
     }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        advanceGeneration()
+        sessionGeneration.advance()
         tickerJob.cancel()
         transcriptionJob.cancel()
-        (mutableState.value as? MediaSessionState.Recording)?.let { recording ->
+        mutableState.ifRecording { recording ->
             mutableIdleTranscription.value = recording.transcription
         }
-        mutableState.value = MediaSessionState.Idle
+        mutableState.transitionIdle()
     }
 
     private fun startPlayback(target: PlaybackTarget, memory: Memory) {
-        val generation = advanceGeneration()
+        val generation = sessionGeneration.advance()
         tickerJob.cancel()
         transcriptionJob.cancel()
-        (mutableState.value as? MediaSessionState.Recording)?.let { recording ->
+        mutableState.ifRecording { recording ->
             mutableIdleTranscription.value = recording.transcription
         }
-        val playableText = when (target.content) {
-            PlaybackContent.TRANSCRIPTION -> memory.transcription
-            PlaybackContent.SUMMARY -> memory.summary
-        }
-        val durationMillis = maxOf(MIN_PLAYBACK_DURATION_MILLIS, playableText.length * MILLIS_PER_CHARACTER)
-        mutableState.value = MediaSessionState.Playing(
-            target = target,
-            elapsedMillis = 0L,
-            durationMillis = durationMillis,
-        )
+        val durationMillis = maxOf(MIN_PLAYBACK_DURATION_MILLIS, target.getText(memory).length * MILLIS_PER_CHARACTER)
+        mutableState.transitionPlaying(target = target, durationMillis = durationMillis)
         startTicker(generation)
     }
 
     private fun startTicker(generation: Long) {
         tickerJob.launch {
-            while (isActive && sessionGeneration.value == generation) {
+            while (isActive && sessionGeneration.isCurrent(generation)) {
                 delay(SESSION_TICK_INTERVAL_MILLIS)
-                if (!isActive || sessionGeneration.value != generation) return@launch
+                if (!isActive || !sessionGeneration.isCurrent(generation)) return@launch
                 updateElapsedTime(generation)
-                if (sessionGeneration.value != generation || mutableState.value == MediaSessionState.Idle) {
+                if (!sessionGeneration.isCurrent(generation) || mutableState.value == MediaSessionState.Idle) {
                     return@launch
                 }
             }
@@ -150,11 +151,11 @@ class DemoMediaSessionService(
     private fun startTranscription(generation: Long) {
         transcriptionJob.launch {
             var sampleIndex = 0
-            while (isActive && sessionGeneration.value == generation) {
+            while (isActive && sessionGeneration.isCurrent(generation)) {
                 val sample = "${TRANSCRIPTION_SAMPLES[sampleIndex % TRANSCRIPTION_SAMPLES.size]} "
                 for (character in sample) {
                     delay(TRANSCRIPTION_CHARACTER_INTERVAL_MILLIS)
-                    if (!isActive || sessionGeneration.value != generation) return@launch
+                    if (!isActive || !sessionGeneration.isCurrent(generation)) return@launch
                     appendTranscription(generation, character)
                 }
                 sampleIndex += 1
@@ -167,7 +168,7 @@ class DemoMediaSessionService(
 
     internal fun updateElapsedTime(generation: Long) {
         mutableState.update { current ->
-            if (sessionGeneration.value != generation) {
+            if (!sessionGeneration.isCurrent(generation)) {
                 current
             } else {
                 when (current) {
@@ -192,7 +193,7 @@ class DemoMediaSessionService(
 
     internal fun appendTranscription(generation: Long, character: Char) {
         mutableState.update { current ->
-            if (sessionGeneration.value == generation && current is MediaSessionState.Recording) {
+            if (sessionGeneration.isCurrent(generation) && current is MediaSessionState.Recording) {
                 val nextTranscription = current.transcription + character
                 current.copy(
                     transcription = if (nextTranscription.length > MAX_TRANSCRIPTION_LENGTH) {
@@ -209,14 +210,6 @@ class DemoMediaSessionService(
 
     private fun ensureOpen() {
         check(!closed.value) { "Media session service has been closed." }
-    }
-
-    private fun advanceGeneration(): Long {
-        while (true) {
-            val current = sessionGeneration.value
-            val next = current + 1L
-            if (sessionGeneration.compareAndSet(current, next)) return next
-        }
     }
 
     private companion object {

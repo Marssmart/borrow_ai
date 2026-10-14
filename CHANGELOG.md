@@ -2,6 +2,13 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.8]
+
+- Added `MutableMediaSessionState`, a wrapper around the media session state with `transitionIdle`, `transitionRecording`, and `transitionPlaying` helpers, plus `ifRecording` and `ifPlaying` to run code only in a given state. `DemoMediaSessionService` now uses it instead of raw state checks and copies.
+- Added `MutableSessionGeneration`, a wrapper around the session generation counter with `isCurrent`, `safeSet`, and `advance` helpers. `DemoMediaSessionService` uses it instead of raw `StateFlow` comparisons.
+- Moved playable text selection into `PlaybackTarget.getText(memory)`.
+- Updated Android and iOS versioning to 1.0.8 (build 9).
+
 ## [1.0.7]
 
 - Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, removing manual cancel/null/launch boilerplate.

@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.service
 
 import kotlinx.coroutines.flow.StateFlow
+import org.deer.borrowai.data.domain.Memory
 
 enum class PlaybackContent {
     TRANSCRIPTION,
@@ -10,7 +11,12 @@ enum class PlaybackContent {
 data class PlaybackTarget(
     val memoryId: String,
     val content: PlaybackContent,
-)
+) {
+    fun getText(memory: Memory): String = when (content) {
+        PlaybackContent.TRANSCRIPTION -> memory.transcription
+        PlaybackContent.SUMMARY -> memory.summary
+    }
+}
 
 data class RecordingResult(
     val elapsedMillis: Long,
