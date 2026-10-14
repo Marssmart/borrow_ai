@@ -11,7 +11,6 @@ import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
-import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 
 class AppServices private constructor(
@@ -83,12 +82,9 @@ class AppServices private constructor(
                 ServiceMode.REAL -> throw RealServicesUnavailableException(DataService.MEDIA_SESSION)
             }
             var onCloseModelSetup: () -> Unit = {}
-            val modelSetup = when (variant.modeOf(DataService.MODEL_SETUP)) {
-                ServiceMode.DEMO -> DemoModelSetupService()
-                ServiceMode.REAL -> device.createRealModelSetup(graphScope).let { real ->
-                    onCloseModelSetup = real.onClose
-                    real.service
-                }
+            val modelSetup = device.createRealModelSetup(graphScope).let { real ->
+                onCloseModelSetup = real.onClose
+                real.service
             }
             return AppServices(
                 variant = variant,

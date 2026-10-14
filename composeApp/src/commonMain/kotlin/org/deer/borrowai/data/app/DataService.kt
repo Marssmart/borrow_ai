@@ -1,10 +1,9 @@
 package org.deer.borrowai.data.app
 
-/** Every data service the app graph builds. Adding an entry requires each variant to declare it. */
+/** Switchable data services. Model setup always uses the real download service and is not listed here. */
 enum class DataService {
     MEMORIES,
     MEDIA_SESSION,
-    MODEL_SETUP,
 }
 
 enum class ServiceMode {
@@ -44,14 +43,10 @@ object ServiceVariants {
         modes = DataService.entries.associateWith { ServiceMode.DEMO },
     )
 
-    /** Only model setup uses the real download service; memories and media stay demo. */
+    /** Memories and media stay demo; model setup is always the real download service. */
     val REAL_MODEL_SETUP = ServiceVariant(
         id = "real-model-setup",
-        modes = mapOf(
-            DataService.MEMORIES to ServiceMode.DEMO,
-            DataService.MEDIA_SESSION to ServiceMode.DEMO,
-            DataService.MODEL_SETUP to ServiceMode.REAL,
-        ),
+        modes = DataService.entries.associateWith { ServiceMode.DEMO },
     )
 
     val all: List<ServiceVariant> = listOf(DEMO, REAL_MODEL_SETUP)

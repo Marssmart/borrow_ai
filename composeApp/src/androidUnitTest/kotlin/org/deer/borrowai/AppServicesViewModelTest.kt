@@ -14,8 +14,17 @@ import org.deer.borrowai.data.app.DeviceEnvironment
 import org.deer.borrowai.data.app.RealModelSetup
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
-import org.deer.borrowai.data.service.demo.DemoModelSetupService
+import org.deer.borrowai.data.service.ModelSetupService
+import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.model.ModelTierSelector
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+private class IdleModelSetupService : ModelSetupService {
+    override val state: StateFlow<ModelSetupState> = MutableStateFlow(ModelSetupState())
+
+    override suspend fun prepare() = Unit
+}
 
 class AppServicesViewModelTest {
     @Test
@@ -26,7 +35,7 @@ class AppServicesViewModelTest {
             override val totalMemoryBytes: Long = 8L * ModelTierSelector.BYTES_PER_GIB
             override val modelDirectory: Path = "/unused-models".toPath()
             override fun createRealModelSetup(scope: CoroutineScope): RealModelSetup =
-                RealModelSetup(DemoModelSetupService())
+                RealModelSetup(IdleModelSetupService())
         }
         val factory = AppServicesViewModelFactory(
             serviceVariantId = "demo",

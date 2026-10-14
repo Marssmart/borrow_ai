@@ -17,8 +17,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import org.deer.borrowai.data.app.AppServices
-import org.deer.borrowai.data.app.DataService
-import org.deer.borrowai.data.app.ServiceMode
 import org.deer.borrowai.data.app.ServiceVariant
 import org.deer.borrowai.data.app.resolveServiceVariant
 import org.deer.borrowai.data.app.resolveServiceVariantLaunch
@@ -45,7 +43,7 @@ class MainActivity : ComponentActivity() {
         if (appServicesViewModel.services.value.variant.id != serviceVariant.id) {
             appServicesViewModel.replaceServices(createServices(serviceVariant))
         }
-        requestModelDownloadNotificationPermission(serviceVariant)
+        requestModelDownloadNotificationPermission()
         setContent {
             val services by appServicesViewModel.services.collectAsState()
             App(services)
@@ -83,7 +81,7 @@ class MainActivity : ComponentActivity() {
         if (appServicesViewModel.services.value.variant.id != serviceVariant.id) {
             appServicesViewModel.replaceServices(createServices(serviceVariant))
         }
-        requestModelDownloadNotificationPermission(serviceVariant)
+        requestModelDownloadNotificationPermission()
     }
 
     private fun resolveLaunchVariant(launchIntent: Intent, callerUid: Int?): ServiceVariant {
@@ -125,8 +123,7 @@ class MainActivity : ComponentActivity() {
             device = AndroidDeviceEnvironment(applicationContext),
         )
 
-    private fun requestModelDownloadNotificationPermission(serviceVariant: ServiceVariant) {
-        if (serviceVariant.modeOf(DataService.MODEL_SETUP) != ServiceMode.REAL) return
+    private fun requestModelDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED

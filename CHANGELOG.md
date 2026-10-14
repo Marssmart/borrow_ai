@@ -7,7 +7,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added RAM-based model tiers for transcription and summarization, selected from device-reported memory and mapped to pinned model catalog entries.
 - Added verified model downloads to static app-private files, with SHA-256 and expected-size checks, resumable `.part` files bound to their model identity, and cached verification sidecars. Oversized responses are stopped before they can exceed the catalog size; short downloads remain resumable.
 - Added Android foreground WorkManager downloads with progress notifications, unmetered-network defaults, an explicit per-download mobile-data override, retry/backoff state, and notification tap-through to the saved app variant.
-- Moved setup status and numeric MB progress to the capture screen; recording remains disabled until models are ready. Cached models become ready without artificial waits, and demo setup is immediately ready.
+- Moved setup status and numeric MB progress to the capture screen; recording remains disabled until models are ready. Cached models become ready without artificial waits. Model setup always uses the real download service, so every variant downloads real models.
 - Persisted authenticated data-service variants. Debug run-config extras work through the trusted shell launch path; exported callers cannot force or persist real setup, and notification launches restore the saved variant.
 - Updated Android and iOS app versions to 1.0.6 (build 7).
 

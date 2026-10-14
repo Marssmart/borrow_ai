@@ -13,7 +13,6 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
-import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 
@@ -28,7 +27,7 @@ class AppServicesTest {
 
         assertEquals(ServiceVariants.DEMO, services.variant)
         assertTrue(services.variant.hasDemoServices)
-        assertNotNull(services.modelSetup as? DemoModelSetupService)
+        assertNotNull(services.modelSetup as? DownloadingModelSetupService)
         assertNotNull(services.memories as? InMemoryDemoMemoryService)
         assertNotNull(services.mediaSession as? DemoMediaSessionService)
         services.close()

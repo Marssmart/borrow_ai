@@ -222,9 +222,8 @@ class ServiceVariantsTest {
     }
 
     @Test
-    fun realModelSetupSwitchesOnlyModelSetup() {
+    fun realModelSetupVariantSwitchesOnlyTheRemainingDemoServices() {
         val variant = ServiceVariants.REAL_MODEL_SETUP
-        assertEquals(ServiceMode.REAL, variant.modeOf(DataService.MODEL_SETUP))
         assertEquals(ServiceMode.DEMO, variant.modeOf(DataService.MEMORIES))
         assertEquals(ServiceMode.DEMO, variant.modeOf(DataService.MEDIA_SESSION))
         assertTrue(variant.hasDemoServices)
