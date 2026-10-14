@@ -150,9 +150,9 @@ internal fun BorrowCaptureScreen(
                 buttonSize = microphoneSize,
                 isRecording = uiState.isRecording,
                 isHoldRecording = uiState.isHoldRecording,
-                isEnabled = modelReady,
+                isEnabled = modelReady || uiState.isRecording,
                 elapsedSeconds = uiState.elapsedSeconds,
-                statusLabel = modelStatus,
+                statusLabel = modelStatus.takeUnless { uiState.isRecording },
                 onToggleRecording = stateHolder::toggleRecording,
                 onStartHoldRecording = stateHolder::startHoldRecording,
                 onStopHoldRecording = stateHolder::stopHoldRecording,
@@ -168,7 +168,7 @@ internal fun BorrowCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
             ) {
-                if (modelReady) {
+                if (modelReady || uiState.isRecording) {
                     Text(
                         text = if (uiState.isRecording) {
                             if (uiState.isHoldRecording) {

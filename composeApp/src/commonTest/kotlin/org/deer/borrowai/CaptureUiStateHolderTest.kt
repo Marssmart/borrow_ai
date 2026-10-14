@@ -30,11 +30,30 @@ class CaptureUiStateHolderTest {
         assertTrue(holder.uiState.value.isRecording)
     }
 
+    @Test
+    fun activeRecordingCanBeStoppedAfterModelReadinessIsRevoked() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession, initiallyModelReady = true)
+
+        holder.toggleRecording()
+        assertTrue(holder.uiState.value.isRecording)
+
+        holder.setModelReady(false)
+        holder.toggleRecording()
+
+        assertEquals(1, mediaSession.stopCount)
+        assertFalse(holder.uiState.value.isRecording)
+        holder.toggleRecording()
+        assertEquals(1, mediaSession.startCount)
+    }
+
     private class FakeMediaSessionService : MediaSessionService {
         private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
         override val state: StateFlow<MediaSessionState> = mutableState
         override val idleTranscription = MutableStateFlow("")
         var startCount = 0
+            private set
+        var stopCount = 0
             private set
         var lastHoldToRecord = false
             private set
@@ -50,6 +69,7 @@ class CaptureUiStateHolderTest {
         }
 
         override fun stopRecording(): RecordingResult? {
+            stopCount++
             mutableState.value = MediaSessionState.Idle
             return RecordingResult(elapsedMillis = 0L, transcription = "")
         }
