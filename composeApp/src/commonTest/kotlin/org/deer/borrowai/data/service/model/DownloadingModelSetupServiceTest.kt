@@ -81,6 +81,20 @@ class DownloadingModelSetupServiceTest {
     )
 
     @Test
+    fun mobileDataOverrideIsNoOpForPlatformNeutralDownloader() = runTest {
+        val fileSystem = FakeFileSystem()
+        val setup = service(
+            fileSystem,
+            RecordingDownloader(fileSystem, listOf(voice, llm)),
+            backgroundScope,
+        )
+
+        setup.downloadOverMobileData()
+
+        assertEquals(ModelSetupPhase.NOT_STARTED, setup.state.value.phase)
+    }
+
+    @Test
     fun firstLaunchDownloadsBothModelsToStaticPathsAndNextLaunchSkipsThem() = runTest {
         val fileSystem = FakeFileSystem()
         val first = RecordingDownloader(fileSystem, listOf(voice, llm))

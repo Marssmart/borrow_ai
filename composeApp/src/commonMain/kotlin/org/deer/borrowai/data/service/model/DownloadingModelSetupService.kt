@@ -34,6 +34,9 @@ class DownloadingModelSetupService(
 
     override val state = mutableState.asStateFlow()
 
+    /** Metered-network overrides are specific to Android's WorkManager implementation. */
+    override suspend fun downloadOverMobileData() = Unit
+
     override suspend fun prepare() {
         val setup = setupMutex.withLock {
             if (mutableState.value.phase == ModelSetupPhase.READY) return
