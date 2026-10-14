@@ -1,5 +1,6 @@
 package org.deer.borrowai.data.service.demo
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -9,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.ModelSetupPhase
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DemoModelSetupServiceTest {
     @Test
     fun setupSimulatesProgressBeforeBecomingReady() = runTest {
@@ -22,6 +24,7 @@ class DemoModelSetupServiceTest {
         runCurrent()
         assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, service.state.value.phase)
         assertTrue(service.state.value.bytesDownloaded > 0L)
+        assertEquals(4_534_000_000L, service.state.value.bytesTotal)
         assertTrue(service.state.value.bytesTotal > service.state.value.bytesDownloaded)
 
         advanceTimeBy(1_600)
@@ -32,6 +35,7 @@ class DemoModelSetupServiceTest {
         runCurrent()
         assertEquals(ModelSetupPhase.DOWNLOADING_LLM, service.state.value.phase)
         assertTrue(service.state.value.bytesDownloaded > 0L)
+        assertEquals(5_761_000_000L, service.state.value.bytesTotal)
 
         advanceTimeBy(1_600)
         runCurrent()

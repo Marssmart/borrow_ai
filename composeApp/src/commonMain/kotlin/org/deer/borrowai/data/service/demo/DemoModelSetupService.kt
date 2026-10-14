@@ -72,7 +72,7 @@ class DemoModelSetupService : ModelSetupService {
         const val LOADING_DELAY_MILLIS = 500L
         const val DOWNLOAD_STEP_DELAY_MILLIS = 100L
         const val VOICE_DOWNLOAD_END = 0.5f
-        const val VOICE_MODEL_BYTES = 4_534_000L
-        const val LLM_MODEL_BYTES = 5_761_000L
+        const val VOICE_MODEL_BYTES = 4_534_000_000L
+        const val LLM_MODEL_BYTES = 5_761_000_000L
     }
 }
