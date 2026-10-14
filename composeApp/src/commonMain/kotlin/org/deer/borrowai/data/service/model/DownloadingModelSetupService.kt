@@ -47,7 +47,7 @@ class DownloadingModelSetupService(
     override suspend fun prepare() {
         setupMutex.withLock {
             if (mutableState.value.phase == ModelSetupPhase.READY) return
-            if (!setupJob.isActive) setupJob.launch { runSetup() }
+            if (!setupJob.isActive()) setupJob.launch { runSetup() }
         }
         setupJob.join()
     }
