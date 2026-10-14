@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.model
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -71,10 +72,12 @@ class DownloadingModelSetupServiceTest {
         downloader: ModelDownloader,
         scope: CoroutineScope,
         models: TierModels = tierModels,
+        network: ModelNetworkPolicy = FixedNetworkPolicy(true),
     ) = DownloadingModelSetupService(
         totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
         store = store(fileSystem),
         downloader = downloader,
+        network = network,
         scope = scope,
         choosingHoldMillis = 0L,
         loadingHoldMillis = 0L,
@@ -117,6 +120,7 @@ class DownloadingModelSetupServiceTest {
             totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
             store = store,
             downloader = downloader,
+            network = FixedNetworkPolicy(true),
             scope = backgroundScope,
             choosingHoldMillis = 60_000L,
             loadingHoldMillis = 60_000L,
@@ -148,6 +152,7 @@ class DownloadingModelSetupServiceTest {
             totalRamBytes = 12L * ModelTierSelector.BYTES_PER_GIB,
             store = store(fileSystem),
             downloader = RecordingDownloader(fileSystem, listOf(voice, llm)),
+            network = FixedNetworkPolicy(true),
             scope = backgroundScope,
             choosingHoldMillis = 0L,
             loadingHoldMillis = 0L,
@@ -244,6 +249,7 @@ class DownloadingModelSetupServiceTest {
             totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
             store = store,
             downloader = downloader,
+            network = FixedNetworkPolicy(true),
             scope = backgroundScope,
             choosingHoldMillis = 0L,
             loadingHoldMillis = 0L,
@@ -390,6 +396,62 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun meteredNetworkHoldsTheTransferUntilMobileDataIsConsented() = runTest {
+        val fileSystem = FakeFileSystem()
+        val network = FixedNetworkPolicy(false)
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope, network = network)
+
+        val prepare = launch { setup.prepare() }
+        runCurrent()
+
+        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value.phase)
+        assertEquals(emptyList(), downloader.requestedUrls)
+
+        setup.downloadOverMobileData()
+        prepare.join()
+
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+    }
+
+    @Test
+    fun unmeteredNetworkReleasesTheHeldTransferWithoutConsent() = runTest {
+        val fileSystem = FakeFileSystem()
+        val network = FixedNetworkPolicy(false)
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope, network = network)
+
+        val prepare = launch { setup.prepare() }
+        runCurrent()
+        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value.phase)
+
+        network.unmetered.value = true
+        prepare.join()
+
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+    }
+
+    @Test
+    fun verifiedLocalModelsReachReadyOnMeteredNetworkWithoutWaiting() = runTest {
+        val fileSystem = FakeFileSystem()
+        val store = store(fileSystem)
+        store.prepareDirectory()
+        writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
+        store.commit(voice, voice.sha256)
+        writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
+        store.commit(llm, llm.sha256)
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope, network = FixedNetworkPolicy(false))
+
+        setup.prepare()
+
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(emptyList(), downloader.requestedUrls)
+    }
+
+    @Test
     fun cancelledPrepareCallerLeavesTheSharedDownloadRunningOnce() = runTest {
         val fileSystem = FakeFileSystem()
         val gate = CompletableDeferred<Unit>()
@@ -436,6 +498,10 @@ class DownloadingModelSetupServiceTest {
         } finally {
             source.close()
         }
+    }
+
+    private class FixedNetworkPolicy(initiallyUnmetered: Boolean) : ModelNetworkPolicy {
+        override val unmetered = MutableStateFlow(initiallyUnmetered)
     }
 
     private inner class GatedDownloader(

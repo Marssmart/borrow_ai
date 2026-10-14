@@ -6,6 +6,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -23,6 +25,7 @@ class DownloadingModelSetupService(
     private val totalRamBytes: Long,
     private val store: ModelFileStore,
     private val downloader: ModelDownloader,
+    private val network: ModelNetworkPolicy,
     private val scope: CoroutineScope,
     private val choosingHoldMillis: Long = CHOOSING_HOLD_MILLIS,
     private val loadingHoldMillis: Long = LOADING_HOLD_MILLIS,
@@ -34,7 +37,13 @@ class DownloadingModelSetupService(
 
     override val state = mutableState.asStateFlow()
 
-    override suspend fun downloadOverMobileData() = Unit
+    private val mobileDataConsent = MutableStateFlow(false)
+
+    override suspend fun downloadOverMobileData() {
+        if (mutableState.value.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+            mobileDataConsent.value = true
+        }
+    }
 
     override suspend fun prepare() {
         val setup = setupMutex.withLock {
@@ -47,6 +56,7 @@ class DownloadingModelSetupService(
 
     private suspend fun runSetup() {
         try {
+            mobileDataConsent.value = false
             store.prepareDirectory()
             val chosen = modelsForRam(totalRamBytes)
             val voicePresent = store.isPresent(chosen.voice)
@@ -132,6 +142,7 @@ class DownloadingModelSetupService(
             mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
             return false
         }
+        awaitTransferAllowed(startProgress)
         val downloadedSha256 = downloader.download(
             spec.downloadUrl,
             store.partialPath(spec),
@@ -148,6 +159,20 @@ class DownloadingModelSetupService(
         store.commit(spec, downloadedSha256)
         mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
         return true
+    }
+
+    /** Holds a required transfer until the network is unmetered or the user consents to mobile data for this run. */
+    private suspend fun awaitTransferAllowed(progress: Float) {
+        val allowed = combine(network.unmetered, mobileDataConsent) { unmetered, consent -> unmetered || consent }
+        if (!allowed.first()) {
+            mutableState.value = mutableState.value.copy(
+                phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK,
+                progress = progress,
+                bytesDownloaded = 0L,
+                bytesTotal = 0L,
+            )
+            allowed.first { it }
+        }
     }
 
     private companion object {
