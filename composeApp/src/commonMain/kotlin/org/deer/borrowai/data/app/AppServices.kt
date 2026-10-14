@@ -13,7 +13,6 @@ import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
-import org.deer.borrowai.data.service.model.ModelCatalog
 
 class AppServices private constructor(
     val variant: ServiceVariant,
@@ -85,9 +84,7 @@ class AppServices private constructor(
             }
             var onCloseModelSetup: () -> Unit = {}
             val modelSetup = when (variant.modeOf(DataService.MODEL_SETUP)) {
-                ServiceMode.DEMO -> DemoModelSetupService(
-                    models = ModelCatalog.modelsForRam(device.totalMemoryBytes),
-                )
+                ServiceMode.DEMO -> DemoModelSetupService()
                 ServiceMode.REAL -> device.createRealModelSetup(graphScope).let { real ->
                     onCloseModelSetup = real.onClose
                     real.service
