@@ -98,8 +98,9 @@ class MutableJobTest {
         assertEquals(1, liveCount())
 
         mutableJob.cancel()
-        lock.withLock { startedJobs.forEach { it.join() } }
-        assertTrue(lock.withLock { startedJobs.none { it.isActive } })
+        val jobs = lock.withLock { startedJobs.toList() }
+        jobs.forEach { it.join() }
+        assertTrue(jobs.none { it.isActive })
         realScope.cancel()
     }
 }
