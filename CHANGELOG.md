@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.9]
+
+- `DownloadingModelSetupService` now uses `MutableJob` for its setup download, removing manual job tracking. `MutableJob` gained `isActive()` and `join()` so `prepare()` can join a running download instead of starting another.
+- Updated Android and iOS versioning to 1.0.9 (build 10).
+
 ## [1.0.8]
 
 - Added `MutableMediaSessionState`, a wrapper around the media session state with `transitionIdle`, `transitionRecording`, and `transitionPlaying` helpers, plus `ifRecording` and `ifPlaying` to run code only in a given state. `DemoMediaSessionService` now uses it instead of raw state checks and copies.
@@ -12,7 +17,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.0.7]
 
-- Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, and `DownloadingModelSetupService` uses it for the setup download, removing manual cancel/null/launch boilerplate. `MutableJob` also exposes `isActive` and `join()` so callers can join a running job instead of starting another.
+- Added `MutableJob`, a single-job wrapper that takes the coroutine scope in its constructor, starts jobs with `launch()`, and clears its reference with `cancel()`. `DemoMediaSessionService` uses it for ticker and transcription jobs, removing manual cancel/null/launch boilerplate.
 - Updated Android and iOS versioning to 1.0.7 (build 8).
 
 ## [1.0.6]
