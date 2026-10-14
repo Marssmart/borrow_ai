@@ -294,6 +294,27 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun okioFileSystemFailureIsClassifiedAsStorage() = runTest {
+        val fileSystem = FakeFileSystem()
+        val downloader = object : ModelDownloader {
+            override suspend fun download(
+                url: String,
+                destination: Path,
+                expectedSizeBytes: Long,
+                onProgress: (Long) -> Unit,
+            ): String {
+                throw okio.IOException("Unable to access model storage.")
+            }
+        }
+        val setup = service(fileSystem, downloader, backgroundScope)
+
+        setup.prepare()
+
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
+        assertEquals(ModelSetupFailureReason.STORAGE, setup.state.value.failureReason)
+    }
+
+    @Test
     fun stagesFollowTheLoaderOrderAndProgressNeverDecreases() = runTest {
         val fileSystem = FakeFileSystem()
         val phases = mutableListOf<ModelSetupPhase>()

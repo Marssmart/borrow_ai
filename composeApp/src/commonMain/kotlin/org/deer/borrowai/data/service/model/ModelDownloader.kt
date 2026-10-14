@@ -14,6 +14,7 @@ import kotlinx.io.IOException
 import okio.FileSystem
 import okio.HashingSink
 import okio.HashingSource
+import okio.IOException as OkioIOException
 import okio.Path
 import okio.blackholeSink
 import okio.buffer
@@ -83,7 +84,7 @@ class KtorModelDownloader(
                             )
                             try {
                                 digestOf(destination)
-                            } catch (error: IOException) {
+                            } catch (error: OkioIOException) {
                                 throw ModelStorageException("Unable to verify the resumed model file.", error)
                             }
                         } else {
@@ -150,7 +151,7 @@ class KtorModelDownloader(
     private fun discardPartial(destination: Path) {
         try {
             fileSystem.delete(destination, mustExist = false)
-        } catch (error: IOException) {
+        } catch (error: OkioIOException) {
             throw ModelStorageException("Unable to discard the invalid partial model file.", error)
         }
     }
@@ -168,7 +169,7 @@ class KtorModelDownloader(
         val buffer = ByteArray(BUFFER_BYTES)
         val rawSink = try {
             if (append) fileSystem.appendingSink(destination) else fileSystem.sink(destination)
-        } catch (error: IOException) {
+        } catch (error: OkioIOException) {
             throw ModelStorageException("Unable to open the partial model file for writing.", error)
         }
         val hashing = HashingSink.sha256(rawSink)
@@ -189,7 +190,7 @@ class KtorModelDownloader(
                 }
                 try {
                     sink.write(buffer, 0, read)
-                } catch (error: IOException) {
+                } catch (error: OkioIOException) {
                     throw ModelStorageException("Unable to write the partial model file.", error)
                 }
                 total += read
@@ -198,7 +199,7 @@ class KtorModelDownloader(
         } finally {
             try {
                 sink.close()
-            } catch (error: IOException) {
+            } catch (error: OkioIOException) {
                 if (oversized) discardPartial(destination)
                 throw ModelStorageException("Unable to close the partial model file.", error)
             }

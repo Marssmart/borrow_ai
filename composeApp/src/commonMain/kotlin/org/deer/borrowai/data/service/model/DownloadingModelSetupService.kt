@@ -88,7 +88,7 @@ class DownloadingModelSetupService(
                 phase = ModelSetupPhase.FAILED,
                 failureReason = when {
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
-                    error is ModelStorageException || error is kotlinx.io.IOException ->
+                    error is ModelStorageException || error is okio.IOException ->
                         ModelSetupFailureReason.STORAGE
                     else -> ModelSetupFailureReason.MODEL
                 },
