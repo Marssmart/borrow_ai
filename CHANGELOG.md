@@ -2,6 +2,12 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.13]
+
+- Added `KotbaseMemoryService`, a `MemoryService` backed by Kotbase (Couchbase Lite) with create, read, update, delete, and list operations.
+- Added Kotbase and AndroidX test dependencies, plus device tests for the Kotbase CRUD operations.
+- Updated Android and iOS versioning to 1.0.13 (build 14).
+
 ## [1.0.12]
 
 - Added `recordingPath` to `Memory` and `MemoryDraft` so a memory can point at its raw recording on device storage.

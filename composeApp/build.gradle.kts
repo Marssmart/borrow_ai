@@ -26,6 +26,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
             implementation(libs.okio)
+            implementation(libs.kotbase.couchbase.lite)
         }
 
         commonTest.dependencies {
@@ -38,6 +39,13 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+        }
+
+        // Kotbase needs the native Couchbase Lite library, so its CRUD tests run on a device.
+        androidInstrumentedTest.dependencies {
+            implementation(kotlin("test-junit"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.test.runner)
         }
 
         iosMain.dependencies {
@@ -54,7 +62,8 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
+        versionCode = 14
         versionName = rootProject.version.toString()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }
