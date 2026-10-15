@@ -101,7 +101,7 @@ internal fun BorrowCaptureScreen(
     val stateHolder = remember(mediaSessionService, modelSetupService) {
         CaptureUiStateHolder(
             mediaSessionService = mediaSessionService,
-            initiallyModelReady = modelSetupService.state.isReady,
+            initiallyModelReady = modelSetupService.state.isReady(),
         )
     }
     val uiState by stateHolder.uiState.state.collectAsState()

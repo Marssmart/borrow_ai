@@ -13,7 +13,7 @@ class DemoModelSetupService : ModelSetupService {
 
     override suspend fun prepare() {
         setupMutex.withLock {
-            if (state.isReady) return
+            if (state.isReady()) return
 
             state.transition(ModelSetupPhase.CHOOSING_MODEL)
             delay(CHOOSING_DELAY_MILLIS)

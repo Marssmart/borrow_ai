@@ -92,7 +92,7 @@ class DownloadingModelSetupServiceTest {
 
         firstSetup.prepare()
 
-        assertEquals(ModelSetupPhase.READY, firstSetup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, firstSetup.state.value().phase)
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), first.requestedUrls)
         assertEquals(40_000L, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertEquals(90_000L, fileSystem.metadata(modelDirectory / ModelCatalog.LLM_FILE_NAME).size)
@@ -102,7 +102,7 @@ class DownloadingModelSetupServiceTest {
         val secondSetup = service(fileSystem, secondDownloader, backgroundScope)
         secondSetup.prepare()
 
-        assertEquals(ModelSetupPhase.READY, secondSetup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, secondSetup.state.value().phase)
         assertEquals(emptyList(), secondDownloader.requestedUrls)
     }
 
@@ -136,7 +136,7 @@ class DownloadingModelSetupServiceTest {
 
         runCurrent()
 
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(emptyList(), downloader.requestedUrls)
         assertEquals(0L, testScheduler.currentTime)
         assertTrue(phases.last() == ModelSetupPhase.READY)
@@ -195,7 +195,7 @@ class DownloadingModelSetupServiceTest {
         assertEquals(listOf(llm.downloadUrl), downloader.requestedUrls)
         assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
     }
 
     @Test
@@ -216,7 +216,7 @@ class DownloadingModelSetupServiceTest {
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
     }
 
     @Test
@@ -258,7 +258,7 @@ class DownloadingModelSetupServiceTest {
         setup.prepare()
 
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(1, voiceHashCount)
     }
 
@@ -275,8 +275,8 @@ class DownloadingModelSetupServiceTest {
 
         setup.prepare()
 
-        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.MODEL, setup.state.value.failureReason)
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value().phase)
+        assertEquals(ModelSetupFailureReason.MODEL, setup.state.value().failureReason)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
     }
@@ -288,8 +288,8 @@ class DownloadingModelSetupServiceTest {
 
         setup.prepare()
 
-        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value().phase)
+        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value().failureReason)
         assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
         assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
     }
@@ -311,8 +311,8 @@ class DownloadingModelSetupServiceTest {
 
         setup.prepare()
 
-        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value().phase)
+        assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value().failureReason)
         assertNull(fileSystem.metadataOrNull(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
     }
 
@@ -333,8 +333,8 @@ class DownloadingModelSetupServiceTest {
 
         setup.prepare()
 
-        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
-        assertEquals(ModelSetupFailureReason.STORAGE, setup.state.value.failureReason)
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value().phase)
+        assertEquals(ModelSetupFailureReason.STORAGE, setup.state.value().failureReason)
     }
 
     @Test
@@ -392,7 +392,7 @@ class DownloadingModelSetupServiceTest {
         assertTrue(voiceDownloads.all { it.bytesTotal == 40_000L })
         assertEquals(40_000L, voiceDownloads.maxOf { it.bytesDownloaded })
         assertEquals(0L, observed.first { it.phase == ModelSetupPhase.LOADING_VOICE }.bytesTotal)
-        assertEquals(0L, setup.state.value.bytesTotal)
+        assertEquals(0L, setup.state.value().bytesTotal)
     }
 
     @Test
@@ -405,13 +405,13 @@ class DownloadingModelSetupServiceTest {
         val prepare = launch { setup.prepare() }
         runCurrent()
 
-        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value().phase)
         assertEquals(emptyList(), downloader.requestedUrls)
 
         setup.downloadOverMobileData()
         prepare.join()
 
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
     }
 
@@ -424,12 +424,12 @@ class DownloadingModelSetupServiceTest {
 
         val prepare = launch { setup.prepare() }
         runCurrent()
-        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value().phase)
 
         network.unmetered.value = true
         prepare.join()
 
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
     }
 
@@ -447,7 +447,7 @@ class DownloadingModelSetupServiceTest {
 
         setup.prepare()
 
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(emptyList(), downloader.requestedUrls)
     }
 
@@ -464,12 +464,12 @@ class DownloadingModelSetupServiceTest {
         first.cancel()
         runCurrent()
 
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value().phase)
         gate.complete(Unit)
         second.join()
 
         assertTrue(first.isCancelled)
-        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, setup.state.value().phase)
         assertEquals(mapOf(voice.downloadUrl to 1, llm.downloadUrl to 1), downloader.downloadCounts)
     }
 

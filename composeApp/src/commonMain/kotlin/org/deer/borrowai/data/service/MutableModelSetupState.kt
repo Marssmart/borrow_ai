@@ -10,11 +10,9 @@ class MutableModelSetupState {
 
     val state: StateFlow<ModelSetupState> = mutableState.asStateFlow()
 
-    val value: ModelSetupState
-        get() = mutableState.value
+    fun value(): ModelSetupState = mutableState.value
 
-    val isReady: Boolean
-        get() = value.isReady
+    fun isReady(): Boolean = value().isReady
 
     fun transition(
         phase: ModelSetupPhase,
