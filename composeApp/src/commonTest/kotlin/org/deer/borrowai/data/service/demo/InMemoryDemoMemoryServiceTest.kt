@@ -22,7 +22,7 @@ class InMemoryDemoMemoryServiceTest {
         assertEquals("demo-memory-1", created.id)
         assertEquals(1_800_000_000_000L, created.createdAtEpochMillis)
         assertEquals(created, service.findById(created.id))
-        assertEquals(listOf(created), service.memories.value)
+        assertEquals(listOf(created), service.getState().value)
 
         val updated = service.update(
             created.id,
@@ -41,7 +41,7 @@ class InMemoryDemoMemoryServiceTest {
 
         assertTrue(service.delete(created.id))
         assertFalse(service.delete(created.id))
-        assertTrue(service.memories.value.isEmpty())
+        assertTrue(service.getState().value.isEmpty())
         assertNull(service.findById(created.id))
     }
 }

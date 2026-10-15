@@ -5,7 +5,7 @@ import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 
 interface MemoryService {
-    val memories: StateFlow<List<Memory>>
+    fun getState(): StateFlow<List<Memory>>
 
     suspend fun findById(id: String): Memory?
 

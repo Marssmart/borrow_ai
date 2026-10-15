@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.cocoapods)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
@@ -10,6 +11,19 @@ kotlin {
 
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
         target.binaries.framework {
+            baseName = "ComposeApp"
+            isStatic = true
+        }
+    }
+
+    cocoapods {
+        summary = "BorrowAI shared application"
+        homepage = "https://github.com/Marssmart/borrow_ai"
+        podfile = project.file("../iosApp/Podfile")
+        version = rootProject.version.toString()
+        ios.deploymentTarget = "15.0"
+        pod("CouchbaseLite", version = "3.2.4", linkOnly = true)
+        framework {
             baseName = "ComposeApp"
             isStatic = true
         }
@@ -26,6 +40,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
             implementation(libs.okio)
+            implementation(libs.kotbase.couchbase.lite)
         }
 
         commonTest.dependencies {
@@ -38,6 +53,13 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+        }
+
+        // Kotbase needs the native Couchbase Lite library, so its CRUD tests run on a device.
+        androidInstrumentedTest.dependencies {
+            implementation(kotlin("test-junit"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.test.runner)
         }
 
         iosMain.dependencies {
@@ -54,7 +76,8 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
+        versionCode = 14
         versionName = rootProject.version.toString()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }

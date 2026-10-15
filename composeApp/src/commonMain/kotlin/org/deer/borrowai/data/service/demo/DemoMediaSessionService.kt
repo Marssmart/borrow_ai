@@ -54,7 +54,7 @@ class DemoMediaSessionService(
 
     override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult {
         ensureOpen()
-        val memory = memoryService.memories.value.firstOrNull { it.id == target.memoryId }
+        val memory = memoryService.getState().value.firstOrNull { it.id == target.memoryId }
             ?: return PlaybackRequestResult.MemoryNotFound
 
         return mutableState.ifRecording { recording ->
@@ -75,7 +75,7 @@ class DemoMediaSessionService(
         ensureOpen()
         val target = mutableState.ifRecording { it.pendingPlayback }
             ?: return PlaybackRequestResult.NoPendingConfirmation
-        val memory = memoryService.memories.value.firstOrNull { it.id == target.memoryId }
+        val memory = memoryService.getState().value.firstOrNull { it.id == target.memoryId }
         if (memory == null) {
             mutableState.ifRecording { recording ->
                 mutableState.transitionRecording(
