@@ -1,32 +1,28 @@
 package org.deer.borrowai.data.service.demo
 
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
-import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.MutableModelSetupState
 
 class DemoModelSetupService : ModelSetupService {
     private val setupMutex = Mutex()
-    private val mutableState = MutableStateFlow(ModelSetupState())
-
-    override val state = mutableState.asStateFlow()
+    override val state = MutableModelSetupState()
 
     override suspend fun prepare() {
         setupMutex.withLock {
-            if (mutableState.value.phase == ModelSetupPhase.READY) return
+            if (state.isReady) return
 
-            mutableState.value = ModelSetupState(phase = ModelSetupPhase.CHOOSING_MODEL)
+            state.transition(ModelSetupPhase.CHOOSING_MODEL)
             delay(CHOOSING_DELAY_MILLIS)
 
             updateDownloadProgress(
                 phase = ModelSetupPhase.DOWNLOADING_VOICE,
                 bytesTotal = VOICE_MODEL_BYTES,
             )
-            mutableState.value = ModelSetupState(
+            state.transition(
                 phase = ModelSetupPhase.LOADING_VOICE,
                 progress = VOICE_DOWNLOAD_END,
             )
@@ -38,7 +34,7 @@ class DemoModelSetupService : ModelSetupService {
                 progressStart = VOICE_DOWNLOAD_END,
                 progressEnd = 1f,
             )
-            mutableState.value = ModelSetupState(
+            state.transition(
                 phase = ModelSetupPhase.READY,
                 progress = 1f,
             )
@@ -56,7 +52,7 @@ class DemoModelSetupService : ModelSetupService {
         repeat(DOWNLOAD_STEPS) { step ->
             delay(DOWNLOAD_STEP_DELAY_MILLIS)
             val bytesDownloaded = bytesTotal * (step + 1) / DOWNLOAD_STEPS
-            mutableState.value = ModelSetupState(
+            state.transition(
                 phase = phase,
                 progress = progressStart +
                     (progressEnd - progressStart) * (step + 1) / DOWNLOAD_STEPS,
