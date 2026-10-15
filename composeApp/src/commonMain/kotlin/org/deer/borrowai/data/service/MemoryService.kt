@@ -1,11 +1,11 @@
 package org.deer.borrowai.data.service
 
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 
 interface MemoryService {
-    val memories: MutableStateFlow<List<Memory>>
+    fun getState(): StateFlow<List<Memory>>
 
     suspend fun findById(id: String): Memory?
 

@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Added `KotbaseMemoryService`, a `MemoryService` backed by Kotbase (Couchbase Lite) with create, read, update, delete, and list operations.
 - Added Kotbase and AndroidX test dependencies, plus device tests for the Kotbase CRUD operations.
-- `MemoryService.memories` is now a `MutableStateFlow<List<Memory>>`. `KotbaseMemoryService` and `InMemoryDemoMemoryService` drive it directly, and the separate `mutableMemories` backing field is removed.
+- Added abstract `StatefulMemoryService`, which owns a protected `MutableStateFlow<List<Memory>>` and exposes it read-only through `getState(): StateFlow<List<Memory>>`. `KotbaseMemoryService` extends it. `MemoryService` no longer exposes a mutable `memories` field, and `InMemoryDemoMemoryService` implements `MemoryService` directly with a private flow and the same `getState()`. The separate `mutableMemories` backing field is removed.
 - Updated Android and iOS versioning to 1.0.13 (build 14).
 
 ## [1.0.12]

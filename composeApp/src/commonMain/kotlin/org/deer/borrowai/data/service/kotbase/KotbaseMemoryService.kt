@@ -1,7 +1,6 @@
 package org.deer.borrowai.data.service.kotbase
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -19,7 +18,7 @@ import kotlin.uuid.Uuid
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
-import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.StatefulMemoryService
 
 /**
  * [MemoryService] backed by a Couchbase Lite database through Kotbase.
@@ -31,10 +30,8 @@ class KotbaseMemoryService private constructor(
     private val database: Database,
     private val epochClock: EpochClock,
     private val idGenerator: () -> String,
-) : MemoryService {
+) : StatefulMemoryService() {
     private val mutex = Mutex()
-
-    override val memories = MutableStateFlow<List<Memory>>(emptyList())
 
     override suspend fun findById(id: String): Memory? = withContext(Dispatchers.Default) {
         database.getDocument(id)?.toMemory()
