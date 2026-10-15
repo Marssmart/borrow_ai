@@ -3,7 +3,6 @@ package org.deer.borrowai.data.service.model
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -13,6 +12,7 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.MutableModelSetupState
+import org.deer.borrowai.data.service.MutableRunConsent
 import org.deer.borrowai.data.service.demo.MutableJob
 
 /**
@@ -34,11 +34,11 @@ class DownloadingModelSetupService(
 
     override val state = MutableModelSetupState()
 
-    private val mobileDataConsent = MutableStateFlow(false)
+    private val mobileDataConsent = MutableRunConsent()
 
     override suspend fun downloadOverMobileData() {
         if (state.value.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
-            mobileDataConsent.value = true
+            mobileDataConsent.grant()
         }
     }
 
@@ -52,7 +52,7 @@ class DownloadingModelSetupService(
 
     private suspend fun runSetup() {
         try {
-            mobileDataConsent.value = false
+            mobileDataConsent.reset()
             store.prepareDirectory()
             val chosen = modelsForRam(totalRamBytes)
             val voicePresent = store.isPresent(chosen.voice)
@@ -153,7 +153,7 @@ class DownloadingModelSetupService(
 
     /** Holds a required transfer until the network is unmetered or the user consents to mobile data for this run. */
     private suspend fun awaitTransferAllowed(progress: Float) {
-        val allowed = combine(network.unmetered, mobileDataConsent) { unmetered, consent -> unmetered || consent }
+        val allowed = combine(network.unmetered, mobileDataConsent.granted) { unmetered, consent -> unmetered || consent }
         if (!allowed.first()) {
             state.transition(
                 phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK,
