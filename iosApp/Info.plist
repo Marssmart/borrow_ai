@@ -22,6 +22,8 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>BorrowAI records audio so you can save voice memories on this device.</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>
