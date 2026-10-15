@@ -75,4 +75,17 @@ class MutableMediaSessionStateTest {
         state.transitionRecording()
         assertNull(state.ifPlaying { "should not run" })
     }
+
+    @Test
+    fun updateRecordingChangesOnlyRecordingState() {
+        val state = MutableMediaSessionState()
+        state.transitionRecording(transcription = "hi")
+
+        state.updateRecording { it.copy(transcription = it.transcription + "!") }
+        assertEquals("hi!", assertIs<MediaSessionState.Recording>(state.value).transcription)
+
+        state.transitionPlaying(target = target, durationMillis = 4_000L)
+        state.updateRecording { it.copy(transcription = "ignored") }
+        assertIs<MediaSessionState.Playing>(state.value)
+    }
 }

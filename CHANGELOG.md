@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.14]
+
+- Added `MutableMediaSessionState.updateRecording`, which atomically transforms the recording state and leaves other states untouched. `DemoMediaSessionService.appendTranscription` now uses it instead of a manual `is Recording` branch inside `update`.
+- Updated Android and iOS versioning to 1.0.14 (build 15).
+
 ## [1.0.13]
 
 - Added `MutableRunConsent`, a per-run consent flag that starts revoked, is granted by the user, and is reset when a new setup run starts. `DownloadingModelSetupService` now uses it instead of a raw `MutableStateFlow<Boolean>` for mobile data consent.

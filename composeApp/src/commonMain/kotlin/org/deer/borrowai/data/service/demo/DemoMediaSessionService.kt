@@ -197,8 +197,10 @@ class DemoMediaSessionService(
     }
 
     internal fun appendTranscription(generation: Long, character: Char) {
-        mutableState.update { current ->
-            if (sessionGeneration.isCurrent(generation) && current is MediaSessionState.Recording) {
+        mutableState.updateRecording { current ->
+            if (!sessionGeneration.isCurrent(generation)) {
+                current
+            } else {
                 val nextTranscription = current.transcription + character
                 current.copy(
                     transcription = if (nextTranscription.length > MAX_TRANSCRIPTION_LENGTH) {
@@ -207,8 +209,6 @@ class DemoMediaSessionService(
                         nextTranscription
                     },
                 )
-            } else {
-                current
             }
         }
     }

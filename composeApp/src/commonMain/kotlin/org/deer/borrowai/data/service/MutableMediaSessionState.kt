@@ -62,6 +62,13 @@ class MutableMediaSessionState {
         return block(playing)
     }
 
+    /** Atomically applies [transform] when recording; other states are left untouched. */
+    internal fun updateRecording(transform: (MediaSessionState.Recording) -> MediaSessionState.Recording) {
+        mutableState.update { current ->
+            if (current is MediaSessionState.Recording) transform(current) else current
+        }
+    }
+
     internal fun update(transform: (MediaSessionState) -> MediaSessionState) {
         mutableState.update(transform)
     }

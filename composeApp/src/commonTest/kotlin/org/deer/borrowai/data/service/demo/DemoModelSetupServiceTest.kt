@@ -18,29 +18,29 @@ class DemoModelSetupServiceTest {
         val setup = backgroundScope.launch { service.prepare() }
 
         runCurrent()
-        assertEquals(ModelSetupPhase.CHOOSING_MODEL, service.state.value.phase)
+        assertEquals(ModelSetupPhase.CHOOSING_MODEL, service.state.value().phase)
 
         advanceTimeBy(400)
         runCurrent()
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, service.state.value.phase)
-        assertTrue(service.state.value.bytesDownloaded > 0L)
-        assertEquals(4_534_000_000L, service.state.value.bytesTotal)
-        assertTrue(service.state.value.bytesTotal > service.state.value.bytesDownloaded)
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, service.state.value().phase)
+        assertTrue(service.state.value().bytesDownloaded > 0L)
+        assertEquals(4_534_000_000L, service.state.value().bytesTotal)
+        assertTrue(service.state.value().bytesTotal > service.state.value().bytesDownloaded)
 
         advanceTimeBy(1_600)
         runCurrent()
-        assertEquals(ModelSetupPhase.LOADING_VOICE, service.state.value.phase)
+        assertEquals(ModelSetupPhase.LOADING_VOICE, service.state.value().phase)
 
         advanceTimeBy(600)
         runCurrent()
-        assertEquals(ModelSetupPhase.DOWNLOADING_LLM, service.state.value.phase)
-        assertTrue(service.state.value.bytesDownloaded > 0L)
-        assertEquals(5_761_000_000L, service.state.value.bytesTotal)
+        assertEquals(ModelSetupPhase.DOWNLOADING_LLM, service.state.value().phase)
+        assertTrue(service.state.value().bytesDownloaded > 0L)
+        assertEquals(5_761_000_000L, service.state.value().bytesTotal)
 
         advanceTimeBy(1_600)
         runCurrent()
-        assertEquals(ModelSetupPhase.READY, service.state.value.phase)
-        assertEquals(1f, service.state.value.progress)
+        assertEquals(ModelSetupPhase.READY, service.state.value().phase)
+        assertEquals(1f, service.state.value().progress)
         setup.cancel()
     }
 
@@ -56,7 +56,7 @@ class DemoModelSetupServiceTest {
 
         service.prepare()
 
-        assertEquals(ModelSetupPhase.READY, service.state.value.phase)
+        assertEquals(ModelSetupPhase.READY, service.state.value().phase)
     }
 
     @Test
@@ -64,9 +64,9 @@ class DemoModelSetupServiceTest {
         val service = DemoModelSetupService()
 
         service.prepare()
-        val readyState = service.state.value
+        val readyState = service.state.value()
         service.prepare()
 
-        assertEquals(readyState, service.state.value)
+        assertEquals(readyState, service.state.value())
     }
 }

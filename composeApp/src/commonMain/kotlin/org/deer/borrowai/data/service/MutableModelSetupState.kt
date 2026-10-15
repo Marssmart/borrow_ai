@@ -10,11 +10,12 @@ class MutableModelSetupState {
 
     val state: StateFlow<ModelSetupState> = mutableState.asStateFlow()
 
-    val value: ModelSetupState
-        get() = mutableState.value
+    fun value(): ModelSetupState = mutableState.value
 
-    val isReady: Boolean
-        get() = value.isReady
+    fun isReady(): Boolean = value().isReady
+
+    fun isWaitingForUnmeteredNetwork(): Boolean =
+        value().phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
 
     fun transition(
         phase: ModelSetupPhase,

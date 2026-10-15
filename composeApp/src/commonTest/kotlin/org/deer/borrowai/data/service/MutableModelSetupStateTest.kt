@@ -11,8 +11,8 @@ class MutableModelSetupStateTest {
     fun startsNotStarted() {
         val state = MutableModelSetupState()
 
-        assertEquals(ModelSetupPhase.NOT_STARTED, state.value.phase)
-        assertEquals(ModelSetupState(), state.value)
+        assertEquals(ModelSetupPhase.NOT_STARTED, state.value().phase)
+        assertEquals(ModelSetupState(), state.value())
     }
 
     @Test
@@ -29,9 +29,9 @@ class MutableModelSetupStateTest {
                 bytesDownloaded = 10L,
                 bytesTotal = 20L,
             ),
-            state.value,
+            state.value(),
         )
-        assertNull(state.value.failureReason)
+        assertNull(state.value().failureReason)
     }
 
     @Test
@@ -41,9 +41,9 @@ class MutableModelSetupStateTest {
 
         state.fail(ModelSetupFailureReason.STORAGE)
 
-        assertEquals(ModelSetupPhase.FAILED, state.value.phase)
-        assertEquals(0.25f, state.value.progress)
-        assertEquals(ModelSetupFailureReason.STORAGE, state.value.failureReason)
+        assertEquals(ModelSetupPhase.FAILED, state.value().phase)
+        assertEquals(0.25f, state.value().progress)
+        assertEquals(ModelSetupFailureReason.STORAGE, state.value().failureReason)
     }
 
     @Test
@@ -58,15 +58,15 @@ class MutableModelSetupStateTest {
     @Test
     fun isReadyOnlyWhenPhaseIsReady() {
         val state = MutableModelSetupState()
-        assertFalse(state.isReady)
+        assertFalse(state.isReady())
 
         state.transition(ModelSetupPhase.DOWNLOADING_LLM, progress = 0.5f)
-        assertFalse(state.isReady)
+        assertFalse(state.isReady())
 
         state.transition(ModelSetupPhase.READY, progress = 1f)
-        assertTrue(state.isReady)
+        assertTrue(state.isReady())
 
         state.fail(ModelSetupFailureReason.NETWORK)
-        assertFalse(state.isReady)
+        assertFalse(state.isReady())
     }
 }

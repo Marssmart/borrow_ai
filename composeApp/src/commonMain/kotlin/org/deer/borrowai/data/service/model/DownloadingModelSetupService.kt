@@ -37,14 +37,14 @@ class DownloadingModelSetupService(
     private val mobileDataConsent = MutableRunConsent()
 
     override suspend fun downloadOverMobileData() {
-        if (state.value.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+        if (state.isWaitingForUnmeteredNetwork()) {
             mobileDataConsent.grant()
         }
     }
 
     override suspend fun prepare() {
         setupMutex.withLock {
-            if (state.isReady) return
+            if (state.isReady()) return
             if (!setupJob.isActive()) setupJob.launch { runSetup() }
         }
         setupJob.join()
