@@ -32,6 +32,13 @@ class InMemoryDemoMemoryServiceTest {
         assertEquals(created.createdAtEpochMillis, updated?.createdAtEpochMillis)
         assertNull(service.update("missing", draft))
 
+        val withRecording = service.create(
+            MemoryDraft("", "", "", recordingPath = "recordings/clip.m4a"),
+        )
+        assertEquals("recordings/clip.m4a", withRecording.recordingPath)
+        assertEquals("", withRecording.title)
+        service.delete(withRecording.id)
+
         assertTrue(service.delete(created.id))
         assertFalse(service.delete(created.id))
         assertTrue(service.memories.value.isEmpty())

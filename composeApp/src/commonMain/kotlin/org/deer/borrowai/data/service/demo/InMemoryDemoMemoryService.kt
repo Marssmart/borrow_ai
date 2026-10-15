@@ -31,6 +31,7 @@ class InMemoryDemoMemoryService(
             title = draft.title,
             summary = draft.summary,
             transcription = draft.transcription,
+            recordingPath = draft.recordingPath,
         )
         records[memory.id] = memory
         publishMemories()
@@ -43,6 +44,7 @@ class InMemoryDemoMemoryService(
             title = draft.title,
             summary = draft.summary,
             transcription = draft.transcription,
+            recordingPath = draft.recordingPath,
         )
         records[id] = updated
         publishMemories()
