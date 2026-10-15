@@ -120,6 +120,8 @@ class KotbaseMemoryServiceTest {
         val first = openService()
         val created = first.create(MemoryDraft("Persisted", "s", "t", "recordings/c.m4a"))
 
+        requireNotNull(database).close()
+        database = Database(databaseName)
         val reopened = openService()
 
         assertEquals(listOf(created), reopened.getState().value)
