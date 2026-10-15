@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.cocoapods)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
@@ -10,6 +11,18 @@ kotlin {
 
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
         target.binaries.framework {
+            baseName = "ComposeApp"
+            isStatic = true
+        }
+    }
+
+    cocoapods {
+        summary = "BorrowAI shared application"
+        homepage = "https://github.com/Marssmart/borrow_ai"
+        podfile = project.file("../iosApp/Podfile")
+        ios.deploymentTarget = "15.0"
+        pod("CouchbaseLite", version = "3.2.4", linkOnly = true)
+        framework {
             baseName = "ComposeApp"
             isStatic = true
         }
