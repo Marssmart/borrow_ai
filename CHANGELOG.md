@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.12]
+
+- Added `MutableCloseOnce`, a small wrapper that runs close logic exactly once. `AppServices` and `DemoMediaSessionService` now use it instead of hand-rolled `MutableStateFlow<Boolean>` compare-and-set flags.
+- Updated Android and iOS versioning to 1.0.12 (build 13).
+
 ## [1.0.11]
 
 - `CaptureUiStateHolder` now updates its UI state with `MutableStateFlow.update` in `stopRecording` and `bindMediaSession` instead of reading and reassigning `.value`, so concurrent updates are no longer lost.
