@@ -2,6 +2,14 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.12]
+
+- Added `recordingPath` to `Memory` and `MemoryDraft` so a memory can point at its raw recording on device storage.
+- `recordingPath` must be a relative path under the app's recordings root. Absolute paths and paths that escape the root are rejected, so stored memories survive app updates and container moves on both Android and iOS.
+- A memory no longer needs a title. Blank titles are accepted.
+- `InMemoryDemoMemoryService` stores and returns `recordingPath`.
+- Updated Android and iOS versioning to 1.0.12 (build 13).
+
 ## [1.0.11]
 
 - `CaptureUiStateHolder` now updates its UI state with `MutableStateFlow.update` in `stopRecording` and `bindMediaSession` instead of reading and reassigning `.value`, so concurrent updates are no longer lost.
