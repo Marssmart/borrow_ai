@@ -14,6 +14,9 @@ class MutableModelSetupState {
 
     fun isReady(): Boolean = value().isReady
 
+    fun isWaitingForUnmeteredNetwork(): Boolean =
+        value().phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK
+
     fun transition(
         phase: ModelSetupPhase,
         progress: Float = 0f,

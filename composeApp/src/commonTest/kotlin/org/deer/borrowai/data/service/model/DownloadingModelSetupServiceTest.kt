@@ -405,7 +405,7 @@ class DownloadingModelSetupServiceTest {
         val prepare = launch { setup.prepare() }
         runCurrent()
 
-        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value().phase)
+        assertTrue(setup.state.isWaitingForUnmeteredNetwork())
         assertEquals(emptyList(), downloader.requestedUrls)
 
         setup.downloadOverMobileData()
@@ -424,7 +424,7 @@ class DownloadingModelSetupServiceTest {
 
         val prepare = launch { setup.prepare() }
         runCurrent()
-        assertEquals(ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK, setup.state.value().phase)
+        assertTrue(setup.state.isWaitingForUnmeteredNetwork())
 
         network.unmetered.value = true
         prepare.join()

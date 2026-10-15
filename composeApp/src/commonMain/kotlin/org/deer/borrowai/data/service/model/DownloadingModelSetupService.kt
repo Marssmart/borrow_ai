@@ -37,7 +37,7 @@ class DownloadingModelSetupService(
     private val mobileDataConsent = MutableRunConsent()
 
     override suspend fun downloadOverMobileData() {
-        if (state.value().phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+        if (state.isWaitingForUnmeteredNetwork()) {
             mobileDataConsent.grant()
         }
     }
