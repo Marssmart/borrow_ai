@@ -2,6 +2,12 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.11]
+
+- `CaptureUiStateHolder` now updates its UI state with `MutableStateFlow.update` in `stopRecording` and `bindMediaSession` instead of reading and reassigning `.value`, so concurrent updates are no longer lost.
+- Added `MutableCaptureUiState`, a wrapper around the capture UI state that owns `UiState`, with `isRecording`, `isHoldRecording`, and `update` helpers. `CaptureUiStateHolder.uiState` now uses it in place of the private `mutableUiState`.
+- Updated Android and iOS versioning to 1.0.11 (build 12).
+
 ## [1.0.10]
 
 - Added `MutableModelSetupState`, a wrapper around the model setup state with `transition` and `fail` helpers. `DownloadingModelSetupService` and `DemoModelSetupService` now use it instead of copying state by hand.

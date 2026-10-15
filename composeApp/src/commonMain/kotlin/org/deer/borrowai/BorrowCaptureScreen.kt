@@ -104,7 +104,7 @@ internal fun BorrowCaptureScreen(
             initiallyModelReady = modelSetupService.state.isReady,
         )
     }
-    val uiState by stateHolder.uiState.collectAsState()
+    val uiState by stateHolder.uiState.state.collectAsState()
     val setupState by modelSetupService.state.state.collectAsState()
     val modelReady = setupState.isReady
     val modelStatus = modelSetupStatus(setupState)
