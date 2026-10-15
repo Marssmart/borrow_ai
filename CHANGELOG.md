@@ -2,6 +2,11 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.13]
+
+- Added `MutableRunConsent`, a per-run consent flag that starts revoked, is granted by the user, and is reset when a new setup run starts. `DownloadingModelSetupService` now uses it instead of a raw `MutableStateFlow<Boolean>` for mobile data consent.
+- Updated Android and iOS versioning to 1.0.13 (build 14).
+
 ## [1.0.12]
 
 - Added `MutableCloseOnce`, a small wrapper that runs close logic exactly once. `AppServices` and `DemoMediaSessionService` now use it instead of hand-rolled `MutableStateFlow<Boolean>` compare-and-set flags.
