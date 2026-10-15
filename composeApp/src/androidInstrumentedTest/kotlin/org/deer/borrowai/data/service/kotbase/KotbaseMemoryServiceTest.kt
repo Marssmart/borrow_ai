@@ -46,7 +46,7 @@ class KotbaseMemoryServiceTest {
         assertEquals("memory-1", created.id)
         assertEquals(1_800_000_000_000L, created.createdAtEpochMillis)
         assertEquals(created, service.findById(created.id))
-        assertEquals(listOf(created), service.memories.value)
+        assertEquals(listOf(created), service.getState().value)
     }
 
     @Test
@@ -73,7 +73,7 @@ class KotbaseMemoryServiceTest {
         assertEquals("recordings/b.m4a", updated?.recordingPath)
         assertEquals(created.createdAtEpochMillis, updated?.createdAtEpochMillis)
         assertEquals(updated, service.findById(created.id))
-        assertEquals(listOf(updated), service.memories.value)
+        assertEquals(listOf(updated), service.getState().value)
     }
 
     @Test
@@ -81,7 +81,7 @@ class KotbaseMemoryServiceTest {
         val service = openService()
 
         assertNull(service.update("missing", MemoryDraft("t", "s", "x")))
-        assertTrue(service.memories.value.isEmpty())
+        assertTrue(service.getState().value.isEmpty())
     }
 
     @Test
@@ -91,7 +91,7 @@ class KotbaseMemoryServiceTest {
 
         assertTrue(service.delete(created.id))
         assertNull(service.findById(created.id))
-        assertTrue(service.memories.value.isEmpty())
+        assertTrue(service.getState().value.isEmpty())
         assertFalse(service.delete(created.id))
     }
 
@@ -111,7 +111,7 @@ class KotbaseMemoryServiceTest {
 
         assertEquals(
             listOf("newest", "middle", "oldest"),
-            service.memories.value.map { it.title },
+            service.getState().value.map { it.title },
         )
     }
 
@@ -120,8 +120,10 @@ class KotbaseMemoryServiceTest {
         val first = openService()
         val created = first.create(MemoryDraft("Persisted", "s", "t", "recordings/c.m4a"))
 
+        requireNotNull(database).close()
+        database = Database(databaseName)
         val reopened = openService()
 
-        assertEquals(listOf(created), reopened.memories.value)
+        assertEquals(listOf(created), reopened.getState().value)
     }
 }

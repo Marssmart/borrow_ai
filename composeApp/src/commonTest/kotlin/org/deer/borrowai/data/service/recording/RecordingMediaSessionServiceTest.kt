@@ -152,7 +152,7 @@ class RecordingMediaSessionServiceTest {
         assertEquals(0L, result.elapsedMillis)
         assertEquals(1, recorder.stopCount)
         assertIs<MediaSessionState.Idle>(service.state.value)
-        val saved = memories.memories.value.single()
+        val saved = memories.getState().value.single()
         assertEquals("recordings/rec-1.m4a", saved.recordingPath)
         assertEquals("", saved.title)
     }
@@ -173,7 +173,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertIs<MediaSessionState.Idle>(service.state.value)
-        assertTrue(memories.memories.value.isEmpty())
+        assertTrue(memories.getState().value.isEmpty())
         assertFalse(fs.exists(recordingFile))
     }
 
@@ -196,7 +196,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertIs<MediaSessionState.Idle>(service.state.value)
-        assertTrue(memories.memories.value.isEmpty())
+        assertTrue(memories.getState().value.isEmpty())
         assertFalse(fs.exists(recordingFile))
     }
 
@@ -210,7 +210,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertEquals(0, recorder.stopCount)
-        assertTrue(memories.memories.value.isEmpty())
+        assertTrue(memories.getState().value.isEmpty())
     }
 
     @Test
@@ -358,7 +358,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertEquals(1, recorder.stopCount)
-        assertEquals(2, memories.memories.value.size)
+        assertEquals(2, memories.getState().value.size)
         assertEquals(listOf(clipFile.toString()), player.playedPaths)
         assertIs<MediaSessionState.Playing>(service.state.value)
     }

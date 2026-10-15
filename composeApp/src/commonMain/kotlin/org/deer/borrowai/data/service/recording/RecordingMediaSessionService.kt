@@ -129,7 +129,7 @@ class RecordingMediaSessionService(
     }
 
     private fun findMemory(target: PlaybackTarget) =
-        memoryService.memories.value.firstOrNull { it.id == target.memoryId }
+        memoryService.getState().value.firstOrNull { it.id == target.memoryId }
 
     /** Returns the absolute file path for a raw recording target, or null when no playable file exists. */
     private fun playableRecordingPath(target: PlaybackTarget, memory: Memory): Path? {
