@@ -5,11 +5,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
+import org.deer.borrowai.data.service.MutableCloseOnce
 import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
@@ -21,15 +21,15 @@ class AppServices private constructor(
     val mediaSession: MediaSessionService,
     private val graphJob: CompletableJob,
 ) {
-    private val closed = MutableStateFlow(false)
+    private val closeOnce = MutableCloseOnce()
 
     fun close() {
-        if (!closed.compareAndSet(expect = false, update = true)) return
-
-        try {
-            mediaSession.close()
-        } finally {
-            graphJob.cancel()
+        closeOnce.closeOnce {
+            try {
+                mediaSession.close()
+            } finally {
+                graphJob.cancel()
+            }
         }
     }
 

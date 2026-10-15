@@ -8,6 +8,7 @@ import kotlinx.coroutines.isActive
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.MutableCloseOnce
 import org.deer.borrowai.data.service.MutableMediaSessionState
 import org.deer.borrowai.data.service.MutableSessionGeneration
 import org.deer.borrowai.data.service.MemoryService
@@ -22,7 +23,7 @@ class DemoMediaSessionService(
     private val mutableState = MutableMediaSessionState()
     private val mutableIdleTranscription = MutableStateFlow(INITIAL_TRANSCRIPTION)
     private val sessionGeneration = MutableSessionGeneration()
-    private val closed = MutableStateFlow(false)
+    private val closeOnce = MutableCloseOnce()
     private val tickerJob = MutableJob(scope)
     private val transcriptionJob = MutableJob(scope)
 
@@ -116,14 +117,15 @@ class DemoMediaSessionService(
     }
 
     override fun close() {
-        if (!closed.compareAndSet(false, true)) return
-        sessionGeneration.advance()
-        tickerJob.cancel()
-        transcriptionJob.cancel()
-        mutableState.ifRecording { recording ->
-            mutableIdleTranscription.value = recording.transcription
+        closeOnce.closeOnce {
+            sessionGeneration.advance()
+            tickerJob.cancel()
+            transcriptionJob.cancel()
+            mutableState.ifRecording { recording ->
+                mutableIdleTranscription.value = recording.transcription
+            }
+            mutableState.transitionIdle()
         }
-        mutableState.transitionIdle()
     }
 
     private fun startPlayback(target: PlaybackTarget, memory: Memory) {
@@ -212,7 +214,7 @@ class DemoMediaSessionService(
     }
 
     private fun ensureOpen() {
-        check(!closed.value) { "Media session service has been closed." }
+        check(!closeOnce.isClosed()) { "Media session service has been closed." }
     }
 
     private companion object {
