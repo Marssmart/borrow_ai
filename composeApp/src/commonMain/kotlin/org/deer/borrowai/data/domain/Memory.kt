@@ -15,7 +15,11 @@ data class Memory(
     val summary: String,
     val transcription: String,
     val recordingPath: String? = null,
-)
+) {
+    init {
+        recordingPath?.let(::requireRelativeRecordingPath)
+    }
+}
 
 data class MemoryDraft(
     val title: String,
