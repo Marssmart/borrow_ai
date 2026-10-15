@@ -21,4 +21,5 @@
     <string name="memory_playback_error_title">Playback unavailable</string>
     <string name="memory_playback_memory_missing_message">This saved memory is no longer available.</string>
     <string name="memory_playback_request_failed_message">Playback could not be started. Try again.</string>
+    <string name="memory_playback_unavailable_message">Playback of saved recordings is not available yet.</string>
 </resources>

@@ -14,30 +14,41 @@ import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 
 internal class AppServicesViewModel(
-    private val startupModeFlag: String?,
-    private val epochClock: EpochClock,
-    private val recordingsRoot: Path,
-    private val recorder: AudioRecorder,
-    private val microphonePermission: MicrophonePermission,
+    startupModeFlag: String?,
+    epochClock: EpochClock,
+    recordingsRoot: Path,
+    recorder: AudioRecorder,
+    microphonePermission: MicrophonePermission,
+    createServices: suspend () -> AppServices = {
+        AppServices.create(
+            startupModeFlag = startupModeFlag,
+            epochClock = epochClock,
+            recordingsRoot = recordingsRoot,
+            recorder = recorder,
+            microphonePermission = microphonePermission,
+        )
+    },
 ) : ViewModel() {
     private val servicesState = MutableStateFlow<AppServices?>(null)
+    private var cleared = false
 
     /** Null until the graph is built; REAL mode opens the database asynchronously. */
     val services: StateFlow<AppServices?> = servicesState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            servicesState.value = AppServices.create(
-                startupModeFlag = startupModeFlag,
-                epochClock = epochClock,
-                recordingsRoot = recordingsRoot,
-                recorder = recorder,
-                microphonePermission = microphonePermission,
-            )
+            val created = createServices()
+            // Creation can finish after onCleared ran; close it here instead of leaking it.
+            if (cleared) {
+                created.close()
+            } else {
+                servicesState.value = created
+            }
         }
     }
 
     override fun onCleared() {
+        cleared = true
         servicesState.value?.close()
         super.onCleared()
     }

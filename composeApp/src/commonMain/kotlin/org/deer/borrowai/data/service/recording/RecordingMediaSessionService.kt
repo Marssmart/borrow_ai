@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.recording
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,10 +48,12 @@ class RecordingMediaSessionService(
     private val closed = MutableStateFlow(false)
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
+    private val pendingSaves = mutableListOf<Job>()
     private var activeRecording: ActiveRecording? = null
 
     override val state: StateFlow<MediaSessionState> = mutableState.state
     override val idleTranscription: StateFlow<String> = mutableIdleTranscription.asStateFlow()
+    override val playbackAvailable: Boolean = false
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()
@@ -67,14 +70,20 @@ class RecordingMediaSessionService(
         return finishRecording()
     }
 
-    override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult = playbackNotImplemented()
+    override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult = PlaybackRequestResult.Unavailable
 
-    override fun confirmPendingPlayback(): PlaybackRequestResult = playbackNotImplemented()
+    override fun confirmPendingPlayback(): PlaybackRequestResult = PlaybackRequestResult.Unavailable
 
     override fun cancelPendingPlayback(): Boolean = false
 
     override fun stopPlayback() {
         ensureOpen()
+    }
+
+    override suspend fun awaitPendingWork() {
+        while (pendingSaves.isNotEmpty()) {
+            pendingSaves.removeFirst().join()
+        }
     }
 
     override fun close() {
@@ -85,7 +94,7 @@ class RecordingMediaSessionService(
     }
 
     private fun beginRecording(holdToRecord: Boolean) {
-        if (mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
+        if (closed.value || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
         val absolutePath = recordingsRoot / relativePath
@@ -121,7 +130,7 @@ class RecordingMediaSessionService(
             fileSystem.delete(recording.absolutePath, mustExist = false)
             return null
         }
-        scope.launch {
+        pendingSaves += scope.launch {
             memoryService.create(
                 MemoryDraft(
                     title = "",
@@ -145,10 +154,6 @@ class RecordingMediaSessionService(
                 }
             }
         }
-    }
-
-    private fun playbackNotImplemented(): Nothing {
-        throw UnsupportedOperationException("Playback of recorded media is not implemented yet.")
     }
 
     private fun ensureOpen() {

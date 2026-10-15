@@ -29,7 +29,9 @@ fun MainViewController(startupModeFlag: String?): UIViewController = ComposeUIVi
         )
     }
     DisposableEffect(services) {
-        onDispose { services?.close() }
+        // Capture the value for this effect; the delegated property may already point at a newer graph.
+        val current = services
+        onDispose { current?.close() }
     }
     services?.let { App(it) }
 }

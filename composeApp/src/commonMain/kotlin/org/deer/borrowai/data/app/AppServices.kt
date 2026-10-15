@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotbase.Database
 import kotlinx.coroutines.flow.MutableStateFlow
 import okio.Path
@@ -12,7 +13,6 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
-import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
@@ -27,19 +27,36 @@ class AppServices private constructor(
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
     private val graphJob: CompletableJob,
+    private val closeScope: CoroutineScope,
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
 
+    /**
+     * Closes the media session, then cancels the graph and runs [onClose] once any memory save started
+     * before close has finished. Saves are joined first so they are not cut off by the cancellation.
+     */
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
 
         try {
             mediaSession.close()
-        } finally {
-            graphJob.cancel()
-            onClose()
+        } catch (failure: Throwable) {
+            finishClose()
+            throw failure
         }
+        closeScope.launch {
+            try {
+                mediaSession.awaitPendingWork()
+            } finally {
+                finishClose()
+            }
+        }
+    }
+
+    private fun finishClose() {
+        graphJob.cancel()
+        onClose()
     }
 
     companion object {
@@ -55,7 +72,13 @@ class AppServices private constructor(
             microphonePermission: MicrophonePermission,
             databaseName: String = DATABASE_NAME,
         ): AppServices = when (AppMode.fromStartupFlag(startupModeFlag)) {
-            AppMode.DEMO -> createFromStartupFlag(startupModeFlag, epochClock)
+            AppMode.DEMO -> createFromStartupFlag(
+                startupModeFlag = startupModeFlag,
+                epochClock = epochClock,
+                recordingsRoot = recordingsRoot,
+                recorder = recorder,
+                microphonePermission = microphonePermission,
+            )
             AppMode.REAL -> createReal(
                 database = Database(databaseName),
                 recordingsRoot = recordingsRoot,
@@ -78,10 +101,12 @@ class AppServices private constructor(
             microphonePermission: MicrophonePermission,
             epochClock: EpochClock,
             dispatcher: CoroutineDispatcher = Dispatchers.Default,
+            mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
                 val graphScope = CoroutineScope(graphJob + dispatcher)
+                val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
                 val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock)
                 return AppServices(
                     mode = AppMode.REAL,
@@ -92,10 +117,11 @@ class AppServices private constructor(
                         recorder = recorder,
                         microphonePermission = microphonePermission,
                         recordingsRoot = recordingsRoot,
-                        scope = graphScope,
+                        scope = mediaScope,
                         epochClock = epochClock,
                     ),
                     graphJob = graphJob,
+                    closeScope = graphScope,
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {
@@ -105,18 +131,31 @@ class AppServices private constructor(
             }
         }
 
+        /**
+         * Demo graph: in-memory memories and a model stub, but the media session is the real
+         * [RecordingMediaSessionService] writing to [recordingsRoot] through [recorder].
+         */
         fun createFromStartupFlag(
             startupModeFlag: String?,
             epochClock: EpochClock,
+            recordingsRoot: Path,
+            recorder: AudioRecorder,
+            microphonePermission: MicrophonePermission,
         ): AppServices = createFromStartupFlag(
             startupModeFlag = startupModeFlag,
             epochClock = epochClock,
+            recordingsRoot = recordingsRoot,
+            recorder = recorder,
+            microphonePermission = microphonePermission,
             dispatcher = Dispatchers.Default,
         )
 
         internal fun createFromStartupFlag(
             startupModeFlag: String?,
             epochClock: EpochClock,
+            recordingsRoot: Path,
+            recorder: AudioRecorder,
+            microphonePermission: MicrophonePermission,
             dispatcher: CoroutineDispatcher,
         ): AppServices {
             val mode = AppMode.fromStartupFlag(startupModeFlag)
@@ -129,11 +168,16 @@ class AppServices private constructor(
                         mode = mode,
                         modelSetup = DemoModelSetupService(),
                         memories = memories,
-                        mediaSession = DemoMediaSessionService(
+                        mediaSession = RecordingMediaSessionService(
                             memoryService = memories,
+                            recorder = recorder,
+                            microphonePermission = microphonePermission,
+                            recordingsRoot = recordingsRoot,
                             scope = graphScope,
+                            epochClock = epochClock,
                         ),
                         graphJob = graphJob,
+                        closeScope = graphScope,
                     )
                 }
 
