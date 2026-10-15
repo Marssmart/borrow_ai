@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 
@@ -74,33 +75,37 @@ internal class CaptureUiStateHolder(
 
     private fun stopRecording() {
         val result = mediaSessionService.stopRecording() ?: return
-        mutableUiState.value = mutableUiState.value.copy(
-            isRecording = false,
-            isHoldRecording = false,
-            elapsedSeconds = (result.elapsedMillis / MILLIS_PER_SECOND).toInt(),
-            transcript = mediaSessionService.idleTranscription.value,
-        )
+        val transcript = mediaSessionService.idleTranscription.value
+        mutableUiState.update {
+            it.copy(
+                isRecording = false,
+                isHoldRecording = false,
+                elapsedSeconds = (result.elapsedMillis / MILLIS_PER_SECOND).toInt(),
+                transcript = transcript,
+            )
+        }
     }
 
     private fun bindMediaSession(
         mediaSessionState: MediaSessionState,
         idleTranscript: String,
     ) {
-        val currentUiState = mutableUiState.value
-        mutableUiState.value = when (mediaSessionState) {
-            MediaSessionState.Idle -> currentUiState.copy(
-                isRecording = false,
-                isHoldRecording = false,
-                transcript = idleTranscript,
-            )
+        mutableUiState.update { currentUiState ->
+            when (mediaSessionState) {
+                MediaSessionState.Idle -> currentUiState.copy(
+                    isRecording = false,
+                    isHoldRecording = false,
+                    transcript = idleTranscript,
+                )
 
-            is MediaSessionState.Recording -> mediaSessionState.toUiState(idleTranscript)
+                is MediaSessionState.Recording -> mediaSessionState.toUiState(idleTranscript)
 
-            is MediaSessionState.Playing -> currentUiState.copy(
-                isRecording = false,
-                isHoldRecording = false,
-                transcript = idleTranscript,
-            )
+                is MediaSessionState.Playing -> currentUiState.copy(
+                    isRecording = false,
+                    isHoldRecording = false,
+                    transcript = idleTranscript,
+                )
+            }
         }
     }
 
