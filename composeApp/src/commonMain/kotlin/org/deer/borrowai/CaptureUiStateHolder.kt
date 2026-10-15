@@ -33,7 +33,7 @@ internal class CaptureUiStateHolder(
     }
 
     fun toggleRecording() {
-        if (uiState.isRecording) {
+        if (uiState.isRecording()) {
             stopRecording()
         } else {
             startRecording(holdToRecord = false)
@@ -41,13 +41,13 @@ internal class CaptureUiStateHolder(
     }
 
     fun startHoldRecording() {
-        if (!uiState.isRecording) {
+        if (!uiState.isRecording()) {
             startRecording(holdToRecord = true)
         }
     }
 
     fun stopHoldRecording() {
-        if (uiState.isRecording && uiState.isHoldRecording) {
+        if (uiState.isRecording() && uiState.isHoldRecording()) {
             stopRecording()
         }
     }

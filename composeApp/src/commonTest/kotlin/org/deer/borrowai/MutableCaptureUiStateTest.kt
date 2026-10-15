@@ -11,20 +11,20 @@ class MutableCaptureUiStateTest {
         val initial = MutableCaptureUiState.UiState(transcript = "hello")
         val uiState = MutableCaptureUiState(initial)
 
-        assertEquals(initial, uiState.value)
+        assertEquals(initial, uiState.value())
         assertEquals(initial, uiState.state.value)
     }
 
     @Test
     fun recordingFlagsReflectCurrentState() {
         val uiState = MutableCaptureUiState(MutableCaptureUiState.UiState())
-        assertFalse(uiState.isRecording)
-        assertFalse(uiState.isHoldRecording)
+        assertFalse(uiState.isRecording())
+        assertFalse(uiState.isHoldRecording())
 
         uiState.update { it.copy(isRecording = true, isHoldRecording = true) }
 
-        assertTrue(uiState.isRecording)
-        assertTrue(uiState.isHoldRecording)
+        assertTrue(uiState.isRecording())
+        assertTrue(uiState.isHoldRecording())
     }
 
     @Test
@@ -33,7 +33,7 @@ class MutableCaptureUiStateTest {
 
         uiState.update { it.copy(elapsedSeconds = 7) }
 
-        assertEquals(7, uiState.value.elapsedSeconds)
+        assertEquals(7, uiState.value().elapsedSeconds)
         assertEquals(7, uiState.state.value.elapsedSeconds)
     }
 }

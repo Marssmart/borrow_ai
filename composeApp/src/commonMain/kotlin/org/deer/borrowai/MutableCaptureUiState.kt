@@ -17,14 +17,11 @@ internal class MutableCaptureUiState(initial: UiState) {
 
     val state: StateFlow<UiState> = mutableState.asStateFlow()
 
-    val value: UiState
-        get() = mutableState.value
+    fun value(): UiState = mutableState.value
 
-    val isRecording: Boolean
-        get() = value.isRecording
+    fun isRecording(): Boolean = value().isRecording
 
-    val isHoldRecording: Boolean
-        get() = value.isHoldRecording
+    fun isHoldRecording(): Boolean = value().isHoldRecording
 
     fun update(transform: (UiState) -> UiState) {
         mutableState.update(transform)
