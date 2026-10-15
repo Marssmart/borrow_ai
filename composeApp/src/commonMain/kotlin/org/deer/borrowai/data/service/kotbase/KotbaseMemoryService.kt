@@ -2,8 +2,6 @@ package org.deer.borrowai.data.service.kotbase
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -35,9 +33,8 @@ class KotbaseMemoryService private constructor(
     private val idGenerator: () -> String,
 ) : MemoryService {
     private val mutex = Mutex()
-    private val mutableMemories = MutableStateFlow<List<Memory>>(emptyList())
 
-    override val memories: StateFlow<List<Memory>> = mutableMemories.asStateFlow()
+    override val memories = MutableStateFlow<List<Memory>>(emptyList())
 
     override suspend fun findById(id: String): Memory? = withContext(Dispatchers.Default) {
         database.getDocument(id)?.toMemory()
@@ -86,7 +83,7 @@ class KotbaseMemoryService private constructor(
     }
 
     private suspend fun publishMemories() {
-        mutableMemories.value = loadAll()
+        memories.value = loadAll()
     }
 
     private suspend fun loadAll(): List<Memory> = withContext(Dispatchers.Default) {
