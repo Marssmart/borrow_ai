@@ -1,9 +1,9 @@
 package org.deer.borrowai.data.service.demo
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -16,9 +16,9 @@ class InMemoryDemoMemoryService(
     private val mutex = Mutex()
     private val records = initialMemories.associateByTo(mutableMapOf(), Memory::id)
     private var nextGeneratedId = 1L
-    private val mutableMemories = MutableStateFlow(records.values.sortedByDescending(Memory::createdAtEpochMillis))
+    private val memories = MutableStateFlow(records.values.sortedByDescending(Memory::createdAtEpochMillis))
 
-    override val memories = mutableMemories.asStateFlow()
+    override fun getState(): StateFlow<List<Memory>> = memories
 
     override suspend fun findById(id: String): Memory? = mutex.withLock {
         records[id]
@@ -65,7 +65,7 @@ class InMemoryDemoMemoryService(
     }
 
     private fun publishMemories() {
-        mutableMemories.value = records.values.sortedByDescending(Memory::createdAtEpochMillis)
+        memories.value = records.values.sortedByDescending(Memory::createdAtEpochMillis)
     }
 
     private object DemoMemoryContent {

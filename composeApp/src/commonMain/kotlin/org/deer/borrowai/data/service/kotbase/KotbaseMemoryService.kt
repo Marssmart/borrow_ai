@@ -1,9 +1,7 @@
 package org.deer.borrowai.data.service.kotbase
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -21,7 +19,7 @@ import kotlin.uuid.Uuid
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
-import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.StatefulMemoryService
 
 /**
  * [MemoryService] backed by a Couchbase Lite database through Kotbase.
@@ -33,11 +31,8 @@ class KotbaseMemoryService private constructor(
     private val database: Database,
     private val epochClock: EpochClock,
     private val idGenerator: () -> String,
-) : MemoryService {
+) : StatefulMemoryService() {
     private val mutex = Mutex()
-    private val mutableMemories = MutableStateFlow<List<Memory>>(emptyList())
-
-    override val memories: StateFlow<List<Memory>> = mutableMemories.asStateFlow()
 
     override suspend fun findById(id: String): Memory? = withContext(Dispatchers.Default) {
         database.getDocument(id)?.toMemory()
@@ -52,10 +47,9 @@ class KotbaseMemoryService private constructor(
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
         )
-        withContext(Dispatchers.Default) {
+        writeAndPublish {
             database.save(memory.toDocument())
         }
-        publishMemories()
         memory
     }
 
@@ -68,25 +62,37 @@ class KotbaseMemoryService private constructor(
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
         )
-        withContext(Dispatchers.Default) {
+        writeAndPublish {
             database.save(updated.toDocument())
         }
-        publishMemories()
         updated
     }
 
     override suspend fun delete(id: String): Boolean = mutex.withLock {
-        val deleted = withContext(Dispatchers.Default) {
-            val document = database.getDocument(id) ?: return@withContext false
-            database.delete(document)
-            true
+        withContext(NonCancellable) {
+            val deleted = withContext(Dispatchers.Default) {
+                val document = database.getDocument(id)
+                    ?.takeIf { it.getString(KEY_TYPE) == TYPE_MEMORY }
+                    ?: return@withContext false
+                database.delete(document)
+                true
+            }
+            if (deleted) publishMemories()
+            deleted
         }
-        if (deleted) publishMemories()
-        deleted
+    }
+
+    /**
+     * Runs [write] and refreshes the published state as one unit. Cancellation is deferred until
+     * both finish, so a committed write never leaves [getState] stale.
+     */
+    private suspend fun writeAndPublish(write: () -> Unit) = withContext(NonCancellable) {
+        withContext(Dispatchers.Default) { write() }
+        publishMemories()
     }
 
     private suspend fun publishMemories() {
-        mutableMemories.value = loadAll()
+        memories.value = loadAll()
     }
 
     private suspend fun loadAll(): List<Memory> = withContext(Dispatchers.Default) {

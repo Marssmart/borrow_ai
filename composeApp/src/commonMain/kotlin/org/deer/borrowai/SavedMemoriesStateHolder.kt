@@ -48,7 +48,7 @@ internal class SavedMemoriesStateHolder(
 
     init {
         scope.launch {
-            memoryService.memories.collect { memories ->
+            memoryService.getState().collect { memories ->
                 updateMemories(memories)
             }
         }
