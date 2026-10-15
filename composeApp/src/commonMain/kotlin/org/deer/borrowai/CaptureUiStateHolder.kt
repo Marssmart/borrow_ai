@@ -3,12 +3,8 @@ package org.deer.borrowai
 import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.update
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 
@@ -16,20 +12,12 @@ internal class CaptureUiStateHolder(
     private val mediaSessionService: MediaSessionService,
     initiallyModelReady: Boolean = false,
 ) {
-    data class UiState(
-        val isRecording: Boolean = false,
-        val isHoldRecording: Boolean = false,
-        val elapsedSeconds: Int = 0,
-        val transcript: String = "",
-    )
-
     val transcriptScrollState = ScrollState(0)
 
-    private val mutableUiState = MutableStateFlow(
+    val uiState = MutableCaptureUiState(
         mediaSessionService.state.value.toUiState(mediaSessionService.idleTranscription.value),
     )
 
-    val uiState: StateFlow<UiState> = mutableUiState.asStateFlow()
     private var isModelReady = initiallyModelReady
 
     fun setModelReady(ready: Boolean) {
@@ -45,7 +33,7 @@ internal class CaptureUiStateHolder(
     }
 
     fun toggleRecording() {
-        if (mutableUiState.value.isRecording) {
+        if (uiState.isRecording) {
             stopRecording()
         } else {
             startRecording(holdToRecord = false)
@@ -53,13 +41,13 @@ internal class CaptureUiStateHolder(
     }
 
     fun startHoldRecording() {
-        if (!mutableUiState.value.isRecording) {
+        if (!uiState.isRecording) {
             startRecording(holdToRecord = true)
         }
     }
 
     fun stopHoldRecording() {
-        if (mutableUiState.value.isRecording && mutableUiState.value.isHoldRecording) {
+        if (uiState.isRecording && uiState.isHoldRecording) {
             stopRecording()
         }
     }
@@ -76,7 +64,7 @@ internal class CaptureUiStateHolder(
     private fun stopRecording() {
         val result = mediaSessionService.stopRecording() ?: return
         val transcript = mediaSessionService.idleTranscription.value
-        mutableUiState.update {
+        uiState.update {
             it.copy(
                 isRecording = false,
                 isHoldRecording = false,
@@ -90,7 +78,7 @@ internal class CaptureUiStateHolder(
         mediaSessionState: MediaSessionState,
         idleTranscript: String,
     ) {
-        mutableUiState.update { currentUiState ->
+        uiState.update { currentUiState ->
             when (mediaSessionState) {
                 MediaSessionState.Idle -> currentUiState.copy(
                     isRecording = false,
@@ -109,17 +97,17 @@ internal class CaptureUiStateHolder(
         }
     }
 
-    private fun MediaSessionState.toUiState(idleTranscript: String): UiState =
+    private fun MediaSessionState.toUiState(idleTranscript: String): MutableCaptureUiState.UiState =
         when (this) {
-            MediaSessionState.Idle -> UiState(transcript = idleTranscript)
-            is MediaSessionState.Recording -> UiState(
+            MediaSessionState.Idle -> MutableCaptureUiState.UiState(transcript = idleTranscript)
+            is MediaSessionState.Recording -> MutableCaptureUiState.UiState(
                 isRecording = true,
                 isHoldRecording = holdToRecord,
                 elapsedSeconds = (elapsedMillis / MILLIS_PER_SECOND).toInt(),
                 transcript = transcription,
             )
 
-            is MediaSessionState.Playing -> UiState(transcript = idleTranscript)
+            is MediaSessionState.Playing -> MutableCaptureUiState.UiState(transcript = idleTranscript)
         }
 
     internal companion object {

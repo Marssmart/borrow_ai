@@ -21,13 +21,13 @@ class CaptureUiStateHolderTest {
         holder.toggleRecording()
         holder.startHoldRecording()
         assertEquals(0, mediaSession.startCount)
-        assertFalse(holder.uiState.value.isRecording)
+        assertFalse(holder.uiState.isRecording)
 
         holder.setModelReady(true)
         holder.startHoldRecording()
         assertEquals(1, mediaSession.startCount)
         assertTrue(mediaSession.lastHoldToRecord)
-        assertTrue(holder.uiState.value.isRecording)
+        assertTrue(holder.uiState.isRecording)
     }
 
     @Test
@@ -36,13 +36,13 @@ class CaptureUiStateHolderTest {
         val holder = CaptureUiStateHolder(mediaSession, initiallyModelReady = true)
 
         holder.toggleRecording()
-        assertTrue(holder.uiState.value.isRecording)
+        assertTrue(holder.uiState.isRecording)
 
         holder.setModelReady(false)
         holder.toggleRecording()
 
         assertEquals(1, mediaSession.stopCount)
-        assertFalse(holder.uiState.value.isRecording)
+        assertFalse(holder.uiState.isRecording)
         holder.toggleRecording()
         assertEquals(1, mediaSession.startCount)
     }
