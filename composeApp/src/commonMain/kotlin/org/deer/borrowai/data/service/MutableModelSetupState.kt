@@ -13,6 +13,9 @@ class MutableModelSetupState {
     val value: ModelSetupState
         get() = mutableState.value
 
+    val isReady: Boolean
+        get() = value.isReady
+
     fun transition(
         phase: ModelSetupPhase,
         progress: Float = 0f,

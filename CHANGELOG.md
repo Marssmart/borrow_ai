@@ -5,6 +5,8 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 ## [1.0.10]
 
 - Added `MutableModelSetupState`, a wrapper around the model setup state with `transition` and `fail` helpers. `DownloadingModelSetupService` and `DemoModelSetupService` now use it instead of copying state by hand.
+- `ModelSetupService.state` is now a `MutableModelSetupState`. Flow collectors read `state.state`, and the current value is read through `state.value`.
+- Added `isReady` to `ModelSetupState` and `MutableModelSetupState`, replacing `phase == ModelSetupPhase.READY` checks.
 - Updated Android and iOS versioning to 1.0.10 (build 11).
 
 ## [1.0.9]

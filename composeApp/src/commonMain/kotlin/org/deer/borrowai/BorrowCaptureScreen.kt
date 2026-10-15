@@ -101,19 +101,19 @@ internal fun BorrowCaptureScreen(
     val stateHolder = remember(mediaSessionService, modelSetupService) {
         CaptureUiStateHolder(
             mediaSessionService = mediaSessionService,
-            initiallyModelReady = modelSetupService.state.value.phase == ModelSetupPhase.READY,
+            initiallyModelReady = modelSetupService.state.isReady,
         )
     }
     val uiState by stateHolder.uiState.collectAsState()
-    val setupState by modelSetupService.state.collectAsState()
-    val modelReady = setupState.phase == ModelSetupPhase.READY
+    val setupState by modelSetupService.state.state.collectAsState()
+    val modelReady = setupState.isReady
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
 
     LaunchedEffect(stateHolder, modelSetupService) {
         launch { stateHolder.observeMediaSession() }
         launch {
-            modelSetupService.state.collect { stateHolder.setModelReady(it.phase == ModelSetupPhase.READY) }
+            modelSetupService.state.state.collect { stateHolder.setModelReady(it.isReady) }
         }
     }
 

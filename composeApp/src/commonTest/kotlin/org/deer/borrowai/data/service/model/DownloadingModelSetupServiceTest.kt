@@ -128,7 +128,7 @@ class DownloadingModelSetupServiceTest {
         )
         val phases = mutableListOf<ModelSetupPhase>()
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            setup.state.collect { state ->
+            setup.state.state.collect { state ->
                 if (phases.lastOrNull() != state.phase) phases += state.phase
             }
         }
@@ -348,7 +348,7 @@ class DownloadingModelSetupServiceTest {
             backgroundScope,
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            setup.state.collect { state ->
+            setup.state.state.collect { state ->
                 if (phases.lastOrNull() != state.phase) phases += state.phase
                 progress += state.progress
             }
@@ -381,7 +381,7 @@ class DownloadingModelSetupServiceTest {
             backgroundScope,
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            setup.state.collect { observed += it }
+            setup.state.state.collect { observed += it }
         }
 
         setup.prepare()

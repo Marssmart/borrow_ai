@@ -2,7 +2,9 @@ package org.deer.borrowai.data.service
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class MutableModelSetupStateTest {
     @Test
@@ -51,5 +53,20 @@ class MutableModelSetupStateTest {
         state.transition(ModelSetupPhase.READY, progress = 1f)
 
         assertEquals(ModelSetupPhase.READY, state.state.value.phase)
+    }
+
+    @Test
+    fun isReadyOnlyWhenPhaseIsReady() {
+        val state = MutableModelSetupState()
+        assertFalse(state.isReady)
+
+        state.transition(ModelSetupPhase.DOWNLOADING_LLM, progress = 0.5f)
+        assertFalse(state.isReady)
+
+        state.transition(ModelSetupPhase.READY, progress = 1f)
+        assertTrue(state.isReady)
+
+        state.fail(ModelSetupFailureReason.NETWORK)
+        assertFalse(state.isReady)
     }
 }

@@ -30,22 +30,21 @@ class DownloadingModelSetupService(
     private val modelsForRam: (totalRamBytes: Long) -> TierModels = ModelCatalog::modelsForRam,
 ) : ModelSetupService {
     private val setupMutex = Mutex()
-    private val mutableState = MutableModelSetupState()
     private val setupJob = MutableJob(scope)
 
-    override val state = mutableState.state
+    override val state = MutableModelSetupState()
 
     private val mobileDataConsent = MutableStateFlow(false)
 
     override suspend fun downloadOverMobileData() {
-        if (mutableState.value.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+        if (state.value.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
             mobileDataConsent.value = true
         }
     }
 
     override suspend fun prepare() {
         setupMutex.withLock {
-            if (mutableState.value.phase == ModelSetupPhase.READY) return
+            if (state.isReady) return
             if (!setupJob.isActive()) setupJob.launch { runSetup() }
         }
         setupJob.join()
@@ -93,7 +92,7 @@ class DownloadingModelSetupService(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            mutableState.fail(
+            state.fail(
                 when {
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
                     error is ModelStorageException || error is okio.IOException ->
@@ -105,7 +104,7 @@ class DownloadingModelSetupService(
     }
 
     private fun publish(phase: ModelSetupPhase, progress: Float) {
-        mutableState.transition(phase, progress)
+        state.transition(phase, progress)
     }
 
     private fun publishFastReady() {
@@ -124,23 +123,23 @@ class DownloadingModelSetupService(
         alreadyPresent: Boolean,
     ): Boolean {
         if (alreadyPresent) {
-            mutableState.transition(phase, progress = endProgress)
+            state.transition(phase, progress = endProgress)
             return false
         }
         store.preparePartial(spec)
         if (store.commitCompletePartial(spec)) {
-            mutableState.transition(phase, progress = endProgress)
+            state.transition(phase, progress = endProgress)
             return false
         }
         awaitTransferAllowed(startProgress)
-        mutableState.transition(phase, progress = startProgress)
+        state.transition(phase, progress = startProgress)
         val downloadedSha256 = downloader.download(
             spec.downloadUrl,
             store.partialPath(spec),
             spec.sizeBytes,
         ) { bytes ->
             val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
-            mutableState.transition(
+            state.transition(
                 phase = phase,
                 progress = startProgress + (endProgress - startProgress) * fraction,
                 bytesDownloaded = bytes,
@@ -148,7 +147,7 @@ class DownloadingModelSetupService(
             )
         }
         store.commit(spec, downloadedSha256)
-        mutableState.transition(phase, progress = endProgress)
+        state.transition(phase, progress = endProgress)
         return true
     }
 
@@ -156,7 +155,7 @@ class DownloadingModelSetupService(
     private suspend fun awaitTransferAllowed(progress: Float) {
         val allowed = combine(network.unmetered, mobileDataConsent) { unmetered, consent -> unmetered || consent }
         if (!allowed.first()) {
-            mutableState.transition(
+            state.transition(
                 phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK,
                 progress = progress,
             )

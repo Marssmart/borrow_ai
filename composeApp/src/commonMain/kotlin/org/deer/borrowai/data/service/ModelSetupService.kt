@@ -1,7 +1,5 @@
 package org.deer.borrowai.data.service
 
-import kotlinx.coroutines.flow.StateFlow
-
 enum class ModelSetupPhase {
     NOT_STARTED,
     CHOOSING_MODEL,
@@ -26,10 +24,13 @@ data class ModelSetupState(
     val bytesDownloaded: Long = 0L,
     val bytesTotal: Long = 0L,
     val failureReason: ModelSetupFailureReason? = null,
-)
+) {
+    val isReady: Boolean
+        get() = phase == ModelSetupPhase.READY
+}
 
 interface ModelSetupService {
-    val state: StateFlow<ModelSetupState>
+    val state: MutableModelSetupState
 
     suspend fun prepare()
 
