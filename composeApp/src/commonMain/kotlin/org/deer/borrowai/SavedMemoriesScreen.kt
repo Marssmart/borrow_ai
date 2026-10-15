@@ -76,13 +76,18 @@ import borrowai.composeapp.generated.resources.memory_playback_confirmation_mess
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_title
 import borrowai.composeapp.generated.resources.memory_playback_error_title
 import borrowai.composeapp.generated.resources.memory_playback_memory_missing_message
+import borrowai.composeapp.generated.resources.memory_playback_recording_unavailable_message
 import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
+import borrowai.composeapp.generated.resources.memory_play_recording
+import borrowai.composeapp.generated.resources.memory_recording_audio_playing
 import borrowai.composeapp.generated.resources.memory_return_to_recording
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_original
+import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_stop_summary
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_audio_playing
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -144,6 +149,7 @@ internal fun SavedMemoriesScreen(
                 onOpenMemory = stateHolder::openMemory,
                 onPlayOriginal = { stateHolder.togglePlayback(it, PlaybackContent.TRANSCRIPTION) },
                 onPlaySummary = { stateHolder.togglePlayback(it, PlaybackContent.SUMMARY) },
+                onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
             )
 
             SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
@@ -160,6 +166,9 @@ internal fun SavedMemoriesScreen(
                     },
                     onPlaySummary = {
                         stateHolder.togglePlayback(memory.id, PlaybackContent.SUMMARY)
+                    },
+                    onPlayRecording = {
+                        stateHolder.togglePlayback(memory.id, PlaybackContent.RECORDING)
                     },
                     onReturnToCapture = {
                         stateHolder.returnToCapture(currentOnReturnToCapture)
@@ -204,6 +213,9 @@ internal fun SavedMemoriesScreen(
 
                             SavedMemoriesPlaybackError.REQUEST_REJECTED ->
                                 Res.string.memory_playback_request_failed_message
+
+                            SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE ->
+                                Res.string.memory_playback_recording_unavailable_message
                         },
                     ),
                 )
@@ -225,6 +237,7 @@ private fun MemoryListScreen(
     onOpenMemory: (String) -> Unit,
     onPlayOriginal: (String) -> Unit,
     onPlaySummary: (String) -> Unit,
+    onPlayRecording: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -249,6 +262,7 @@ private fun MemoryListScreen(
                     onOpen = { onOpenMemory(memory.id) },
                     onPlayOriginal = { onPlayOriginal(memory.id) },
                     onPlaySummary = { onPlaySummary(memory.id) },
+                    onPlayRecording = { onPlayRecording(memory.id) },
                 )
             }
         }
@@ -271,6 +285,7 @@ private fun MemoryCard(
     onOpen: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
+    onPlayRecording: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -315,21 +330,28 @@ private fun MemoryCard(
                 }
             }
 
-            MemoryTextSection(
-                label = stringResource(Res.string.memory_summary),
-                text = memory.summary.preview(),
-                color = MaterialTheme.colorScheme.onSurface,
-                showIcon = true,
-            )
-            MemoryTextSection(
-                label = stringResource(Res.string.memory_original_transcription),
-                text = memory.transcription.preview(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                showIcon = true,
-                isOriginal = true,
-            )
+            if (memory.summary.isNotBlank()) {
+                MemoryTextSection(
+                    label = stringResource(Res.string.memory_summary),
+                    text = memory.summary.preview(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    showIcon = true,
+                )
+            }
+            if (memory.transcription.isNotBlank()) {
+                MemoryTextSection(
+                    label = stringResource(Res.string.memory_original_transcription),
+                    text = memory.transcription.preview(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    showIcon = true,
+                    isOriginal = true,
+                )
+            }
             AudioPlaybackButtons(
                 playingContent = playingContent,
+                hasTranscription = memory.transcription.isNotBlank(),
+                hasSummary = memory.summary.isNotBlank(),
+                onPlayRecording = onPlayRecording,
                 onPlayOriginal = onPlayOriginal,
                 onPlaySummary = onPlaySummary,
             )
@@ -345,6 +367,7 @@ private fun MemoryDetailScreen(
     onBack: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
+    onPlayRecording: () -> Unit,
     onReturnToCapture: () -> Unit,
 ) {
     Column(
@@ -399,31 +422,38 @@ private fun MemoryDetailScreen(
             ) {
                 AudioPlaybackButtons(
                     playingContent = playingContent,
+                    hasTranscription = memory.transcription.isNotBlank(),
+                    hasSummary = memory.summary.isNotBlank(),
+                    onPlayRecording = onPlayRecording,
                     onPlayOriginal = onPlayOriginal,
                     onPlaySummary = onPlaySummary,
                 )
             }
-            AuroraPanel(
-                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SHAPE,
-                containerColor = Color.White.copy(
-                    alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SURFACE_ALPHA,
-                ),
-            ) {
-                MemoryTextSection(
-                    label = stringResource(Res.string.memory_summary),
-                    text = memory.summary,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+            if (memory.summary.isNotBlank()) {
+                AuroraPanel(
+                    shape = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SHAPE,
+                    containerColor = Color.White.copy(
+                        alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_SUMMARY_SURFACE_ALPHA,
+                    ),
+                ) {
+                    MemoryTextSection(
+                        label = stringResource(Res.string.memory_summary),
+                        text = memory.summary,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
-            AuroraPanel(
-                shape = SavedMemoriesStateHolder.MEMORY_DETAIL_TRANSCRIPTION_SHAPE,
-            ) {
-                MemoryTextSection(
-                    label = stringResource(Res.string.memory_original_transcription),
-                    text = memory.transcription,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    isOriginal = true,
-                )
+            if (memory.transcription.isNotBlank()) {
+                AuroraPanel(
+                    shape = SavedMemoriesStateHolder.MEMORY_DETAIL_TRANSCRIPTION_SHAPE,
+                ) {
+                    MemoryTextSection(
+                        label = stringResource(Res.string.memory_original_transcription),
+                        text = memory.transcription,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        isOriginal = true,
+                    )
+                }
             }
         }
     }
@@ -508,6 +538,9 @@ private fun AuroraPanel(
 @Composable
 private fun AudioPlaybackButtons(
     playingContent: PlaybackContent?,
+    hasTranscription: Boolean,
+    hasSummary: Boolean,
+    onPlayRecording: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
 ) {
@@ -515,67 +548,61 @@ private fun AudioPlaybackButtons(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        TextButton(
-            onClick = onPlayOriginal,
-            colors = ButtonDefaults.textButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-            border = BorderStroke(
-                SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH,
-                MaterialTheme.colorScheme.primary.copy(
-                    alpha = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_ALPHA,
-                ),
-            ),
-            contentPadding = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (playingContent == PlaybackContent.TRANSCRIPTION) "■" else "▶",
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
-                Text(
-                    stringResource(
-                        if (playingContent == PlaybackContent.TRANSCRIPTION) {
-                            Res.string.memory_stop_original
-                        } else {
-                            Res.string.memory_play_original
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
+        PlaybackButton(
+            playing = playingContent == PlaybackContent.RECORDING,
+            playLabel = Res.string.memory_play_recording,
+            stopLabel = Res.string.memory_stop_recording,
+            onClick = onPlayRecording,
+        )
+        if (hasTranscription) {
+            PlaybackButton(
+                playing = playingContent == PlaybackContent.TRANSCRIPTION,
+                playLabel = Res.string.memory_play_original,
+                stopLabel = Res.string.memory_stop_original,
+                onClick = onPlayOriginal,
+            )
         }
-        TextButton(
-            onClick = onPlaySummary,
-            colors = ButtonDefaults.textButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        if (hasSummary) {
+            PlaybackButton(
+                playing = playingContent == PlaybackContent.SUMMARY,
+                playLabel = Res.string.memory_play_summary,
+                stopLabel = Res.string.memory_stop_summary,
+                onClick = onPlaySummary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaybackButton(
+    playing: Boolean,
+    playLabel: StringResource,
+    stopLabel: StringResource,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        colors = ButtonDefaults.textButtonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        border = BorderStroke(
+            SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH,
+            MaterialTheme.colorScheme.primary.copy(
+                alpha = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_ALPHA,
             ),
-            border = BorderStroke(
-                SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH,
-                MaterialTheme.colorScheme.primary.copy(
-                    alpha = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_BORDER_ALPHA,
-                ),
-            ),
-            contentPadding = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (playingContent == PlaybackContent.SUMMARY) "■" else "▶",
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
-                Text(
-                    stringResource(
-                        if (playingContent == PlaybackContent.SUMMARY) {
-                            Res.string.memory_stop_summary
-                        } else {
-                            Res.string.memory_play_summary
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
+        ),
+        contentPadding = SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (playing) "■" else "▶",
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+            Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
+            Text(
+                stringResource(if (playing) stopLabel else playLabel),
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }
@@ -586,6 +613,7 @@ private fun AudioGlyph(playingContent: PlaybackContent?) {
         when (playingContent) {
             PlaybackContent.TRANSCRIPTION -> Res.string.memory_audio_playing
             PlaybackContent.SUMMARY -> Res.string.memory_summary_audio_playing
+            PlaybackContent.RECORDING -> Res.string.memory_recording_audio_playing
             null -> Res.string.memory_audio_not_playing
         },
     )

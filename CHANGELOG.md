@@ -2,6 +2,14 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.15]
+
+- Added real playback of the raw recording for each saved memory. The Play recording button is always shown; Transcription and Summary buttons appear only when that text exists.
+- Added `AudioPlayer` with Android `MediaPlayer` and iOS `AVAudioPlayer` implementations. Playback runs through `MediaSessionService`, and a playing recording stops when the service closes.
+- Playing a recording while a recording is in progress asks for confirmation. Confirming saves the active recording first, so audio is not lost.
+- Missing or unreadable recordings show a "recording unavailable" message instead of failing silently.
+- Updated Android and iOS versioning to 1.0.15 (build 16).
+
 ## [1.0.14]
 
 - Added `RecordingMediaSessionService`, which records microphone audio to `recordings/<id>.m4a` under the app's files directory on Android and iOS.

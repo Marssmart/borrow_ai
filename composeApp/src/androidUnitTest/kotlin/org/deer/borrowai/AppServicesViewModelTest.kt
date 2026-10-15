@@ -17,6 +17,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 
@@ -40,6 +41,7 @@ class AppServicesViewModelTest {
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
             recorder = FakeRecorder(),
+            audioPlayer = FakeAudioPlayer(),
             microphonePermission = FakeMicrophonePermission(),
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)
@@ -61,6 +63,11 @@ class AppServicesViewModelTest {
 
     private class FakeRecorder : AudioRecorder {
         override fun start(absolutePath: String) = Unit
+        override fun stop() = Unit
+    }
+
+    private class FakeAudioPlayer : AudioPlayer {
+        override fun play(absolutePath: String): Long = 1_000L
         override fun stop() = Unit
     }
 

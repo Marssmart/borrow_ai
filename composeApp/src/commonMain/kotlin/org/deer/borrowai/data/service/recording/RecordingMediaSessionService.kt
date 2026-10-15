@@ -7,16 +7,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.MutableMediaSessionState
+import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackRequestResult
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
@@ -29,12 +32,15 @@ import org.deer.borrowai.data.service.demo.MutableJob
  * cancels the pending start. Stored memories hold only a path relative to [recordingsRoot], because
  * absolute container paths change between installs and updates.
  *
- * Playback of recorded media is not implemented yet.
+ * Playback plays a memory's raw recording through [audioPlayer]. Only [PlaybackContent.RECORDING] targets have
+ * audio, so text targets return [PlaybackRequestResult.RecordingUnavailable]. Requesting playback while
+ * recording asks for confirmation. Confirming stops and saves the recording, then plays the requested memory.
  */
 @OptIn(ExperimentalUuidApi::class)
 class RecordingMediaSessionService(
     private val memoryService: MemoryService,
     private val recorder: AudioRecorder,
+    private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
     private val recordingsRoot: Path,
     private val scope: CoroutineScope,
@@ -67,14 +73,51 @@ class RecordingMediaSessionService(
         return finishRecording()
     }
 
-    override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult = playbackNotImplemented()
+    override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult {
+        ensureOpen()
+        val memory = findMemory(target) ?: return PlaybackRequestResult.MemoryNotFound
+        val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackRequestResult.RecordingUnavailable
 
-    override fun confirmPendingPlayback(): PlaybackRequestResult = playbackNotImplemented()
+        return mutableState.ifRecording { recording ->
+            mutableState.transitionRecording(
+                elapsedMillis = recording.elapsedMillis,
+                transcription = recording.transcription,
+                pendingPlayback = target,
+                holdToRecord = recording.holdToRecord,
+            )
+            PlaybackRequestResult.ConfirmationRequired(target)
+        } ?: startPlayback(target, absolutePath)
+    }
 
-    override fun cancelPendingPlayback(): Boolean = false
+    override fun confirmPendingPlayback(): PlaybackRequestResult {
+        ensureOpen()
+        val target = mutableState.ifRecording { it.pendingPlayback }
+            ?: return PlaybackRequestResult.NoPendingConfirmation
+        val memory = findMemory(target)
+        val absolutePath = memory?.let { playableRecordingPath(target, it) }
+        if (memory == null || absolutePath == null) {
+            clearPendingPlayback()
+            return if (memory == null) PlaybackRequestResult.MemoryNotFound else PlaybackRequestResult.RecordingUnavailable
+        }
+        finishRecording()
+        return startPlayback(target, absolutePath)
+    }
+
+    override fun cancelPendingPlayback(): Boolean {
+        ensureOpen()
+        return mutableState.ifRecording { recording ->
+            if (recording.pendingPlayback == null) {
+                false
+            } else {
+                clearPendingPlayback()
+                true
+            }
+        } ?: false
+    }
 
     override fun stopPlayback() {
         ensureOpen()
+        stopActivePlayback()
     }
 
     override fun close() {
@@ -82,6 +125,64 @@ class RecordingMediaSessionService(
         closed.value = true
         pendingStartJob.cancel()
         finishRecording()
+        stopActivePlayback()
+    }
+
+    private fun findMemory(target: PlaybackTarget) =
+        memoryService.memories.value.firstOrNull { it.id == target.memoryId }
+
+    /** Returns the absolute file path for a raw recording target, or null when no playable file exists. */
+    private fun playableRecordingPath(target: PlaybackTarget, memory: Memory): Path? {
+        if (target.content != PlaybackContent.RECORDING) return null
+        val relativePath = memory.recordingPath?.takeIf { it.isNotBlank() } ?: return null
+        val absolutePath = recordingsRoot / relativePath
+        return absolutePath.takeIf { fileSystem.exists(it) }
+    }
+
+    private fun startPlayback(target: PlaybackTarget, absolutePath: Path): PlaybackRequestResult {
+        val durationMillis = try {
+            audioPlayer.play(absolutePath.toString())
+        } catch (exception: PlaybackUnavailableException) {
+            return PlaybackRequestResult.RecordingUnavailable
+        }
+        tickerJob.cancel()
+        mutableState.transitionPlaying(target = target, durationMillis = durationMillis)
+        startPlaybackTicker(durationMillis)
+        return PlaybackRequestResult.Started
+    }
+
+    private fun startPlaybackTicker(durationMillis: Long) {
+        val startedAtMillis = epochClock.nowEpochMillis()
+        tickerJob.launch {
+            while (isActive) {
+                delay(TICK_INTERVAL_MILLIS)
+                val elapsedMillis = epochClock.nowEpochMillis() - startedAtMillis
+                if (elapsedMillis >= durationMillis) {
+                    stopActivePlayback()
+                    return@launch
+                }
+                mutableState.update { current ->
+                    if (current is MediaSessionState.Playing) current.copy(elapsedMillis = elapsedMillis) else current
+                }
+            }
+        }
+    }
+
+    private fun stopActivePlayback() {
+        if (mutableState.value !is MediaSessionState.Playing) return
+        tickerJob.cancel()
+        audioPlayer.stop()
+        mutableState.transitionIdle()
+    }
+
+    private fun clearPendingPlayback() {
+        mutableState.ifRecording { recording ->
+            mutableState.transitionRecording(
+                elapsedMillis = recording.elapsedMillis,
+                transcription = recording.transcription,
+                holdToRecord = recording.holdToRecord,
+            )
+        }
     }
 
     private fun beginRecording(holdToRecord: Boolean) {
@@ -145,10 +246,6 @@ class RecordingMediaSessionService(
                 }
             }
         }
-    }
-
-    private fun playbackNotImplemented(): Nothing {
-        throw UnsupportedOperationException("Playback of recorded media is not implemented yet.")
     }
 
     private fun ensureOpen() {

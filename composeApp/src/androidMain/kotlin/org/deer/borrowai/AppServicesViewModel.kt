@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 
@@ -18,6 +19,7 @@ internal class AppServicesViewModel(
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
+    private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
 ) : ViewModel() {
     private val servicesState = MutableStateFlow<AppServices?>(null)
@@ -32,6 +34,7 @@ internal class AppServicesViewModel(
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,
+                audioPlayer = audioPlayer,
                 microphonePermission = microphonePermission,
             )
         }
@@ -48,6 +51,7 @@ internal class AppServicesViewModelFactory(
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
+    private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -60,6 +64,7 @@ internal class AppServicesViewModelFactory(
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,
+                audioPlayer = audioPlayer,
                 microphonePermission = microphonePermission,
             ),
         )
