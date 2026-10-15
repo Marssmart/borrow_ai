@@ -214,7 +214,7 @@ class DemoMediaSessionService(
     }
 
     private fun ensureOpen() {
-        check(!closeOnce.isClosed) { "Media session service has been closed." }
+        check(!closeOnce.isClosed()) { "Media session service has been closed." }
     }
 
     private companion object {

@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class MutableCloseOnceTest {
     @Test
     fun startsOpen() {
-        assertFalse(MutableCloseOnce().isClosed)
+        assertFalse(MutableCloseOnce().isClosed())
     }
 
     @Test
@@ -20,7 +20,7 @@ class MutableCloseOnceTest {
         assertFalse(closeOnce.closeOnce { runs++ })
 
         assertEquals(1, runs)
-        assertTrue(closeOnce.isClosed)
+        assertTrue(closeOnce.isClosed())
     }
 
     @Test
@@ -29,7 +29,7 @@ class MutableCloseOnceTest {
 
         runCatching { closeOnce.closeOnce { error("boom") } }
 
-        assertTrue(closeOnce.isClosed)
+        assertTrue(closeOnce.isClosed())
         assertFalse(closeOnce.closeOnce { error("should not run") })
     }
 }

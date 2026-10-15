@@ -5,8 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MutableCloseOnce {
     private val closed = MutableStateFlow(false)
 
-    val isClosed: Boolean
-        get() = closed.value
+    fun isClosed(): Boolean = closed.value
 
     /**
      * Runs [action] only on the first call. Returns true if this call performed the close.
