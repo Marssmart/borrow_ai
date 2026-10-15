@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -13,7 +12,7 @@ import org.deer.borrowai.data.service.ModelSetupMilestones
 import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
-import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.MutableModelSetupState
 import org.deer.borrowai.data.service.demo.MutableJob
 
 /**
@@ -31,10 +30,10 @@ class DownloadingModelSetupService(
     private val modelsForRam: (totalRamBytes: Long) -> TierModels = ModelCatalog::modelsForRam,
 ) : ModelSetupService {
     private val setupMutex = Mutex()
-    private val mutableState = MutableStateFlow(ModelSetupState())
+    private val mutableState = MutableModelSetupState()
     private val setupJob = MutableJob(scope)
 
-    override val state = mutableState.asStateFlow()
+    override val state = mutableState.state
 
     private val mobileDataConsent = MutableStateFlow(false)
 
@@ -94,9 +93,8 @@ class DownloadingModelSetupService(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            mutableState.value = mutableState.value.copy(
-                phase = ModelSetupPhase.FAILED,
-                failureReason = when {
+            mutableState.fail(
+                when {
                     (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
                     error is ModelStorageException || error is okio.IOException ->
                         ModelSetupFailureReason.STORAGE
@@ -107,10 +105,7 @@ class DownloadingModelSetupService(
     }
 
     private fun publish(phase: ModelSetupPhase, progress: Float) {
-        mutableState.value = ModelSetupState(
-            phase = phase,
-            progress = progress,
-        )
+        mutableState.transition(phase, progress)
     }
 
     private fun publishFastReady() {
@@ -118,10 +113,7 @@ class DownloadingModelSetupService(
         publish(ModelSetupPhase.DOWNLOADING_VOICE, ModelSetupMilestones.CHOOSING_END)
         publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
         publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END)
-        mutableState.value = ModelSetupState(
-            phase = ModelSetupPhase.READY,
-            progress = 1f,
-        )
+        publish(ModelSetupPhase.READY, 1f)
     }
 
     private suspend fun downloadModel(
@@ -132,23 +124,23 @@ class DownloadingModelSetupService(
         alreadyPresent: Boolean,
     ): Boolean {
         if (alreadyPresent) {
-            mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+            mutableState.transition(phase, progress = endProgress)
             return false
         }
         store.preparePartial(spec)
         if (store.commitCompletePartial(spec)) {
-            mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+            mutableState.transition(phase, progress = endProgress)
             return false
         }
         awaitTransferAllowed(startProgress)
-        mutableState.value = mutableState.value.copy(phase = phase, progress = startProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+        mutableState.transition(phase, progress = startProgress)
         val downloadedSha256 = downloader.download(
             spec.downloadUrl,
             store.partialPath(spec),
             spec.sizeBytes,
         ) { bytes ->
             val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
-            mutableState.value = mutableState.value.copy(
+            mutableState.transition(
                 phase = phase,
                 progress = startProgress + (endProgress - startProgress) * fraction,
                 bytesDownloaded = bytes,
@@ -156,7 +148,7 @@ class DownloadingModelSetupService(
             )
         }
         store.commit(spec, downloadedSha256)
-        mutableState.value = mutableState.value.copy(phase = phase, progress = endProgress, bytesDownloaded = 0L, bytesTotal = 0L)
+        mutableState.transition(phase, progress = endProgress)
         return true
     }
 
@@ -164,11 +156,9 @@ class DownloadingModelSetupService(
     private suspend fun awaitTransferAllowed(progress: Float) {
         val allowed = combine(network.unmetered, mobileDataConsent) { unmetered, consent -> unmetered || consent }
         if (!allowed.first()) {
-            mutableState.value = mutableState.value.copy(
+            mutableState.transition(
                 phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK,
                 progress = progress,
-                bytesDownloaded = 0L,
-                bytesTotal = 0L,
             )
             allowed.first { it }
         }
