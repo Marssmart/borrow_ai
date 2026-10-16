@@ -1,5 +1,7 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.right
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -303,8 +305,8 @@ class DownloadingModelSetupServiceTest {
                 destination: Path,
                 expectedSizeBytes: Long,
                 onProgress: (Long) -> Unit,
-            ): String {
-                throw ModelDownloadException("Model download failed with HTTP 500.", retryable = true)
+            ): Either<ModelDownloadError, String> {
+                return Either.Left(ModelDownloadError.Network("Model download failed with HTTP 500."))
             }
         }
         val setup = service(fileSystem, downloader, backgroundScope)
@@ -325,8 +327,8 @@ class DownloadingModelSetupServiceTest {
                 destination: Path,
                 expectedSizeBytes: Long,
                 onProgress: (Long) -> Unit,
-            ): String {
-                throw okio.IOException("Unable to access model storage.")
+            ): Either<ModelDownloadError, String> {
+                return Either.Left(ModelDownloadError.Storage(okio.IOException("Unable to access model storage.")))
             }
         }
         val setup = service(fileSystem, downloader, backgroundScope)
@@ -516,14 +518,14 @@ class DownloadingModelSetupServiceTest {
             destination: Path,
             expectedSizeBytes: Long,
             onProgress: (Long) -> Unit,
-        ): String {
+        ): Either<ModelDownloadError, String> {
             downloadCounts[url] = (downloadCounts[url] ?: 0) + 1
             val model = specs.first { it.downloadUrl == url }
             gate.await()
             val bytes = ByteArray(model.sizeBytes.toInt())
             writeBytes(fileSystem, destination, bytes)
             onProgress(model.sizeBytes)
-            return sha256Hex(bytes)
+            return sha256Hex(bytes).right()
         }
     }
 
@@ -540,7 +542,7 @@ class DownloadingModelSetupServiceTest {
             destination: Path,
             expectedSizeBytes: Long,
             onProgress: (Long) -> Unit,
-        ): String {
+        ): Either<ModelDownloadError, String> {
             requestedUrls += url
             val model = specs.first { it.downloadUrl == url }
             assertEquals(model.sizeBytes, expectedSizeBytes)
@@ -558,7 +560,7 @@ class DownloadingModelSetupServiceTest {
             } finally {
                 sink.close()
             }
-            return hashing.hash.hex()
+            return hashing.hash.hex().right()
         }
     }
 }

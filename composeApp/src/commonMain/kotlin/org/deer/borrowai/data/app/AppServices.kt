@@ -114,7 +114,10 @@ class AppServices private constructor(
             try {
                 val graphScope = CoroutineScope(graphJob + dispatcher)
                 val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
-                val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock)
+                val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock).fold(
+                    ifLeft = { error -> throw IllegalStateException("Memory store failed to open: $error") },
+                    ifRight = { it },
+                )
                 val httpClient = createPlatformModelHttpClient()
                 // Closed when the graph completes, including the failure path where cancel() runs below.
                 graphJob.invokeOnCompletion { httpClient.close() }

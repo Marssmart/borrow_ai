@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.recording
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
@@ -27,7 +30,8 @@ import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.MutableMediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
-import org.deer.borrowai.data.service.PlaybackRequestResult
+import org.deer.borrowai.data.service.PlaybackError
+import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
 import org.deer.borrowai.data.service.MutableJob
@@ -40,7 +44,7 @@ import org.deer.borrowai.data.service.MutableJob
  * absolute container paths change between installs and updates.
  *
  * Playback plays a memory's raw recording through [audioPlayer]. Only [PlaybackContent.RECORDING] targets have
- * audio, so text targets return [PlaybackRequestResult.RecordingUnavailable]. Requesting playback while
+ * audio, so text targets return [PlaybackError.RecordingUnavailable]. Requesting playback while
  * recording asks for confirmation. Confirming stops and saves the recording, then plays the requested memory.
  */
 @OptIn(ExperimentalUuidApi::class)
@@ -89,10 +93,10 @@ class RecordingMediaSessionService(
         return finishRecording()
     }
 
-    override fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult {
+    override fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest> {
         ensureOpen()
-        val memory = findMemory(target) ?: return PlaybackRequestResult.MemoryNotFound
-        val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackRequestResult.RecordingUnavailable
+        val memory = findMemory(target) ?: return PlaybackError.MemoryNotFound.left()
+        val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackError.RecordingUnavailable.left()
 
         return mutableState.ifRecording { recording ->
             mutableState.transitionRecording(
@@ -101,18 +105,19 @@ class RecordingMediaSessionService(
                 pendingPlayback = target,
                 holdToRecord = recording.holdToRecord,
             )
-            PlaybackRequestResult.ConfirmationRequired(target)
+            PlaybackRequest.ConfirmationRequired(target).right()
         } ?: startPlayback(target, absolutePath)
     }
-    override fun confirmPendingPlayback(): PlaybackRequestResult {
+
+    override fun confirmPendingPlayback(): Either<PlaybackError, PlaybackRequest> {
         ensureOpen()
         val target = mutableState.ifRecording { it.pendingPlayback }
-            ?: return PlaybackRequestResult.NoPendingConfirmation
+            ?: return PlaybackError.NoPendingConfirmation.left()
         val memory = findMemory(target)
         val absolutePath = memory?.let { playableRecordingPath(target, it) }
         if (memory == null || absolutePath == null) {
             clearPendingPlayback()
-            return if (memory == null) PlaybackRequestResult.MemoryNotFound else PlaybackRequestResult.RecordingUnavailable
+            return (if (memory == null) PlaybackError.MemoryNotFound else PlaybackError.RecordingUnavailable).left()
         }
         finishRecording()
         return startPlayback(target, absolutePath)
@@ -161,25 +166,25 @@ class RecordingMediaSessionService(
         return absolutePath.takeIf { fileSystem.exists(it) }
     }
 
-    private fun startPlayback(target: PlaybackTarget, absolutePath: Path): PlaybackRequestResult {
+    private fun startPlayback(target: PlaybackTarget, absolutePath: Path): Either<PlaybackError, PlaybackRequest> {
         val durationMillis = try {
             audioPlayer.play(absolutePath.toString())
         } catch (exception: PlaybackUnavailableException) {
             // A failed replacement has already stopped any previous playback, so the state must not stay Playing.
             tickerJob.cancel()
             if (mutableState.value is MediaSessionState.Playing) mutableState.transitionIdle()
-            return PlaybackRequestResult.RecordingUnavailable
+            return PlaybackError.RecordingUnavailable.left()
         }
         mutableState.transitionPlaying(target = target, durationMillis = durationMillis)
         // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
         // after publishing either sees the close or lets close stop this playback.
         if (closed.value) {
             stopActivePlayback()
-            return PlaybackRequestResult.RecordingUnavailable
+            return PlaybackError.RecordingUnavailable.left()
         }
         tickerJob.cancel()
         startPlaybackTicker(durationMillis)
-        return PlaybackRequestResult.Started
+        return PlaybackRequest.Started.right()
     }
 
     private fun startPlaybackTicker(durationMillis: Long) {
@@ -272,6 +277,10 @@ class RecordingMediaSessionService(
                         recordingPath = recording.relativePath,
                     ),
                     id = recording.recordingId,
+                ).fold(
+                    // The audio stays on disk. RecordingReconciler pairs it with a memory on its next sweep.
+                    ifLeft = { },
+                    ifRight = { },
                 )
             } catch (exception: CancellationException) {
                 throw exception

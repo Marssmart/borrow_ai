@@ -25,14 +25,13 @@ class DeletedMemoryPurger(
     /** Purges deleted memories. Returns how many were removed. */
     suspend fun purge(): Int {
         if (isRecording()) return 0
-        val memories = try {
-            memoryService.findAll()
-        } catch (exception: CancellationException) {
-            throw exception
-        } catch (exception: Exception) {
-            // The next scheduled run retries.
-            return 0
-        }
+        val memories = memoryService.findAll().fold(
+            ifLeft = {
+                // A malformed row blocks the purge until it is repaired; the next run retries.
+                return 0
+            },
+            ifRight = { it },
+        )
         // A recording path still used by an active memory must keep its audio.
         val activePaths = memories
             .filterNot(Memory::deleted)

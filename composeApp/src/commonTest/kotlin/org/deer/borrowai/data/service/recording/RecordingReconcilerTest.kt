@@ -1,17 +1,21 @@
 package org.deer.borrowai.data.service.recording
 
+import arrow.core.Either
+import arrow.core.left
 import kotlinx.coroutines.test.runTest
+import okio.IOException
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.MemoryError
+import org.deer.borrowai.data.service.MemoryService
 
 class RecordingReconcilerTest {
     private val root = "/app/files".toPath()
@@ -21,6 +25,9 @@ class RecordingReconcilerTest {
         initialMemories = emptyList(),
         epochClock = EpochClock { 1_800_000_000_000L },
     )
+
+    private suspend fun FakeMemoryService.createMemory(draft: MemoryDraft, id: String? = null): Memory =
+        create(draft, id).getOrNull()!!
 
     private fun reconciler(
         memories: FakeMemoryService,
@@ -48,7 +55,7 @@ class RecordingReconcilerTest {
 
         assertEquals(1, reconciler(memories, fs).reconcile())
 
-        val memory = memories.findById("abc")
+        val memory = memories.findById("abc").getOrNull()
         assertEquals("recordings/abc.m4a", memory?.recordingPath)
     }
 
@@ -57,7 +64,7 @@ class RecordingReconcilerTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
         val memories = memories()
-        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
+        memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
 
         assertEquals(0, reconciler(memories, fs).reconcile())
         assertEquals(1, memories.getState().value.size)
@@ -68,7 +75,7 @@ class RecordingReconcilerTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
         val memories = memories()
-        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "other")
+        memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "other")
 
         assertEquals(0, reconciler(memories, fs).reconcile())
         assertEquals(1, memories.getState().value.size)
@@ -79,11 +86,11 @@ class RecordingReconcilerTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
         val memories = memories()
-        val memory = memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
+        val memory = memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
         memories.delete(memory.id)
 
         assertEquals(0, reconciler(memories, fs).reconcile())
-        assertEquals(true, memories.findById("abc")?.deleted)
+        assertEquals(true, memories.findById("abc").getOrNull()?.deleted)
     }
 
     @Test
@@ -93,7 +100,7 @@ class RecordingReconcilerTest {
         val memories = memories()
 
         assertEquals(0, reconciler(memories, fs).reconcile())
-        assertNull(memories.findById("temp_abc"))
+        assertTrue(memories.findById("temp_abc").isLeft())
     }
 
     @Test
@@ -103,7 +110,7 @@ class RecordingReconcilerTest {
         val memories = memories()
 
         assertEquals(0, reconciler(memories, fs, isRecording = { true }).reconcile())
-        assertNull(memories.findById("abc"))
+        assertTrue(memories.findById("abc").isLeft())
     }
 
     @Test
@@ -118,8 +125,9 @@ class RecordingReconcilerTest {
     fun failedCreateLeavesFileForNextSweep() = runTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
-        val failing = object : org.deer.borrowai.data.service.MemoryService by memories() {
-            override suspend fun create(draft: MemoryDraft, id: String?): Memory = error("disk full")
+        val failing = object : MemoryService by memories() {
+            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> =
+                MemoryError.Persistence(IOException("disk full")).left()
         }
         val reconciler = RecordingReconciler(
             memoryService = failing,

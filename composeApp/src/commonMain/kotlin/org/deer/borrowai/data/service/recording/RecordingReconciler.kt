@@ -40,7 +40,13 @@ class RecordingReconciler(
 
     private suspend fun sweep(recordingsDirectory: Path): Int {
         if (!fileSystem.exists(recordingsDirectory)) return 0
-        val memories = memoryService.findAll()
+        val memories = memoryService.findAll().fold(
+            ifLeft = {
+                // A malformed row blocks reconciliation until it is repaired; the next sweep retries.
+                return 0
+            },
+            ifRight = { it },
+        )
         val pairedIds = memories.mapTo(mutableSetOf()) { it.id }
         val pairedPaths = memories.mapNotNullTo(mutableSetOf()) { it.recordingPath }
         var created = 0
@@ -59,8 +65,8 @@ class RecordingReconciler(
             if (id in pairedIds || relativePath in pairedPaths) continue
             try {
                 // Re-check, because a save may have completed after the snapshot above was taken.
-                if (memoryService.findById(id) != null) continue
-                memoryService.create(
+                if (memoryService.findById(id).isRight()) continue
+                val result = memoryService.create(
                     draft = MemoryDraft(
                         title = "",
                         summary = "",
@@ -69,7 +75,7 @@ class RecordingReconciler(
                     ),
                     id = id,
                 )
-                created++
+                if (result.isRight()) created++
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
