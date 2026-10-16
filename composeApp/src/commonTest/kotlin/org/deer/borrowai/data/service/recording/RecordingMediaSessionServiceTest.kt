@@ -68,7 +68,7 @@ class RecordingMediaSessionServiceTest {
 
     private class FakeAudioPlayer(
         private val durationMillis: Long = 2_000L,
-        private val failOnPlay: Boolean = false,
+        var failOnPlay: Boolean = false,
     ) : AudioPlayer {
         val playedPaths = mutableListOf<String>()
         var stopCount = 0
@@ -125,6 +125,7 @@ class RecordingMediaSessionServiceTest {
         scope: CoroutineScope,
         audioPlayer: AudioPlayer = FakeAudioPlayer(),
         epochClock: EpochClock = EpochClock { 1_800_000_000_000L },
+        monotonicMillis: () -> Long = { 0L },
     ) = RecordingMediaSessionService(
         memoryService = memories,
         recorder = recorder,
@@ -135,6 +136,7 @@ class RecordingMediaSessionServiceTest {
         epochClock = epochClock,
         fileSystem = fileSystem,
         idGenerator = { "rec-1" },
+        monotonicMillis = monotonicMillis,
     )
 
     @Test
@@ -419,7 +421,6 @@ class RecordingMediaSessionServiceTest {
         val fs = FakeFileSystem()
         val memories = memories()
         val memory = savedRecording(memories, fs)
-        val clock = EpochClock { testScheduler.currentTime }
         val service = service(
             FakeRecorder(),
             FakePermission(CompletableDeferred(true)),
@@ -427,7 +428,7 @@ class RecordingMediaSessionServiceTest {
             fs,
             backgroundScope,
             player,
-            clock,
+            monotonicMillis = { testScheduler.currentTime },
         )
 
         service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
@@ -436,6 +437,75 @@ class RecordingMediaSessionServiceTest {
 
         assertIs<MediaSessionState.Idle>(service.state.value)
         assertEquals(1, player.stopCount)
+    }
+
+    @Test
+    fun playbackIgnoresWallClockJumps() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        var epochOffsetMillis = 0L
+        val service = service(
+            FakeRecorder(),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            player,
+            epochClock = EpochClock { testScheduler.currentTime + epochOffsetMillis },
+            monotonicMillis = { testScheduler.currentTime },
+        )
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(500L)
+        epochOffsetMillis = -100_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertIs<MediaSessionState.Playing>(service.state.value)
+
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun failedReplacementPlaybackClearsPlayingState() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+        val target = PlaybackTarget(memory.id, PlaybackContent.RECORDING)
+
+        assertEquals(PlaybackRequestResult.Started, service.requestPlayback(target))
+        player.failOnPlay = true
+
+        assertEquals(PlaybackRequestResult.RecordingUnavailable, service.requestPlayback(target))
+        assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun startRecordingWhilePlayingStopsPlaybackAndRecords() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            player,
+        )
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        service.startRecording(holdToRecord = false)
+        runCurrent()
+
+        assertEquals(1, player.stopCount)
+        assertIs<MediaSessionState.Recording>(service.state.value)
     }
 
     @Test

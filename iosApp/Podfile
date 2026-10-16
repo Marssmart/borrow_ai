@@ -2,5 +2,5 @@ platform :ios, '15.0'
 
 target 'BorrowAI' do
   use_frameworks!
-  pod 'ComposeApp', :path => '../composeApp'
+  pod 'composeApp', :path => '../composeApp'
 end

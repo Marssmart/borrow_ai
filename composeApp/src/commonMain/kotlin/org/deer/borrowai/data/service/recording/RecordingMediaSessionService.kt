@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.TimeSource
 import okio.FileSystem
 import okio.IOException
 import okio.Path
@@ -53,6 +54,7 @@ class RecordingMediaSessionService(
     private val epochClock: EpochClock,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val idGenerator: () -> String = { Uuid.random().toString() },
+    private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
 ) : MediaSessionService {
     private val mutableState = MutableMediaSessionState()
     private val mutableIdleTranscription = MutableStateFlow("")
@@ -68,6 +70,7 @@ class RecordingMediaSessionService(
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()
+        stopActivePlayback()
         if (mutableState.value !is MediaSessionState.Idle) return
         pendingStartJob.launch {
             if (!microphonePermission.request()) return@launch
@@ -158,6 +161,9 @@ class RecordingMediaSessionService(
         val durationMillis = try {
             audioPlayer.play(absolutePath.toString())
         } catch (exception: PlaybackUnavailableException) {
+            // A failed replacement has already stopped any previous playback, so the state must not stay Playing.
+            tickerJob.cancel()
+            if (mutableState.value is MediaSessionState.Playing) mutableState.transitionIdle()
             return PlaybackRequestResult.RecordingUnavailable
         }
         tickerJob.cancel()
@@ -167,11 +173,12 @@ class RecordingMediaSessionService(
     }
 
     private fun startPlaybackTicker(durationMillis: Long) {
-        val startedAtMillis = epochClock.nowEpochMillis()
+        // Playback uses a monotonic clock so changing the wall clock cannot stop or extend playback.
+        val startedAtMillis = monotonicMillis()
         tickerJob.launch {
             while (isActive) {
                 delay(TICK_INTERVAL_MILLIS)
-                val elapsedMillis = epochClock.nowEpochMillis() - startedAtMillis
+                val elapsedMillis = monotonicMillis() - startedAtMillis
                 if (elapsedMillis >= durationMillis) {
                     stopActivePlayback()
                     return@launch
@@ -317,3 +324,7 @@ class RecordingMediaSessionService(
         const val TICK_INTERVAL_MILLIS = 1_000L
     }
 }
+
+private val monotonicOrigin = TimeSource.Monotonic.markNow()
+
+internal fun monotonicMillisSinceStart(): Long = monotonicOrigin.elapsedNow().inWholeMilliseconds
