@@ -27,7 +27,7 @@ class RecordingReconciler(
         if (isRecording()) return 0
         val recordingsDirectory = recordingsRoot / RECORDINGS_DIRECTORY
         if (!fileSystem.exists(recordingsDirectory)) return 0
-        val memories = memoryService.getState().value
+        val memories = memoryService.findAll()
         val pairedIds = memories.mapTo(mutableSetOf()) { it.id }
         val pairedPaths = memories.mapNotNullTo(mutableSetOf()) { it.recordingPath }
         var created = 0

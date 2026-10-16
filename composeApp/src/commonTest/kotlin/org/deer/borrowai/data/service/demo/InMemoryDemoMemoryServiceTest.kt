@@ -42,6 +42,25 @@ class InMemoryDemoMemoryServiceTest {
         assertTrue(service.delete(created.id))
         assertFalse(service.delete(created.id))
         assertTrue(service.getState().value.isEmpty())
+        assertEquals(true, service.findById(created.id)?.deleted)
+        assertTrue(service.purge(created.id))
         assertNull(service.findById(created.id))
+    }
+
+    @Test
+    fun purgeRemovesOnlyDeletedMemories() = runTest {
+        val service = InMemoryDemoMemoryService(
+            initialMemories = emptyList(),
+            epochClock = EpochClock { 1_800_000_000_000L },
+        )
+        val active = service.create(MemoryDraft("Active", "", ""))
+        val deleted = service.create(MemoryDraft("Deleted", "", ""))
+
+        assertFalse(service.purge(deleted.id))
+        assertTrue(service.delete(deleted.id))
+        assertTrue(service.purge(deleted.id))
+        assertNull(service.findById(deleted.id))
+        assertFalse(service.purge(active.id))
+        assertEquals(listOf(active.id), service.findAll().map { it.id })
     }
 }

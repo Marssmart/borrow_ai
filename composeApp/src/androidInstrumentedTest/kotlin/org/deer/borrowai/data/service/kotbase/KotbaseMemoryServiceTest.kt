@@ -90,9 +90,11 @@ class KotbaseMemoryServiceTest {
         val created = service.create(MemoryDraft("To delete", "", ""))
 
         assertTrue(service.delete(created.id))
-        assertNull(service.findById(created.id))
+        assertEquals(true, service.findById(created.id)?.deleted)
         assertTrue(service.getState().value.isEmpty())
         assertFalse(service.delete(created.id))
+        assertTrue(service.purge(created.id))
+        assertNull(service.findById(created.id))
     }
 
     @Test

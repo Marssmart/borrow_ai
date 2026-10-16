@@ -19,6 +19,7 @@ import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.model.UnavailableModelSetupService
 import org.deer.borrowai.data.service.recording.AudioRecorder
+import org.deer.borrowai.data.service.recording.DeletedMemoryPurger
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
@@ -119,6 +120,11 @@ class AppServices private constructor(
                     epochClock = epochClock,
                 )
                 RecordingReconciler(
+                    memoryService = memories,
+                    recordingsRoot = recordingsRoot,
+                    isRecording = { mediaSession.isBusy },
+                ).start(scope = graphScope)
+                DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },

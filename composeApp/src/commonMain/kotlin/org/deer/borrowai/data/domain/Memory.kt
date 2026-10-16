@@ -7,6 +7,9 @@ package org.deer.borrowai.data.domain
  * directory (for example `recordings/abc.m4a`). It is never an absolute path: iOS changes the
  * app container path across reinstalls and updates, so the platform layer resolves the relative
  * path at playback time.
+ *
+ * A [deleted] memory is hidden from the UI. Its audio file and record are removed later by a purge
+ * job, so the reconciler does not mistake the leftover recording for an unsaved one.
  */
 data class Memory(
     val id: String,
@@ -15,6 +18,7 @@ data class Memory(
     val summary: String,
     val transcription: String,
     val recordingPath: String? = null,
+    val deleted: Boolean = false,
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)

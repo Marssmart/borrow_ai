@@ -16,12 +16,18 @@ class InMemoryDemoMemoryService(
     private val mutex = Mutex()
     private val records = initialMemories.associateByTo(mutableMapOf(), Memory::id)
     private var nextGeneratedId = 1L
-    private val memories = MutableStateFlow(records.values.sortedByDescending(Memory::createdAtEpochMillis))
+    private val memories = MutableStateFlow(
+        records.values.filterNot(Memory::deleted).sortedByDescending(Memory::createdAtEpochMillis),
+    )
 
     override fun getState(): StateFlow<List<Memory>> = memories
 
     override suspend fun findById(id: String): Memory? = mutex.withLock {
         records[id]
+    }
+
+    override suspend fun findAll(): List<Memory> = mutex.withLock {
+        records.values.toList()
     }
 
     override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
@@ -39,7 +45,7 @@ class InMemoryDemoMemoryService(
     }
 
     override suspend fun update(id: String, draft: MemoryDraft): Memory? = mutex.withLock {
-        val existing = records[id] ?: return@withLock null
+        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock null
         val updated = existing.copy(
             title = draft.title,
             summary = draft.summary,
@@ -52,7 +58,15 @@ class InMemoryDemoMemoryService(
     }
 
     override suspend fun delete(id: String): Boolean = mutex.withLock {
-        if (records.remove(id) == null) return@withLock false
+        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock false
+        records[id] = existing.copy(deleted = true)
+        publishMemories()
+        true
+    }
+
+    override suspend fun purge(id: String): Boolean = mutex.withLock {
+        if (records[id]?.deleted != true) return@withLock false
+        records.remove(id)
         publishMemories()
         true
     }
@@ -65,7 +79,9 @@ class InMemoryDemoMemoryService(
     }
 
     private fun publishMemories() {
-        memories.value = records.values.sortedByDescending(Memory::createdAtEpochMillis)
+        memories.value = records.values
+            .filterNot(Memory::deleted)
+            .sortedByDescending(Memory::createdAtEpochMillis)
     }
 
     private object DemoMemoryContent {
