@@ -1,6 +1,5 @@
 package org.deer.borrowai
 
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.window.ComposeUIViewController
@@ -19,7 +18,7 @@ fun MainViewController(startupModeFlag: String?): UIViewController = ComposeUIVi
     // Stored files are relative to this root; the container path can change between installs.
     val recordingsRoot = (NSHomeDirectory() + "/Documents").toPath()
     val services by produceState<AppServices?>(initialValue = null, startupModeFlag) {
-        value = AppServices.create(
+        val created = AppServices.create(
             startupModeFlag = startupModeFlag,
             epochClock = EpochClock {
                 (NSDate().timeIntervalSince1970 * MILLIS_PER_SECOND).toLong()
@@ -29,9 +28,9 @@ fun MainViewController(startupModeFlag: String?): UIViewController = ComposeUIVi
             audioPlayer = IosAudioPlayer(),
             microphonePermission = IosMicrophonePermission(),
         )
-    }
-    DisposableEffect(services) {
-        onDispose { services?.close() }
+        value = created
+        // Tied to the producer, so the graph closes even if the view leaves composition before a new one is made.
+        awaitDispose { created.close() }
     }
     services?.let { App(it) }
 }

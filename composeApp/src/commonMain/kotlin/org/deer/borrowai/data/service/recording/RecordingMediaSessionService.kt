@@ -2,8 +2,13 @@ package org.deer.borrowai.data.service.recording
 
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okio.FileSystem
+import okio.IOException
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
@@ -53,17 +59,20 @@ class RecordingMediaSessionService(
     private val closed = MutableStateFlow(false)
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
+    private val pendingSaves = MutableStateFlow<List<Job>>(emptyList())
     private var activeRecording: ActiveRecording? = null
 
     override val state: StateFlow<MediaSessionState> = mutableState.state
     override val idleTranscription: StateFlow<String> = mutableIdleTranscription.asStateFlow()
+    override val playbackAvailable: Boolean = true
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()
         if (mutableState.value !is MediaSessionState.Idle) return
         pendingStartJob.launch {
             if (!microphonePermission.request()) return@launch
-            beginRecording(holdToRecord)
+            currentCoroutineContext().ensureActive()
+            beginRecording(holdToRecord) { coroutineContext.isActive }
         }
     }
 
@@ -88,7 +97,6 @@ class RecordingMediaSessionService(
             PlaybackRequestResult.ConfirmationRequired(target)
         } ?: startPlayback(target, absolutePath)
     }
-
     override fun confirmPendingPlayback(): PlaybackRequestResult {
         ensureOpen()
         val target = mutableState.ifRecording { it.pendingPlayback }
@@ -118,6 +126,13 @@ class RecordingMediaSessionService(
     override fun stopPlayback() {
         ensureOpen()
         stopActivePlayback()
+    }
+
+    override suspend fun awaitPendingWork() {
+        while (true) {
+            val job = pendingSaves.value.firstOrNull() ?: return
+            job.join()
+        }
     }
 
     override fun close() {
@@ -185,21 +200,33 @@ class RecordingMediaSessionService(
         }
     }
 
-    private fun beginRecording(holdToRecord: Boolean) {
-        if (mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
+    private fun beginRecording(holdToRecord: Boolean, isStartStillWanted: () -> Boolean) {
+        if (closed.value || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
         val absolutePath = recordingsRoot / relativePath
-        absolutePath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
+        val temporaryPath = recordingsRoot / temporaryRecordingRelativePath(recordingId)
         try {
-            recorder.start(absolutePath.toString())
+            temporaryPath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
+            recorder.start(temporaryPath.toString())
+        } catch (exception: IOException) {
+            fileSystem.delete(temporaryPath, mustExist = false)
+            return
         } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(absolutePath, mustExist = false)
+            fileSystem.delete(temporaryPath, mustExist = false)
+            return
+        }
+        // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
+        if (closed.value || !isStartStillWanted()) {
+            runCatching { recorder.stop() }
+            fileSystem.delete(temporaryPath, mustExist = false)
             return
         }
         activeRecording = ActiveRecording(
+            recordingId = recordingId,
             relativePath = relativePath,
             absolutePath = absolutePath,
+            temporaryPath = temporaryPath,
             startedAtMillis = epochClock.nowEpochMillis(),
         )
         mutableState.transitionRecording(holdToRecord = holdToRecord)
@@ -216,24 +243,50 @@ class RecordingMediaSessionService(
         tickerJob.cancel()
         mutableState.transitionIdle()
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
+        // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
+        // finished file whose memory is still being written.
+        val save = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                memoryService.create(
+                    draft = MemoryDraft(
+                        title = "",
+                        summary = "",
+                        transcription = "",
+                        recordingPath = recording.relativePath,
+                    ),
+                    id = recording.recordingId,
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                // The audio stays on disk. RecordingReconciler pairs it with a memory on its next sweep.
+            }
+        }
+        pendingSaves.update { it + save }
+        save.invokeOnCompletion { pendingSaves.update { jobs -> jobs - save } }
         try {
             recorder.stop()
+            fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
         } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(recording.absolutePath, mustExist = false)
+            discardUnfinishedRecording(recording, save)
+            return null
+        } catch (exception: IOException) {
+            discardUnfinishedRecording(recording, save)
             return null
         }
-        scope.launch {
-            memoryService.create(
-                MemoryDraft(
-                    title = "",
-                    summary = "",
-                    transcription = "",
-                    recordingPath = recording.relativePath,
-                ),
-            )
-        }
+        save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
+
+    private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
+        save.cancel()
+        fileSystem.delete(recording.temporaryPath, mustExist = false)
+        fileSystem.delete(recording.absolutePath, mustExist = false)
+    }
+
+    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. */
+    val isBusy: Boolean
+        get() = activeRecording != null || pendingSaves.value.isNotEmpty() || mutableState.value !is MediaSessionState.Idle
 
     private fun startTicker() {
         tickerJob.launch {
@@ -253,8 +306,10 @@ class RecordingMediaSessionService(
     }
 
     private class ActiveRecording(
+        val recordingId: String,
         val relativePath: String,
         val absolutePath: Path,
+        val temporaryPath: Path,
         val startedAtMillis: Long,
     )
 

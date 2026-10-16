@@ -15,6 +15,8 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
         file.parentFile?.mkdirs()
         val mediaRecorder = createMediaRecorder()
         try {
+            // Start the foreground service before capture so it keeps running after the app is minimized.
+            MicrophoneForegroundService.start(context)
             mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -25,6 +27,7 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             mediaRecorder.start()
         } catch (exception: Exception) {
             mediaRecorder.release()
+            MicrophoneForegroundService.stop(context)
             throw RecordingUnavailableException("Could not start microphone capture", exception)
         }
         recorder = mediaRecorder
@@ -40,6 +43,7 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             throw RecordingUnavailableException("Could not finalize recording", exception)
         } finally {
             mediaRecorder.release()
+            MicrophoneForegroundService.stop(context)
         }
     }
 

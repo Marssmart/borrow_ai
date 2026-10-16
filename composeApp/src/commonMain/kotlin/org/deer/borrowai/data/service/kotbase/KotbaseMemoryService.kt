@@ -38,9 +38,9 @@ class KotbaseMemoryService private constructor(
         database.getDocument(id)?.toMemory()
     }
 
-    override suspend fun create(draft: MemoryDraft): Memory = mutex.withLock {
+    override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
         val memory = Memory(
-            id = idGenerator(),
+            id = id ?: idGenerator(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
             title = draft.title,
             summary = draft.summary,
@@ -55,6 +55,7 @@ class KotbaseMemoryService private constructor(
 
     override suspend fun update(id: String, draft: MemoryDraft): Memory? = mutex.withLock {
         val existing = withContext(Dispatchers.Default) { database.getDocument(id)?.toMemory() }
+            ?.takeIf { !it.deleted }
             ?: return@withLock null
         val updated = existing.copy(
             title = draft.title,
@@ -70,16 +71,34 @@ class KotbaseMemoryService private constructor(
 
     override suspend fun delete(id: String): Boolean = mutex.withLock {
         withContext(NonCancellable) {
-            val deleted = withContext(Dispatchers.Default) {
+            val marked = withContext(Dispatchers.Default) {
+                val memory = database.getDocument(id)?.toMemory()
+                    ?.takeIf { !it.deleted }
+                    ?: return@withContext false
+                database.save(memory.copy(deleted = true).toDocument())
+                true
+            }
+            if (marked) publishMemories()
+            marked
+        }
+    }
+
+    override suspend fun purge(id: String): Boolean = mutex.withLock {
+        withContext(NonCancellable) {
+            val purged = withContext(Dispatchers.Default) {
                 val document = database.getDocument(id)
-                    ?.takeIf { it.getString(KEY_TYPE) == TYPE_MEMORY }
+                    ?.takeIf { it.getString(KEY_TYPE) == TYPE_MEMORY && it.getBoolean(COLUMN_DELETED) }
                     ?: return@withContext false
                 database.delete(document)
                 true
             }
-            if (deleted) publishMemories()
-            deleted
+            if (purged) publishMemories()
+            purged
         }
+    }
+
+    override suspend fun findAll(): List<Memory> = withContext(Dispatchers.Default) {
+        readAll()
     }
 
     /**
@@ -92,10 +111,10 @@ class KotbaseMemoryService private constructor(
     }
 
     private suspend fun publishMemories() {
-        memories.value = loadAll()
+        memories.value = withContext(Dispatchers.Default) { readAll() }.filterNot(Memory::deleted)
     }
 
-    private suspend fun loadAll(): List<Memory> = withContext(Dispatchers.Default) {
+    private fun readAll(): List<Memory> {
         val query = QueryBuilder
             .select(
                 SelectResult.expression(Meta.id).`as`(COLUMN_ID),
@@ -104,12 +123,13 @@ class KotbaseMemoryService private constructor(
                 SelectResult.property(COLUMN_SUMMARY),
                 SelectResult.property(COLUMN_TRANSCRIPTION),
                 SelectResult.property(COLUMN_RECORDING_PATH),
+                SelectResult.property(COLUMN_DELETED),
             )
             .from(DataSource.database(database))
             .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
             .orderBy(Ordering.property(COLUMN_CREATED_AT).descending())
 
-        query.execute().allResults().map { row ->
+        return query.execute().allResults().map { row ->
             Memory(
                 id = row.getString(COLUMN_ID)!!,
                 createdAtEpochMillis = row.getLong(COLUMN_CREATED_AT),
@@ -117,6 +137,7 @@ class KotbaseMemoryService private constructor(
                 summary = row.getString(COLUMN_SUMMARY).orEmpty(),
                 transcription = row.getString(COLUMN_TRANSCRIPTION).orEmpty(),
                 recordingPath = row.getString(COLUMN_RECORDING_PATH),
+                deleted = row.getBoolean(COLUMN_DELETED),
             )
         }
     }
@@ -128,6 +149,7 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_SUMMARY, summary)
         setString(COLUMN_TRANSCRIPTION, transcription)
         setString(COLUMN_RECORDING_PATH, recordingPath)
+        setBoolean(COLUMN_DELETED, deleted)
     }
 
     private fun Document.toMemory(): Memory? {
@@ -139,6 +161,7 @@ class KotbaseMemoryService private constructor(
             summary = getString(COLUMN_SUMMARY).orEmpty(),
             transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
             recordingPath = getString(COLUMN_RECORDING_PATH),
+            deleted = getBoolean(COLUMN_DELETED),
         )
     }
 
@@ -151,6 +174,7 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_SUMMARY = "summary"
         private const val COLUMN_TRANSCRIPTION = "transcription"
         private const val COLUMN_RECORDING_PATH = "recordingPath"
+        private const val COLUMN_DELETED = "deleted"
 
         /**
          * Opens the memory store on [database]. Existing memories are loaded before the service is

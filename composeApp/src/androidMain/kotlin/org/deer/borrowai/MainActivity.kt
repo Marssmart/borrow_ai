@@ -10,9 +10,9 @@ import androidx.lifecycle.ViewModelProvider
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.domain.EpochClock
-import org.deer.borrowai.data.service.recording.ActivityMicrophonePermission
 import org.deer.borrowai.data.service.recording.AndroidAudioPlayer
 import org.deer.borrowai.data.service.recording.AndroidAudioRecorder
+import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,8 +24,10 @@ class MainActivity : ComponentActivity() {
             } else {
                 null
             }
-        // The permission launcher must be registered before the activity is started.
-        val microphonePermission = ActivityMicrophonePermission.register(this)
+        // The permission outlives recreation, so each activity re-attaches its launcher before use.
+        val microphonePermission = ViewModelProvider(this)[MicrophonePermissionViewModel::class.java]
+            .permission
+            .also { it.attach(this) }
         val viewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(

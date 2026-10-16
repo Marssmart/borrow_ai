@@ -20,6 +20,7 @@ kotlin {
         summary = "BorrowAI shared application"
         homepage = "https://github.com/Marssmart/borrow_ai"
         podfile = project.file("../iosApp/Podfile")
+        version = rootProject.version.toString()
         ios.deploymentTarget = "15.0"
         pod("CouchbaseLite", version = "3.2.4", linkOnly = true)
         framework {

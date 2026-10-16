@@ -14,16 +14,11 @@ import org.deer.borrowai.data.service.RecordingResult
 
 class CaptureUiStateHolderTest {
     @Test
-    fun recordingActionsAreBlockedUntilModelsAreReady() {
+    fun recordingIsAllowedWhileTranscriptionModelIsNotReady() {
         val mediaSession = FakeMediaSessionService()
         val holder = CaptureUiStateHolder(mediaSession)
 
-        holder.toggleRecording()
-        holder.startHoldRecording()
-        assertEquals(0, mediaSession.startCount)
-        assertFalse(holder.uiState.isRecording())
-
-        holder.setModelReady(true)
+        assertTrue(holder.canRecord)
         holder.startHoldRecording()
         assertEquals(1, mediaSession.startCount)
         assertTrue(mediaSession.lastHoldToRecord)
@@ -31,23 +26,57 @@ class CaptureUiStateHolderTest {
     }
 
     @Test
-    fun activeRecordingCanBeStoppedAfterModelReadinessIsRevoked() {
+    fun recordingIsBlockedWhenMediaSessionCannotRecord() {
+        val mediaSession = FakeMediaSessionService(recordingAvailable = false)
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        assertFalse(holder.canRecord)
+        holder.toggleRecording()
+        holder.startHoldRecording()
+        assertEquals(0, mediaSession.startCount)
+        assertFalse(holder.uiState.isRecording())
+    }
+
+    @Test
+    fun holdReleaseWhileNotRecordingCancelsPendingStart() {
         val mediaSession = FakeMediaSessionService()
-        val holder = CaptureUiStateHolder(mediaSession, initiallyModelReady = true)
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        holder.startHoldRecording()
+        holder.stopHoldRecording()
+
+        assertEquals(1, mediaSession.stopCount)
+    }
+
+    @Test
+    fun releaseWithoutHoldPressIsIgnored() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        holder.stopHoldRecording()
+
+        assertEquals(0, mediaSession.stopCount)
+    }
+
+    @Test
+    fun activeRecordingCanBeStoppedFromToggle() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
 
         holder.toggleRecording()
         assertTrue(holder.uiState.isRecording())
 
-        holder.setModelReady(false)
         holder.toggleRecording()
 
         assertEquals(1, mediaSession.stopCount)
         assertFalse(holder.uiState.isRecording())
         holder.toggleRecording()
-        assertEquals(1, mediaSession.startCount)
+        assertEquals(2, mediaSession.startCount)
     }
 
-    private class FakeMediaSessionService : MediaSessionService {
+    private class FakeMediaSessionService(
+        override val recordingAvailable: Boolean = true,
+    ) : MediaSessionService {
         private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
         override val state: StateFlow<MediaSessionState> = mutableState
         override val idleTranscription = MutableStateFlow("")

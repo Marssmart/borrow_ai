@@ -21,26 +21,37 @@ internal class AppServicesViewModel(
     private val recorder: AudioRecorder,
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
+    private val createServices: suspend () -> AppServices = {
+        AppServices.create(
+            startupModeFlag = startupModeFlag,
+            epochClock = epochClock,
+            recordingsRoot = recordingsRoot,
+            recorder = recorder,
+            audioPlayer = audioPlayer,
+            microphonePermission = microphonePermission,
+        )
+    },
 ) : ViewModel() {
     private val servicesState = MutableStateFlow<AppServices?>(null)
+    private var cleared = false
 
     /** Null until the graph is built; REAL mode opens the database asynchronously. */
     val services: StateFlow<AppServices?> = servicesState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            servicesState.value = AppServices.create(
-                startupModeFlag = startupModeFlag,
-                epochClock = epochClock,
-                recordingsRoot = recordingsRoot,
-                recorder = recorder,
-                audioPlayer = audioPlayer,
-                microphonePermission = microphonePermission,
-            )
+            val created = createServices()
+            // Creation can finish after onCleared ran; close it here instead of leaking it.
+            if (cleared) {
+                created.close()
+            } else {
+                servicesState.value = created
+            }
         }
     }
 
     override fun onCleared() {
+        cleared = true
         servicesState.value?.close()
         super.onCleared()
     }

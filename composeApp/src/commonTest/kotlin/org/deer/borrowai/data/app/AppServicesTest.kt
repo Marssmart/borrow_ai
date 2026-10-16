@@ -1,21 +1,81 @@
 package org.deer.borrowai.data.app
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import okio.FileSystem
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
-import org.deer.borrowai.data.service.demo.DemoMediaSessionService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.recording.AudioPlayer
+import org.deer.borrowai.data.service.recording.AudioRecorder
+import org.deer.borrowai.data.service.recording.MicrophonePermission
+import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 
 class AppServicesTest {
+    @BeforeTest
+    fun setMainDispatcher() {
+        Dispatchers.setMain(StandardTestDispatcher())
+    }
+
+    @AfterTest
+    fun resetMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
+    private class NoopAudioPlayer : AudioPlayer {
+        override fun play(absolutePath: String): Long = 0L
+
+        override fun stop() = Unit
+    }
+
+    private class NoopRecorder : AudioRecorder {
+        override fun start(absolutePath: String) = Unit
+        override fun stop() = Unit
+    }
+
+    private class GrantedPermission : MicrophonePermission {
+        override suspend fun request(): Boolean = CompletableDeferred(true).await()
+    }
+
+    private fun demoServices(dispatcher: kotlinx.coroutines.CoroutineDispatcher? = null): AppServices {
+        val root = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-appservices-test"
+        return if (dispatcher == null) {
+            AppServices.createFromStartupFlag(
+                startupModeFlag = "demo",
+                epochClock = EpochClock { 1_800_000_000_000L },
+                recordingsRoot = root,
+                recorder = NoopRecorder(),
+                audioPlayer = NoopAudioPlayer(),
+                microphonePermission = GrantedPermission(),
+            )
+        } else {
+            AppServices.createFromStartupFlag(
+                startupModeFlag = "demo",
+                epochClock = EpochClock { 1_800_000_000_000L },
+                recordingsRoot = root,
+                recorder = NoopRecorder(),
+                audioPlayer = NoopAudioPlayer(),
+                microphonePermission = GrantedPermission(),
+                dispatcher = dispatcher,
+            )
+        }
+    }
+
     @Test
     fun startupFlagSelectsDemoOnlyForDemo() {
         assertEquals(AppMode.DEMO, AppMode.fromStartupFlag(" demo "))
@@ -23,51 +83,49 @@ class AppServicesTest {
         assertEquals(AppMode.REAL, AppMode.fromStartupFlag("invalid"))
         assertEquals(AppMode.REAL, AppMode.fromStartupFlag("real"))
 
-        val services = AppServices.createFromStartupFlag("demo", EpochClock { 1_800_000_000_000L })
+        val services = demoServices()
         assertEquals(AppMode.DEMO, services.mode)
         assertNotNull(services.modelSetup as? DemoModelSetupService)
         assertNotNull(services.memories as? InMemoryDemoMemoryService)
-        assertNotNull(services.mediaSession as? DemoMediaSessionService)
+        assertIs<RecordingMediaSessionService>(services.mediaSession)
+        services.close()
     }
 
     @Test
-    fun realModeFailsInsteadOfFallingBackToDemo() {
-        assertFailsWith<RealServicesUnavailableException> {
-            AppServices.createFromStartupFlag("real", EpochClock { 1_800_000_000_000L })
-        }
-        assertFailsWith<RealServicesUnavailableException> {
-            AppServices.createFromStartupFlag(null, EpochClock { 1_800_000_000_000L })
+    fun realModeFailsInsteadOfFallingBackToDemo() = runTest {
+        val root = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-appservices-test"
+        for (flag in listOf("real", null)) {
+            assertFailsWith<RealServicesUnavailableException> {
+                AppServices.createFromStartupFlag(
+                    startupModeFlag = flag,
+                    epochClock = EpochClock { 1_800_000_000_000L },
+                    recordingsRoot = root,
+                    recorder = NoopRecorder(),
+                    audioPlayer = NoopAudioPlayer(),
+                    microphonePermission = GrantedPermission(),
+                )
+            }
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun closingServiceGraphCancelsMediaSessionWork() = runTest {
-        val services = AppServices.createFromStartupFlag(
-            startupModeFlag = "demo",
-            epochClock = EpochClock { 1_800_000_000_000L },
-            dispatcher = StandardTestDispatcher(testScheduler),
-        )
+    fun closingServiceGraphStopsMediaSessionWork() = runTest {
+        val services = demoServices(StandardTestDispatcher(testScheduler))
 
         services.mediaSession.startRecording()
-        advanceTimeBy(45)
         runCurrent()
-        assertEquals(
-            "T",
-            assertNotNull(services.mediaSession.state.value as? MediaSessionState.Recording)
-                .transcription,
-        )
+        assertIs<MediaSessionState.Recording>(services.mediaSession.state.value)
 
         services.close()
         assertEquals(MediaSessionState.Idle, services.mediaSession.state.value)
-        val stateAfterClose = services.mediaSession.state.value
         advanceTimeBy(1_000)
         runCurrent()
 
-        assertEquals(stateAfterClose, services.mediaSession.state.value)
         assertFailsWith<IllegalStateException> {
             services.mediaSession.startRecording()
         }
+        assertEquals(MediaSessionState.Idle, services.mediaSession.state.value)
         services.close()
     }
 }

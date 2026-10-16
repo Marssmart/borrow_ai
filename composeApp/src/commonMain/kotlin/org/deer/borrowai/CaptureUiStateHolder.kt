@@ -10,19 +10,18 @@ import org.deer.borrowai.data.service.MediaSessionState
 
 internal class CaptureUiStateHolder(
     private val mediaSessionService: MediaSessionService,
-    initiallyModelReady: Boolean = false,
 ) {
     val transcriptScrollState = ScrollState(0)
+
+    /** True from a hold press until its release, even if recording has not started yet. */
+    private var holdPressed = false
 
     val uiState = MutableCaptureUiState(
         mediaSessionService.state.value.toUiState(mediaSessionService.idleTranscription.value),
     )
 
-    private var isModelReady = initiallyModelReady
-
-    fun setModelReady(ready: Boolean) {
-        isModelReady = ready
-    }
+    /** Raw recording does not depend on the transcription model being ready. */
+    val canRecord: Boolean get() = mediaSessionService.recordingAvailable
 
     suspend fun observeMediaSession() {
         combine(mediaSessionService.state, mediaSessionService.idleTranscription) { session, idleTranscript ->
@@ -41,19 +40,25 @@ internal class CaptureUiStateHolder(
     }
 
     fun startHoldRecording() {
+        holdPressed = true
         if (!uiState.isRecording()) {
             startRecording(holdToRecord = true)
         }
     }
 
     fun stopHoldRecording() {
-        if (uiState.isRecording() && uiState.isHoldRecording()) {
+        if (!holdPressed) return
+        holdPressed = false
+        if (uiState.isRecording()) {
             stopRecording()
+        } else {
+            // Released while the microphone permission prompt is open: cancel the pending start.
+            mediaSessionService.stopRecording()
         }
     }
 
     private fun startRecording(holdToRecord: Boolean) {
-        if (!isModelReady) return
+        if (!canRecord) return
         mediaSessionService.startRecording(holdToRecord)
         bindMediaSession(
             mediaSessionService.state.value,

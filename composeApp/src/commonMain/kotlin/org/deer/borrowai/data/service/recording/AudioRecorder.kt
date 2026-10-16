@@ -22,3 +22,12 @@ internal const val RECORDING_EXTENSION = "m4a"
 /** Relative path stored on a memory. Resolved against the app-owned recordings root on each device. */
 fun recordingRelativePath(recordingId: String): String =
     "$RECORDINGS_DIRECTORY/$recordingId.$RECORDING_EXTENSION"
+
+/**
+ * Relative path a capture is written to while it is in progress. It is promoted to [recordingRelativePath] only
+ * after the recorder finalizes the file, so an unfinished file never looks like a finished recording.
+ */
+internal fun temporaryRecordingRelativePath(recordingId: String): String =
+    "$RECORDINGS_DIRECTORY/$TEMPORARY_RECORDING_PREFIX$recordingId.$RECORDING_EXTENSION"
+
+internal const val TEMPORARY_RECORDING_PREFIX = "temp_"

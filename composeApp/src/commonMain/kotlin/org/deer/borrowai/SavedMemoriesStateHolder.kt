@@ -47,6 +47,9 @@ internal class SavedMemoriesStateHolder(
 
     val uiState = mutableUiState.asStateFlow()
 
+    /** Playback buttons are disabled when the media service cannot play recorded media. */
+    val playbackAvailable: Boolean get() = mediaSessionService.playbackAvailable
+
     init {
         scope.launch {
             memoryService.getState().collect { memories ->
@@ -98,6 +101,7 @@ internal class SavedMemoriesStateHolder(
     }
 
     fun togglePlayback(memoryId: String, content: PlaybackContent) {
+        if (!playbackAvailable) return
         val target = PlaybackTarget(memoryId = memoryId, content = content)
         val currentPlayback = uiState.value.mediaSessionState as? MediaSessionState.Playing
         if (currentPlayback?.target == target) {
