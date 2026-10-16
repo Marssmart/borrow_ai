@@ -5,6 +5,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import okio.FileSystem
+import okio.ForwardingFileSystem
+import okio.IOException
+import okio.Path
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
@@ -57,7 +61,7 @@ class RecordingMediaSessionServiceTest {
         recorder: AudioRecorder,
         permission: MicrophonePermission,
         memories: MemoryService,
-        fileSystem: FakeFileSystem,
+        fileSystem: FileSystem,
         scope: CoroutineScope,
     ) = RecordingMediaSessionService(
         memoryService = memories,
@@ -69,6 +73,32 @@ class RecordingMediaSessionServiceTest {
         fileSystem = fileSystem,
         idGenerator = { "rec-1" },
     )
+
+    @Test
+    fun recordingStaysAvailableWithoutModelAndPlaybackIsUnavailable() = runTest {
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories(), FakeFileSystem(), backgroundScope)
+
+        assertTrue(service.recordingAvailable)
+        assertFalse(service.playbackAvailable)
+    }
+
+    @Test
+    fun unusableRecordingsFolderKeepsRecorderStopped() = runTest {
+        val recorder = FakeRecorder()
+        val failingFs = object : ForwardingFileSystem(FakeFileSystem()) {
+            override fun createDirectory(dir: Path, mustCreate: Boolean) {
+                throw IOException("recordings folder is unusable")
+            }
+        }
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories(), failingFs, backgroundScope)
+
+        service.startRecording(holdToRecord = true)
+        runCurrent()
+
+        assertTrue(recorder.startedPaths.isEmpty())
+        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertNull(service.stopRecording())
+    }
 
     @Test
     fun grantedPermissionStartsRecordingIntoRecordingsFolder() = runTest {
