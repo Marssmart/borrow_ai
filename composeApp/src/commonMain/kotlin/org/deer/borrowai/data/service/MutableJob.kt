@@ -1,4 +1,4 @@
-package org.deer.borrowai.data.service.demo
+package org.deer.borrowai.data.service
 
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi

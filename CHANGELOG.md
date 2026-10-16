@@ -2,6 +2,15 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [Unreleased]
+
+## [1.0.16]
+
+- Removed demo mode: the `BORROW_AI_DATA_MODE` flag, `AppMode`, the demo services, the demo badge, and their tests.
+- The app graph now always uses the real services. `DownloadingModelSetupService` is wired with a per-platform `ModelDevice` (RAM and network policy) and models stored under the app root.
+- Added `ACCESS_NETWORK_STATE` on Android.
+- Updated Android and iOS versioning to 1.0.16 (build 17).
+
 ## [1.0.15]
 
 - Added real playback of the raw recording for each saved memory. The Play recording button is always shown; Transcription and Summary buttons appear only when that text exists.

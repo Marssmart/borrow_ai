@@ -2,10 +2,15 @@ package org.deer.borrowai
 
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import kotbase.Database
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -22,6 +27,8 @@ import kotlin.test.assertSame
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.model.ModelDevice
+import org.deer.borrowai.data.service.model.ModelNetworkPolicy
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
@@ -42,7 +49,7 @@ class AppServicesViewModelTest {
     fun serviceGraphSurvivesProviderRecreationAndClosesWithItsStore() {
         val store = ViewModelStore()
         val factory = AppServicesViewModelFactory(
-            startupModeFlag = "demo",
+            modelDevice = FakeModelDevice(),
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
             recorder = FakeRecorder(),
@@ -71,7 +78,7 @@ class AppServicesViewModelTest {
         val gate = CompletableDeferred<AppServices>()
         val store = ViewModelStore()
         val viewModel = AppServicesViewModel(
-            startupModeFlag = "demo",
+            modelDevice = FakeModelDevice(),
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
             recorder = FakeRecorder(),
@@ -83,14 +90,17 @@ class AppServicesViewModelTest {
         store.put("services", viewModel)
 
         store.clear()
-        val late = AppServices.createFromStartupFlag(
-            startupModeFlag = "demo",
-            epochClock = EpochClock { 1_800_000_000_000L },
-            recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
-            recorder = FakeRecorder(),
-            audioPlayer = FakeAudioPlayer(),
-            microphonePermission = FakeMicrophonePermission(),
-        )
+        val late = runBlocking {
+            AppServices.createReal(
+                database = Database("borrowai-vm-late-${System.nanoTime()}"),
+                epochClock = EpochClock { 1_800_000_000_000L },
+                recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
+                recorder = FakeRecorder(),
+                audioPlayer = FakeAudioPlayer(),
+                microphonePermission = FakeMicrophonePermission(),
+                modelDevice = FakeModelDevice(),
+            )
+        }
         gate.complete(late)
 
         assertNull(viewModel.services.value)
@@ -112,5 +122,13 @@ class AppServicesViewModelTest {
 
     private class FakeMicrophonePermission : MicrophonePermission {
         override suspend fun request(): Boolean = true
+    }
+
+    private class FakeModelDevice : ModelDevice {
+        override val totalRamBytes: Long = 8L * 1024 * 1024 * 1024
+        private val unmeteredState = MutableStateFlow(false)
+        override val network: ModelNetworkPolicy = object : ModelNetworkPolicy {
+            override val unmetered: StateFlow<Boolean> = unmeteredState.asStateFlow()
+        }
     }
 }

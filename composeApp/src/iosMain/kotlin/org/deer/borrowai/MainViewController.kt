@@ -6,6 +6,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.model.IosModelDevice
 import org.deer.borrowai.data.service.recording.IosAudioPlayer
 import org.deer.borrowai.data.service.recording.IosAudioRecorder
 import org.deer.borrowai.data.service.recording.IosMicrophonePermission
@@ -14,12 +15,12 @@ import platform.Foundation.NSHomeDirectory
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIViewController
 
-fun MainViewController(startupModeFlag: String?): UIViewController = ComposeUIViewController {
+fun MainViewController(): UIViewController = ComposeUIViewController {
     // Stored files are relative to this root; the container path can change between installs.
     val recordingsRoot = (NSHomeDirectory() + "/Documents").toPath()
-    val services by produceState<AppServices?>(initialValue = null, startupModeFlag) {
+    val services by produceState<AppServices?>(initialValue = null) {
         val created = AppServices.create(
-            startupModeFlag = startupModeFlag,
+            modelDevice = IosModelDevice(),
             epochClock = EpochClock {
                 (NSDate().timeIntervalSince1970 * MILLIS_PER_SECOND).toLong()
             },

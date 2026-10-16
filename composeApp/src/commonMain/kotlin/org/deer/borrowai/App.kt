@@ -2,18 +2,12 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,15 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.app.AppServices
-import borrowai.composeapp.generated.resources.Res
-import borrowai.composeapp.generated.resources.app_demo_data_indicator
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.stringResource
 
 private val BorrowColors = lightColorScheme(
     primary = Color(0xFF14757B),
@@ -136,41 +123,7 @@ fun App(services: AppServices) {
                         )
                     }
                 }
-                if (services.mode == AppMode.DEMO) {
-                    DemoDataBadge(
-                        modifier = Modifier.align(
-                            if (appUiState.isMemoryDetailVisible) Alignment.TopCenter else Alignment.TopEnd,
-                        ),
-                    )
-                }
             }
         }
-    }
-}
-
-@Composable
-private fun DemoDataBadge(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(
-                top = AppShellStateHolder.DEMO_BADGE_TOP_PADDING,
-                end = AppShellStateHolder.DEMO_BADGE_END_PADDING,
-            ),
-        shape = RoundedCornerShape(AppShellStateHolder.DEMO_BADGE_CORNER_RADIUS),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(
-            alpha = AppShellStateHolder.DEMO_BADGE_ALPHA,
-        ),
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-        Text(
-            stringResource(Res.string.app_demo_data_indicator),
-            modifier = Modifier.padding(
-                horizontal = AppShellStateHolder.DEMO_BADGE_HORIZONTAL_PADDING,
-                vertical = AppShellStateHolder.DEMO_BADGE_VERTICAL_PADDING,
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = AppShellStateHolder.DEMO_BADGE_LETTER_SPACING,
-        )
     }
 }

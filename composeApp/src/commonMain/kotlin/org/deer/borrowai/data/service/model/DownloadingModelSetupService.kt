@@ -13,7 +13,7 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.MutableModelSetupState
-import org.deer.borrowai.data.service.demo.MutableJob
+import org.deer.borrowai.data.service.MutableJob
 
 /**
  * Chooses the tier models from the device RAM and downloads them to static files.

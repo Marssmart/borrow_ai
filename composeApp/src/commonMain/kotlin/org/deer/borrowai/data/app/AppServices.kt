@@ -15,10 +15,13 @@ import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
-import org.deer.borrowai.data.service.demo.DemoModelSetupService
-import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
-import org.deer.borrowai.data.service.model.UnavailableModelSetupService
+import org.deer.borrowai.data.service.model.DownloadingModelSetupService
+import org.deer.borrowai.data.service.model.KtorModelDownloader
+import org.deer.borrowai.data.service.model.ModelDevice
+import org.deer.borrowai.data.service.model.ModelFileStore
+import org.deer.borrowai.data.service.model.createPlatformModelHttpClient
+import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.DeletedMemoryPurger
@@ -27,7 +30,6 @@ import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
 
 class AppServices private constructor(
-    val mode: AppMode,
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
@@ -69,40 +71,29 @@ class AppServices private constructor(
     }
 
     companion object {
-        private const val DEMO_RECORDINGS_ROOT_DIRECTORY = "demo"
+        private const val DATABASE_NAME = "borrow-ai"
 
         /**
-         * Picks the graph for [startupModeFlag]. REAL opens the Kotbase database named [databaseName]
-         * in the platform's default directory.
+         * Builds the production graph, opening the Kotbase database named [databaseName] in the
+         * platform's default directory. Models live under [recordingsRoot] next to the recordings.
          */
         suspend fun create(
-            startupModeFlag: String?,
             epochClock: EpochClock,
             recordingsRoot: Path,
             recorder: AudioRecorder,
             audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
+            modelDevice: ModelDevice,
             databaseName: String = DATABASE_NAME,
-        ): AppServices = when (AppMode.fromStartupFlag(startupModeFlag)) {
-            AppMode.DEMO -> createFromStartupFlag(
-                startupModeFlag = startupModeFlag,
-                epochClock = epochClock,
-                recordingsRoot = recordingsRoot,
-                recorder = recorder,
-                audioPlayer = audioPlayer,
-                microphonePermission = microphonePermission,
-            )
-            AppMode.REAL -> createReal(
-                database = Database(databaseName),
-                recordingsRoot = recordingsRoot,
-                recorder = recorder,
-                audioPlayer = audioPlayer,
-                microphonePermission = microphonePermission,
-                epochClock = epochClock,
-            )
-        }
-
-        private const val DATABASE_NAME = "borrow-ai"
+        ): AppServices = createReal(
+            database = Database(databaseName),
+            recordingsRoot = recordingsRoot,
+            recorder = recorder,
+            audioPlayer = audioPlayer,
+            microphonePermission = microphonePermission,
+            modelDevice = modelDevice,
+            epochClock = epochClock,
+        )
 
         /**
          * Builds the production graph on an already-open [database]. Ownership of [database] passes
@@ -114,6 +105,7 @@ class AppServices private constructor(
             recorder: AudioRecorder,
             audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
+            modelDevice: ModelDevice,
             epochClock: EpochClock,
             dispatcher: CoroutineDispatcher = Dispatchers.Default,
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
@@ -123,6 +115,13 @@ class AppServices private constructor(
                 val graphScope = CoroutineScope(graphJob + dispatcher)
                 val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
                 val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock)
+                val modelSetup = DownloadingModelSetupService(
+                    totalRamBytes = modelDevice.totalRamBytes,
+                    store = ModelFileStore(modelDirectoryUnder(recordingsRoot.toString())),
+                    downloader = KtorModelDownloader(createPlatformModelHttpClient()),
+                    network = modelDevice.network,
+                    scope = graphScope,
+                )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
                     recorder = recorder,
@@ -144,8 +143,7 @@ class AppServices private constructor(
                     isRecording = { mediaSession.isBusy },
                 ).start(scope = graphScope)
                 return AppServices(
-                    mode = AppMode.REAL,
-                    modelSetup = UnavailableModelSetupService(),
+                    modelSetup = modelSetup,
                     memories = memories,
                     mediaSession = mediaSession,
                     graphJob = graphJob,
@@ -159,71 +157,5 @@ class AppServices private constructor(
                 throw failure
             }
         }
-
-        /**
-         * Demo graph: in-memory memories and a model stub, but the media session is the real
-         * [RecordingMediaSessionService] writing to [recordingsRoot] through [recorder].
-         */
-        fun createFromStartupFlag(
-            startupModeFlag: String?,
-            epochClock: EpochClock,
-            recordingsRoot: Path,
-            recorder: AudioRecorder,
-            audioPlayer: AudioPlayer,
-            microphonePermission: MicrophonePermission,
-        ): AppServices = createFromStartupFlag(
-            startupModeFlag = startupModeFlag,
-            epochClock = epochClock,
-            recordingsRoot = recordingsRoot,
-            recorder = recorder,
-            audioPlayer = audioPlayer,
-            microphonePermission = microphonePermission,
-            dispatcher = Dispatchers.Default,
-        )
-
-        internal fun createFromStartupFlag(
-            startupModeFlag: String?,
-            epochClock: EpochClock,
-            recordingsRoot: Path,
-            recorder: AudioRecorder,
-            audioPlayer: AudioPlayer,
-            microphonePermission: MicrophonePermission,
-            dispatcher: CoroutineDispatcher,
-            mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-        ): AppServices {
-            val mode = AppMode.fromStartupFlag(startupModeFlag)
-            return when (mode) {
-                AppMode.DEMO -> {
-                    val graphJob = SupervisorJob()
-                    val graphScope = CoroutineScope(graphJob + dispatcher)
-                    val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
-                    val memories = InMemoryDemoMemoryService(epochClock = epochClock)
-                    AppServices(
-                        mode = mode,
-                        modelSetup = DemoModelSetupService(),
-                        memories = memories,
-                        mediaSession = RecordingMediaSessionService(
-                            memoryService = memories,
-                            recorder = recorder,
-                            audioPlayer = audioPlayer,
-                            microphonePermission = microphonePermission,
-                            // Demo audio lives under its own root so REAL reconciliation,
-                            // which scans `<root>/recordings`, never adopts it.
-                            recordingsRoot = recordingsRoot / DEMO_RECORDINGS_ROOT_DIRECTORY,
-                            scope = mediaScope,
-                            epochClock = epochClock,
-                        ),
-                        graphJob = graphJob,
-                        closeScope = graphScope,
-                    )
-                }
-
-                AppMode.REAL -> throw RealServicesUnavailableException()
-            }
-        }
     }
 }
-
-class RealServicesUnavailableException : IllegalStateException(
-    "Real mode was requested, but production data services have not been implemented.",
-)

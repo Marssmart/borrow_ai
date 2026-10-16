@@ -1,4 +1,4 @@
-package org.deer.borrowai.data.service.demo
+package org.deer.borrowai.data.service
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -7,10 +7,9 @@ import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
-import org.deer.borrowai.data.service.MemoryService
 
-class InMemoryDemoMemoryService(
-    initialMemories: List<Memory> = DemoMemoryContent.memories,
+class FakeMemoryService(
+    initialMemories: List<Memory> = emptyList(),
     private val epochClock: EpochClock,
 ) : MemoryService {
     private val mutex = Mutex()
@@ -73,7 +72,7 @@ class InMemoryDemoMemoryService(
 
     private fun nextId(): String {
         while (true) {
-            val id = "demo-memory-${nextGeneratedId++}"
+            val id = "memory-${nextGeneratedId++}"
             if (id !in records) return id
         }
     }
@@ -82,42 +81,5 @@ class InMemoryDemoMemoryService(
         memories.value = records.values
             .filterNot(Memory::deleted)
             .sortedByDescending(Memory::createdAtEpochMillis)
-    }
-
-    private object DemoMemoryContent {
-        val memories = listOf(
-            Memory(
-                id = "release-ideas",
-                createdAtEpochMillis = 1_791_718_800_000L,
-                title = "Ideas for the first release",
-                summary = "Keep the initial experience focused on recording, a readable transcript, and a short useful summary.",
-                transcription = "For the first release, keep the capture experience clear and direct. Show the transcript while speaking, " +
-                    "then make the finished note easy to scan. We can add more organization after the basic flow feels good.",
-            ),
-            Memory(
-                id = "weekend-plan",
-                createdAtEpochMillis = 1_791_713_100_000L,
-                title = "Weekend trip checklist",
-                summary = "Pack the charger, check the train time, and remember to bring a light jacket for the evening.",
-                transcription = "Check the train departure before leaving home. Pack the phone charger, headphones, and the small notebook. " +
-                    "The weather may cool down later, so bring a light jacket too.",
-            ),
-            Memory(
-                id = "reading-notes",
-                createdAtEpochMillis = 1_791_656_700_000L,
-                title = "Reading notes: small habits",
-                summary = "Small routines are easier to maintain when they are attached to an existing daily habit.",
-                transcription = "A useful routine should be small enough to repeat on a busy day. Attach a new action to something that " +
-                    "already happens, then review it after a week instead of trying to change everything at once.",
-            ),
-            Memory(
-                id = "team-review",
-                createdAtEpochMillis = 1_791_555_000_000L,
-                title = "Questions for the team review",
-                summary = "Ask which part of the prototype needs clarification and what should be tested next.",
-                transcription = "During the review, ask where the prototype feels unclear and which task should be tested next. " +
-                    "Write down any assumptions that need confirmation before making the next design pass.",
-            ),
-        )
     }
 }

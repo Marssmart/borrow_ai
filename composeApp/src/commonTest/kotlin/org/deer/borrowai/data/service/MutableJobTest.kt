@@ -1,4 +1,4 @@
-package org.deer.borrowai.data.service.demo
+package org.deer.borrowai.data.service
 
 import kotlin.coroutines.coroutineContext
 import kotlin.test.Test
