@@ -115,6 +115,27 @@ class DeletedMemoryPurgerTest {
     }
 
     @Test
+    fun audioOrphanedByUpdateIsRemovedBeforeReconcileCanRecreateMemory() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("abc.m4a")
+        val memories = memories()
+        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
+        memories.update("abc", MemoryDraft("edited", "", ""))
+        memories.delete("abc")
+
+        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertFalse(fs.exists(recordings / "abc.m4a"))
+        RecordingReconciler(
+            memoryService = memories,
+            recordingsRoot = root,
+            isRecording = { false },
+            epochClock = EpochClock { 1_800_000_000_000L },
+            fileSystem = fs,
+        ).reconcile()
+        assertNull(memories.findById("abc"))
+    }
+
+    @Test
     fun failedAudioRemovalKeepsRecordForRetry() = runTest {
         val base = FakeFileSystem()
         base.addRecording("abc.m4a")

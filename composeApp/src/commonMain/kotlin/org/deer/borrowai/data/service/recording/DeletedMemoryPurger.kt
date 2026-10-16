@@ -42,9 +42,11 @@ class DeletedMemoryPurger(
             if (isRecording()) break
             if (!memory.deleted) continue
             try {
-                val recordingPath = memory.recordingPath
-                if (recordingPath != null && recordingPath !in activePaths) {
-                    val file = recordingsRoot / recordingPath
+                // Updates can clear or replace recordingPath, so the audio named after the memory id is also removed.
+                val candidatePaths = setOfNotNull(memory.recordingPath, recordingRelativePath(memory.id))
+                for (relativePath in candidatePaths) {
+                    if (relativePath in activePaths) continue
+                    val file = recordingsRoot / relativePath
                     if (fileSystem.exists(file)) fileSystem.delete(file)
                 }
                 if (memoryService.purge(memory.id)) purged++
