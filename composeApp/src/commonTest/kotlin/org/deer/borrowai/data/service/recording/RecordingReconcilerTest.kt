@@ -71,6 +71,28 @@ class RecordingReconcilerTest {
     }
 
     @Test
+    fun deletedMemoryIsNotRecreatedFromItsRecording() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("abc")
+        val memories = memories()
+        val memory = memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
+        memories.delete(memory.id)
+
+        assertEquals(0, reconciler(memories, fs).reconcile())
+        assertEquals(true, memories.findById("abc")?.deleted)
+    }
+
+    @Test
+    fun temporaryRecordingIsNotImported() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("temp_abc")
+        val memories = memories()
+
+        assertEquals(0, reconciler(memories, fs).reconcile())
+        assertNull(memories.findById("temp_abc"))
+    }
+
+    @Test
     fun sweepSkipsWhileRecording() = runTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
