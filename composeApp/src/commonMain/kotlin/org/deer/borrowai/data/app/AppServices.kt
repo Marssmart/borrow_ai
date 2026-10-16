@@ -121,7 +121,7 @@ class AppServices private constructor(
                 RecordingReconciler(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
-                    isRecording = { mediaSession.state.value !is MediaSessionState.Idle },
+                    isRecording = { mediaSession.isBusy },
                 ).start(scope = graphScope)
                 return AppServices(
                     mode = AppMode.REAL,

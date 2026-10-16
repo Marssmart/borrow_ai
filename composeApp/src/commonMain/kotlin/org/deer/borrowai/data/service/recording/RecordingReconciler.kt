@@ -36,10 +36,14 @@ class RecordingReconciler(
             if (isRecording()) break
             val name = file.name
             if (!name.endsWith(".$RECORDING_EXTENSION")) continue
+            // Unfinished captures are written under a temporary prefix until they are finalized.
+            if (name.startsWith(TEMPORARY_RECORDING_PREFIX)) continue
             val id = name.removeSuffix(".$RECORDING_EXTENSION")
             val relativePath = recordingRelativePath(id)
             if (id in pairedIds || relativePath in pairedPaths) continue
             try {
+                // Re-check, because a save may have completed after the snapshot above was taken.
+                if (memoryService.findById(id) != null) continue
                 memoryService.create(
                     draft = MemoryDraft(
                         title = "",

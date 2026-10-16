@@ -22,7 +22,7 @@ class MicrophoneForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        ensureChannel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ensureChannel()
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -66,9 +66,14 @@ class MicrophoneForegroundService : Service() {
         private const val ACTION_STOP = "org.deer.borrowai.action.STOP_MIC"
 
         fun start(context: Context) {
-            context.startForegroundService(
-                Intent(context, MicrophoneForegroundService::class.java).setAction(ACTION_START),
-            )
+            val intent = Intent(context, MicrophoneForegroundService::class.java).setAction(ACTION_START)
+            // startForegroundService() was added in API 26. Older devices start the service normally and it
+            // promotes itself to the foreground in onStartCommand.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         fun stop(context: Context) {

@@ -34,6 +34,7 @@ class RecordingMediaSessionServiceTest {
     private class FakeRecorder(
         private val failOnStart: Boolean = false,
         private val failOnStop: Boolean = false,
+        private val fileSystem: FileSystem? = null,
     ) : AudioRecorder {
         val startedPaths = mutableListOf<String>()
         var stopCount = 0
@@ -41,6 +42,8 @@ class RecordingMediaSessionServiceTest {
         override fun start(absolutePath: String) {
             if (failOnStart) throw RecordingUnavailableException("no mic")
             startedPaths += absolutePath
+            // Real recorders create the output file on start, so promotion has something to move.
+            fileSystem?.write(absolutePath.toPath()) { writeUtf8("audio") }
         }
 
         override fun stop() {
@@ -111,7 +114,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertTrue(assertIs<MediaSessionState.Recording>(service.state.value).holdToRecord)
-        assertEquals(listOf(recordingFile.toString()), recorder.startedPaths)
+        assertEquals(listOf("/app/files/recordings/temp_rec-1.m4a"), recorder.startedPaths)
         assertTrue(fs.exists("/app/files/recordings".toPath()))
     }
 
@@ -145,9 +148,10 @@ class RecordingMediaSessionServiceTest {
 
     @Test
     fun stopAutoSavesMemoryWithRelativeRecordingPath() = runTest {
-        val recorder = FakeRecorder()
+        val fs = FakeFileSystem()
+        val recorder = FakeRecorder(fileSystem = fs)
         val memories = memories()
-        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, FakeFileSystem(), backgroundScope)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope)
 
         service.startRecording()
         runCurrent()
@@ -221,10 +225,10 @@ class RecordingMediaSessionServiceTest {
     @Test
     fun failedMemorySaveKeepsRecordingFileAndDoesNotThrow() = runTest {
         val fs = FakeFileSystem()
+        val recorder = FakeRecorder(fileSystem = fs)
         val failingMemories = object : MemoryService by memories() {
             override suspend fun create(draft: MemoryDraft, id: String?): Memory = error("disk full")
         }
-        val recorder = FakeRecorder()
         val service = service(recorder, FakePermission(CompletableDeferred(true)), failingMemories, fs, backgroundScope)
 
         service.startRecording()
@@ -247,7 +251,8 @@ class RecordingMediaSessionServiceTest {
                 return delegate.create(draft, id)
             }
         }
-        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), slowMemories, FakeFileSystem(), backgroundScope)
+        val fs = FakeFileSystem()
+        val service = service(FakeRecorder(fileSystem = fs), FakePermission(CompletableDeferred(true)), slowMemories, fs, backgroundScope)
 
         service.startRecording()
         runCurrent()

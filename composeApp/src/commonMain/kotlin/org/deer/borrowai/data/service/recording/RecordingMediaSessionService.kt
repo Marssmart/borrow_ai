@@ -4,6 +4,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -102,20 +103,22 @@ class RecordingMediaSessionService(
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
         val absolutePath = recordingsRoot / relativePath
+        val temporaryPath = recordingsRoot / temporaryRecordingRelativePath(recordingId)
         try {
-            absolutePath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
-            recorder.start(absolutePath.toString())
+            temporaryPath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
+            recorder.start(temporaryPath.toString())
         } catch (exception: IOException) {
-            fileSystem.delete(absolutePath, mustExist = false)
+            fileSystem.delete(temporaryPath, mustExist = false)
             return
         } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(absolutePath, mustExist = false)
+            fileSystem.delete(temporaryPath, mustExist = false)
             return
         }
         activeRecording = ActiveRecording(
             recordingId = recordingId,
             relativePath = relativePath,
             absolutePath = absolutePath,
+            temporaryPath = temporaryPath,
             startedAtMillis = epochClock.nowEpochMillis(),
         )
         mutableState.transitionRecording(holdToRecord = holdToRecord)
@@ -132,13 +135,9 @@ class RecordingMediaSessionService(
         tickerJob.cancel()
         mutableState.transitionIdle()
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
-        try {
-            recorder.stop()
-        } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(recording.absolutePath, mustExist = false)
-            return null
-        }
-        val save = scope.launch {
+        // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
+        // finished file whose memory is still being written.
+        val save = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 memoryService.create(
                     draft = MemoryDraft(
@@ -157,8 +156,29 @@ class RecordingMediaSessionService(
         }
         pendingSaves.update { it + save }
         save.invokeOnCompletion { pendingSaves.update { jobs -> jobs - save } }
+        try {
+            recorder.stop()
+            fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
+        } catch (exception: RecordingUnavailableException) {
+            discardUnfinishedRecording(recording, save)
+            return null
+        } catch (exception: IOException) {
+            discardUnfinishedRecording(recording, save)
+            return null
+        }
+        save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
+
+    private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
+        save.cancel()
+        fileSystem.delete(recording.temporaryPath, mustExist = false)
+        fileSystem.delete(recording.absolutePath, mustExist = false)
+    }
+
+    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. */
+    val isBusy: Boolean
+        get() = activeRecording != null || pendingSaves.value.isNotEmpty() || mutableState.value !is MediaSessionState.Idle
 
     private fun startTicker() {
         tickerJob.launch {
@@ -181,6 +201,7 @@ class RecordingMediaSessionService(
         val recordingId: String,
         val relativePath: String,
         val absolutePath: Path,
+        val temporaryPath: Path,
         val startedAtMillis: Long,
     )
 
