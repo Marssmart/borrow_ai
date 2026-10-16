@@ -2,7 +2,6 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,14 +32,7 @@ internal class AppShellStateHolder(
         const val MAIN_PAGE_COUNT = 2
         const val CAPTURE_PAGE = 0
         const val MEMORIES_PAGE = 1
-        const val DEMO_BADGE_ALPHA = 0.9f
-        val DEMO_BADGE_LETTER_SPACING = 0.5.sp
         val BACKGROUND_TOP_GLOW_SIZE = 380.dp
         val BACKGROUND_BOTTOM_GLOW_SIZE = 440.dp
-        val DEMO_BADGE_TOP_PADDING = 8.dp
-        val DEMO_BADGE_END_PADDING = 12.dp
-        val DEMO_BADGE_CORNER_RADIUS = 50.dp
-        val DEMO_BADGE_HORIZONTAL_PADDING = 10.dp
-        val DEMO_BADGE_VERTICAL_PADDING = 4.dp
     }
 }

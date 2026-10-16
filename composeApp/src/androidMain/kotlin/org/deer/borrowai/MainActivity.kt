@@ -1,6 +1,5 @@
 package org.deer.borrowai
 
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,8 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModelProvider
 import okio.Path.Companion.toPath
-import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.model.AndroidModelDevice
 import org.deer.borrowai.data.service.recording.AndroidAudioPlayer
 import org.deer.borrowai.data.service.recording.AndroidAudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
@@ -17,13 +16,6 @@ import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Home-screen launches cannot carry the demo extra from the IDE run configuration.
-        val startupModeFlag = intent.getStringExtra(DATA_MODE_EXTRA)
-            ?: if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-                AppMode.DEMO.name
-            } else {
-                null
-            }
         // The permission outlives recreation, so each activity re-attaches its launcher before use.
         val microphonePermission = ViewModelProvider(this)[MicrophonePermissionViewModel::class.java]
             .permission
@@ -31,7 +23,8 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(
-                startupModeFlag = startupModeFlag,
+                // Built only when the ViewModel is created, so recreated activities don't register a second callback.
+                createModelDevice = { AndroidModelDevice(applicationContext) },
                 epochClock = EpochClock { System.currentTimeMillis() },
                 // The service stores "recordings/<id>.m4a" relative to this root.
                 recordingsRoot = filesDir.absolutePath.toPath(),
@@ -44,9 +37,5 @@ class MainActivity : ComponentActivity() {
             val services by viewModel.services.collectAsState()
             services?.let { App(it) }
         }
-    }
-
-    private companion object {
-        const val DATA_MODE_EXTRA = "BORROW_AI_DATA_MODE"
     }
 }

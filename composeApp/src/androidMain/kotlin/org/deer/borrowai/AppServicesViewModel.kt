@@ -10,12 +10,13 @@ import kotlinx.coroutines.launch
 import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 
 internal class AppServicesViewModel(
-    private val startupModeFlag: String?,
+    private val modelDevice: ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
@@ -23,7 +24,7 @@ internal class AppServicesViewModel(
     private val microphonePermission: MicrophonePermission,
     private val createServices: suspend () -> AppServices = {
         AppServices.create(
-            startupModeFlag = startupModeFlag,
+            modelDevice = modelDevice,
             epochClock = epochClock,
             recordingsRoot = recordingsRoot,
             recorder = recorder,
@@ -35,7 +36,7 @@ internal class AppServicesViewModel(
     private val servicesState = MutableStateFlow<AppServices?>(null)
     private var cleared = false
 
-    /** Null until the graph is built; REAL mode opens the database asynchronously. */
+    /** Null until the graph is built, because the database opens asynchronously. */
     val services: StateFlow<AppServices?> = servicesState.asStateFlow()
 
     init {
@@ -53,12 +54,13 @@ internal class AppServicesViewModel(
     override fun onCleared() {
         cleared = true
         servicesState.value?.close()
+        modelDevice.close()
         super.onCleared()
     }
 }
 
 internal class AppServicesViewModelFactory(
-    private val startupModeFlag: String?,
+    private val createModelDevice: () -> ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
@@ -71,7 +73,7 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
-                startupModeFlag = startupModeFlag,
+                modelDevice = createModelDevice(),
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,

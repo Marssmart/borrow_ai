@@ -28,7 +28,7 @@ import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackRequestResult
 import org.deer.borrowai.data.service.PlaybackTarget
-import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.FakeMemoryService
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordingMediaSessionServiceTest {
@@ -61,7 +61,7 @@ class RecordingMediaSessionServiceTest {
         override suspend fun request(): Boolean = granted.await()
     }
 
-    private fun memories() = InMemoryDemoMemoryService(
+    private fun memories() = FakeMemoryService(
         initialMemories = emptyList(),
         epochClock = EpochClock { 1_800_000_000_000L },
     )
@@ -620,7 +620,7 @@ class RecordingMediaSessionServiceTest {
         assertEquals(1, player.stopCount)
     }
 
-    private suspend fun savedRecording(memories: InMemoryDemoMemoryService, fs: FakeFileSystem): Memory {
+    private suspend fun savedRecording(memories: FakeMemoryService, fs: FakeFileSystem): Memory {
         val memory = memories.create(
             MemoryDraft(title = "", summary = "", transcription = "", recordingPath = "recordings/clip.m4a"),
         )

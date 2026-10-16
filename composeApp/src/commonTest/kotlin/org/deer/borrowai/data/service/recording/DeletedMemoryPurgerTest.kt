@@ -13,13 +13,13 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.MemoryService
-import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.FakeMemoryService
 
 class DeletedMemoryPurgerTest {
     private val root = "/app/files".toPath()
     private val recordings = "/app/files/recordings".toPath()
 
-    private fun memories() = InMemoryDemoMemoryService(
+    private fun memories() = FakeMemoryService(
         initialMemories = emptyList(),
         epochClock = EpochClock { 1_800_000_000_000L },
     )

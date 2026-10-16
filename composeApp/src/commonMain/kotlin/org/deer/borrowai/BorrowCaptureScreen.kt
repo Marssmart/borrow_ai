@@ -182,7 +182,8 @@ internal fun BorrowCaptureScreen(
                         color = if (uiState.isRecording) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface,
                     )
-                } else if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
+                }
+                if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
                     Button(onClick = onDownloadOverMobileData) {
                         Text(stringResource(Res.string.capture_download_over_mobile_data))
                     }

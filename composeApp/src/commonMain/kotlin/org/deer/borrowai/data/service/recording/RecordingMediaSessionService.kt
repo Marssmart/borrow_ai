@@ -30,7 +30,7 @@ import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackRequestResult
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
-import org.deer.borrowai.data.service.demo.MutableJob
+import org.deer.borrowai.data.service.MutableJob
 
 /**
  * Records microphone audio under [recordingsRoot] and saves a memory when recording stops.
