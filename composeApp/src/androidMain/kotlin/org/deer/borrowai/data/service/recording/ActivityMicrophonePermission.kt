@@ -16,8 +16,9 @@ import kotlinx.coroutines.withContext
  * Requests [Manifest.permission.RECORD_AUDIO] through an [ActivityResultLauncher].
  *
  * The instance outlives activity recreation (see [MicrophonePermissionViewModel]), so every
- * activity must call [attach] from `onCreate` before a request can start. [attach] drops a request
- * left pending by the previous activity (it is reported as denied); the user asks again.
+ * activity must call [attach] from `onCreate` before a request can start. A request launched by a
+ * previous activity stays pending: the activity result registry redelivers its result to the
+ * callback registered under the same key by the new activity, which completes the request.
  */
 class ActivityMicrophonePermission : MicrophonePermission {
     private var context: Context? = null
@@ -25,8 +26,6 @@ class ActivityMicrophonePermission : MicrophonePermission {
     private var pending: CompletableDeferred<Boolean>? = null
 
     fun attach(activity: ComponentActivity) {
-        pending?.complete(false)
-        pending = null
         context = activity.applicationContext
         launcher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),

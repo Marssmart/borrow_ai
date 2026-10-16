@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.recording
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.FileSystem
@@ -234,5 +235,29 @@ class RecordingMediaSessionServiceTest {
 
         assertTrue(fs.exists(recordingFile))
         assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun awaitPendingWorkWaitsForInFlightSave() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val delegate = memories()
+        val slowMemories = object : MemoryService by delegate {
+            override suspend fun create(draft: MemoryDraft, id: String?): Memory {
+                gate.await()
+                return delegate.create(draft, id)
+            }
+        }
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), slowMemories, FakeFileSystem(), backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        service.stopRecording()
+        val waiter = async { service.awaitPendingWork() }
+        runCurrent()
+        assertFalse(waiter.isCompleted)
+
+        gate.complete(Unit)
+        waiter.await()
+        assertEquals(1, delegate.getState().value.size)
     }
 }

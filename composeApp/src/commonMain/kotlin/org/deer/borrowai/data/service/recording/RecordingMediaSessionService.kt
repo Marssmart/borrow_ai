@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okio.FileSystem
@@ -50,7 +51,7 @@ class RecordingMediaSessionService(
     private val closed = MutableStateFlow(false)
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
-    private val pendingSaves = mutableListOf<Job>()
+    private val pendingSaves = MutableStateFlow<List<Job>>(emptyList())
     private var activeRecording: ActiveRecording? = null
 
     override val state: StateFlow<MediaSessionState> = mutableState.state
@@ -83,8 +84,9 @@ class RecordingMediaSessionService(
     }
 
     override suspend fun awaitPendingWork() {
-        while (pendingSaves.isNotEmpty()) {
-            pendingSaves.removeFirst().join()
+        while (true) {
+            val job = pendingSaves.value.firstOrNull() ?: return
+            job.join()
         }
     }
 
@@ -136,7 +138,7 @@ class RecordingMediaSessionService(
             fileSystem.delete(recording.absolutePath, mustExist = false)
             return null
         }
-        pendingSaves += scope.launch {
+        val save = scope.launch {
             try {
                 memoryService.create(
                     draft = MemoryDraft(
@@ -153,6 +155,8 @@ class RecordingMediaSessionService(
                 // The audio stays on disk. RecordingReconciler pairs it with a memory on its next sweep.
             }
         }
+        pendingSaves.update { it + save }
+        save.invokeOnCompletion { pendingSaves.update { jobs -> jobs - save } }
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
 
