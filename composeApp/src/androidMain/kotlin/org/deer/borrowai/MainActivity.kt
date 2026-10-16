@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.recording.AndroidAudioPlayer
 import org.deer.borrowai.data.service.recording.AndroidAudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
 
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
                 // The service stores "recordings/<id>.m4a" relative to this root.
                 recordingsRoot = filesDir.absolutePath.toPath(),
                 recorder = AndroidAudioRecorder(applicationContext),
+                audioPlayer = AndroidAudioPlayer(applicationContext),
                 microphonePermission = microphonePermission,
             ),
         ).get(AppServicesViewModel::class.java)

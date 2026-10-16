@@ -19,6 +19,7 @@ import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.model.UnavailableModelSetupService
+import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.DeletedMemoryPurger
 import org.deer.borrowai.data.service.recording.MicrophonePermission
@@ -79,6 +80,7 @@ class AppServices private constructor(
             epochClock: EpochClock,
             recordingsRoot: Path,
             recorder: AudioRecorder,
+            audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
             databaseName: String = DATABASE_NAME,
         ): AppServices = when (AppMode.fromStartupFlag(startupModeFlag)) {
@@ -87,12 +89,14 @@ class AppServices private constructor(
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,
+                audioPlayer = audioPlayer,
                 microphonePermission = microphonePermission,
             )
             AppMode.REAL -> createReal(
                 database = Database(databaseName),
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,
+                audioPlayer = audioPlayer,
                 microphonePermission = microphonePermission,
                 epochClock = epochClock,
             )
@@ -108,6 +112,7 @@ class AppServices private constructor(
             database: Database,
             recordingsRoot: Path,
             recorder: AudioRecorder,
+            audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
             epochClock: EpochClock,
             dispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -121,6 +126,7 @@ class AppServices private constructor(
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
                     recorder = recorder,
+                    audioPlayer = audioPlayer,
                     microphonePermission = microphonePermission,
                     recordingsRoot = recordingsRoot,
                     scope = mediaScope,
@@ -163,12 +169,14 @@ class AppServices private constructor(
             epochClock: EpochClock,
             recordingsRoot: Path,
             recorder: AudioRecorder,
+            audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
         ): AppServices = createFromStartupFlag(
             startupModeFlag = startupModeFlag,
             epochClock = epochClock,
             recordingsRoot = recordingsRoot,
             recorder = recorder,
+            audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
             dispatcher = Dispatchers.Default,
         )
@@ -178,6 +186,7 @@ class AppServices private constructor(
             epochClock: EpochClock,
             recordingsRoot: Path,
             recorder: AudioRecorder,
+            audioPlayer: AudioPlayer,
             microphonePermission: MicrophonePermission,
             dispatcher: CoroutineDispatcher,
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
@@ -196,6 +205,7 @@ class AppServices private constructor(
                         mediaSession = RecordingMediaSessionService(
                             memoryService = memories,
                             recorder = recorder,
+                            audioPlayer = audioPlayer,
                             microphonePermission = microphonePermission,
                             // Demo audio lives under its own root so REAL reconciliation,
                             // which scans `<root>/recordings`, never adopts it.

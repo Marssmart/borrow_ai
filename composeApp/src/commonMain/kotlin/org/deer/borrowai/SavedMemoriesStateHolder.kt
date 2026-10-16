@@ -32,7 +32,7 @@ internal data class SavedMemoriesUiState(
 internal enum class SavedMemoriesPlaybackError {
     MEMORY_NOT_FOUND,
     REQUEST_REJECTED,
-    UNAVAILABLE,
+    RECORDING_UNAVAILABLE,
 }
 
 internal class SavedMemoriesStateHolder(
@@ -116,11 +116,11 @@ internal class SavedMemoriesStateHolder(
             PlaybackRequestResult.MemoryNotFound ->
                 setPlaybackError(SavedMemoriesPlaybackError.MEMORY_NOT_FOUND)
 
+            PlaybackRequestResult.RecordingUnavailable ->
+                setPlaybackError(SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE)
+
             PlaybackRequestResult.NoPendingConfirmation ->
                 setPlaybackError(SavedMemoriesPlaybackError.REQUEST_REJECTED)
-
-            PlaybackRequestResult.Unavailable ->
-                setPlaybackError(SavedMemoriesPlaybackError.UNAVAILABLE)
         }
     }
 
@@ -131,11 +131,11 @@ internal class SavedMemoriesStateHolder(
             PlaybackRequestResult.MemoryNotFound ->
                 setPlaybackError(SavedMemoriesPlaybackError.MEMORY_NOT_FOUND)
 
+            PlaybackRequestResult.RecordingUnavailable ->
+                setPlaybackError(SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE)
+
             PlaybackRequestResult.NoPendingConfirmation ->
                 setPlaybackError(SavedMemoriesPlaybackError.REQUEST_REJECTED)
-
-            PlaybackRequestResult.Unavailable ->
-                setPlaybackError(SavedMemoriesPlaybackError.UNAVAILABLE)
         }
     }
 

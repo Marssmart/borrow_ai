@@ -21,6 +21,7 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
+import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
@@ -34,6 +35,12 @@ class AppServicesTest {
     @AfterTest
     fun resetMainDispatcher() {
         Dispatchers.resetMain()
+    }
+
+    private class NoopAudioPlayer : AudioPlayer {
+        override fun play(absolutePath: String): Long = 0L
+
+        override fun stop() = Unit
     }
 
     private class NoopRecorder : AudioRecorder {
@@ -53,6 +60,7 @@ class AppServicesTest {
                 epochClock = EpochClock { 1_800_000_000_000L },
                 recordingsRoot = root,
                 recorder = NoopRecorder(),
+                audioPlayer = NoopAudioPlayer(),
                 microphonePermission = GrantedPermission(),
             )
         } else {
@@ -61,6 +69,7 @@ class AppServicesTest {
                 epochClock = EpochClock { 1_800_000_000_000L },
                 recordingsRoot = root,
                 recorder = NoopRecorder(),
+                audioPlayer = NoopAudioPlayer(),
                 microphonePermission = GrantedPermission(),
                 dispatcher = dispatcher,
             )
@@ -92,6 +101,7 @@ class AppServicesTest {
                     epochClock = EpochClock { 1_800_000_000_000L },
                     recordingsRoot = root,
                     recorder = NoopRecorder(),
+                    audioPlayer = NoopAudioPlayer(),
                     microphonePermission = GrantedPermission(),
                 )
             }

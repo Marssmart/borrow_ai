@@ -6,15 +6,18 @@ import org.deer.borrowai.data.domain.Memory
 enum class PlaybackContent {
     TRANSCRIPTION,
     SUMMARY,
+    RECORDING,
 }
 
 data class PlaybackTarget(
     val memoryId: String,
     val content: PlaybackContent,
 ) {
+    /** Text shown for the target. Raw recordings are audio, so they have no text. */
     fun getText(memory: Memory): String = when (content) {
         PlaybackContent.TRANSCRIPTION -> memory.transcription
         PlaybackContent.SUMMARY -> memory.summary
+        PlaybackContent.RECORDING -> ""
     }
 }
 
@@ -49,9 +52,10 @@ sealed interface PlaybackRequestResult {
 
     data object MemoryNotFound : PlaybackRequestResult
 
-    data object NoPendingConfirmation : PlaybackRequestResult
+    /** The memory has no raw recording, or its file is missing or cannot be played on this device. */
+    data object RecordingUnavailable : PlaybackRequestResult
 
-    data object Unavailable : PlaybackRequestResult
+    data object NoPendingConfirmation : PlaybackRequestResult
 }
 
 interface MediaSessionService {

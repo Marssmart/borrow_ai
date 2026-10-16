@@ -6,6 +6,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.recording.IosAudioPlayer
 import org.deer.borrowai.data.service.recording.IosAudioRecorder
 import org.deer.borrowai.data.service.recording.IosMicrophonePermission
 import platform.Foundation.NSDate
@@ -24,6 +25,7 @@ fun MainViewController(startupModeFlag: String?): UIViewController = ComposeUIVi
             },
             recordingsRoot = recordingsRoot,
             recorder = IosAudioRecorder(),
+            audioPlayer = IosAudioPlayer(),
             microphonePermission = IosMicrophonePermission(),
         )
         value = created
