@@ -14,9 +14,9 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
         val file = File(absolutePath)
         file.parentFile?.mkdirs()
         val mediaRecorder = createMediaRecorder()
-        // Start the foreground service first so capture keeps running after the app is minimized.
-        MicrophoneForegroundService.start(context)
         try {
+            // Start the foreground service before capture so it keeps running after the app is minimized.
+            MicrophoneForegroundService.start(context)
             mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)

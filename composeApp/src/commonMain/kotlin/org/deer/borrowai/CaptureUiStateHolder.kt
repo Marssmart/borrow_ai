@@ -13,6 +13,9 @@ internal class CaptureUiStateHolder(
 ) {
     val transcriptScrollState = ScrollState(0)
 
+    /** True from a hold press until its release, even if recording has not started yet. */
+    private var holdPressed = false
+
     val uiState = MutableCaptureUiState(
         mediaSessionService.state.value.toUiState(mediaSessionService.idleTranscription.value),
     )
@@ -37,16 +40,20 @@ internal class CaptureUiStateHolder(
     }
 
     fun startHoldRecording() {
+        holdPressed = true
         if (!uiState.isRecording()) {
             startRecording(holdToRecord = true)
         }
     }
 
     fun stopHoldRecording() {
-        when {
-            uiState.isRecording() && uiState.isHoldRecording() -> stopRecording()
+        if (!holdPressed) return
+        holdPressed = false
+        if (uiState.isRecording()) {
+            stopRecording()
+        } else {
             // Released while the microphone permission prompt is open: cancel the pending start.
-            !uiState.isRecording() -> mediaSessionService.stopRecording()
+            mediaSessionService.stopRecording()
         }
     }
 

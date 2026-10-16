@@ -6,7 +6,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +66,7 @@ class RecordingMediaSessionService(
         if (mutableState.value !is MediaSessionState.Idle) return
         pendingStartJob.launch {
             if (!microphonePermission.request()) return@launch
+            currentCoroutineContext().ensureActive()
             beginRecording(holdToRecord)
         }
     }

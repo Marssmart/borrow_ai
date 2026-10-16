@@ -5,7 +5,9 @@ import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -24,10 +26,12 @@ class RecordingReconcilerTest {
         memories: InMemoryDemoMemoryService,
         fs: FakeFileSystem,
         isRecording: () -> Boolean = { false },
+        epochClock: EpochClock = EpochClock { 1_800_000_000_000L },
     ) = RecordingReconciler(
         memoryService = memories,
         recordingsRoot = root,
         isRecording = isRecording,
+        epochClock = epochClock,
         fileSystem = fs,
     )
 
@@ -121,10 +125,38 @@ class RecordingReconcilerTest {
             memoryService = failing,
             recordingsRoot = root,
             isRecording = { false },
+            epochClock = EpochClock { 1_800_000_000_000L },
             fileSystem = fs,
         )
 
         assertEquals(0, reconciler.reconcile())
         assertEquals(true, fs.exists(recordings / "abc.m4a"))
+    }
+
+    @Test
+    fun oldTemporaryCaptureIsDeletedAndRecentOneIsKept() = runTest {
+        val fs = FakeFileSystem()
+        fs.createDirectories(recordings)
+        fs.write(recordings / "temp_old.m4a") { writeUtf8("partial") }
+        fs.write(recordings / "temp_new.m4a") { writeUtf8("partial") }
+
+        // Ages are measured against the clock, so a far-future clock makes every file stale.
+        reconciler(memories(), fs, epochClock = EpochClock { Long.MAX_VALUE / 2 }).reconcile()
+        assertFalse(fs.exists(recordings / "temp_old.m4a"))
+
+        fs.write(recordings / "temp_new.m4a") { writeUtf8("partial") }
+        reconciler(memories(), fs, epochClock = EpochClock { 0L }).reconcile()
+        assertTrue(fs.exists(recordings / "temp_new.m4a"))
+    }
+
+    @Test
+    fun temporaryCaptureIsKeptWhileRecording() = runTest {
+        val fs = FakeFileSystem()
+        fs.createDirectories(recordings)
+        fs.write(recordings / "temp_active.m4a") { writeUtf8("partial") }
+
+        reconciler(memories(), fs, isRecording = { true }, epochClock = EpochClock { Long.MAX_VALUE / 2 }).reconcile()
+
+        assertTrue(fs.exists(recordings / "temp_active.m4a"))
     }
 }

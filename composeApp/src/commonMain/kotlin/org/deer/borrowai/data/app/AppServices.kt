@@ -3,6 +3,7 @@ package org.deer.borrowai.data.app
 import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -31,6 +32,7 @@ class AppServices private constructor(
     val mediaSession: MediaSessionService,
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
+    private val backgroundJobs: List<Job> = emptyList(),
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -51,6 +53,9 @@ class AppServices private constructor(
         closeScope.launch {
             try {
                 mediaSession.awaitPendingWork()
+                // Periodic sweeps must finish before the database closes under them.
+                backgroundJobs.forEach { it.cancel() }
+                backgroundJobs.forEach { it.join() }
             } finally {
                 finishClose()
             }
@@ -119,12 +124,13 @@ class AppServices private constructor(
                     scope = mediaScope,
                     epochClock = epochClock,
                 )
-                RecordingReconciler(
+                val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
+                    epochClock = epochClock,
                 ).start(scope = graphScope)
-                DeletedMemoryPurger(
+                val purgerJob = DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
@@ -136,6 +142,7 @@ class AppServices private constructor(
                     mediaSession = mediaSession,
                     graphJob = graphJob,
                     closeScope = graphScope,
+                    backgroundJobs = listOf(reconcilerJob, purgerJob),
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

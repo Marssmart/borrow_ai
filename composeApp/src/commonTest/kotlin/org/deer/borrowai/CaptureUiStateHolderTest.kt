@@ -42,9 +42,20 @@ class CaptureUiStateHolderTest {
         val mediaSession = FakeMediaSessionService()
         val holder = CaptureUiStateHolder(mediaSession)
 
+        holder.startHoldRecording()
         holder.stopHoldRecording()
 
         assertEquals(1, mediaSession.stopCount)
+    }
+
+    @Test
+    fun releaseWithoutHoldPressIsIgnored() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        holder.stopHoldRecording()
+
+        assertEquals(0, mediaSession.stopCount)
     }
 
     @Test
