@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import okio.FileSystem
 import okio.HashingSource
 import okio.Path
@@ -83,31 +86,31 @@ class ModelFileStore(
             writePartialIdentity(spec, PartialIdentity.from(spec))
             return false
         }
-        commit(spec, digest)
-        return true
+        return commit(spec, digest).isRight()
     }
 
     /**
      * Moves the partial file into the static name once its size and digest match. A short partial file is kept so
-     * the next attempt can resume it; a full-size file with the wrong digest is discarded.
+     * the next attempt can resume it (retryable [ModelDownloadError.Network]); a full-size file with the wrong digest
+     * is discarded ([ModelDownloadError.Model]).
      */
-    fun commit(spec: ModelSpec, downloadedSha256: String) {
+    fun commit(spec: ModelSpec, downloadedSha256: String): Either<ModelDownloadError, Unit> {
         val partialSize = fileSystem.metadataOrNull(partialPath(spec))?.size
         if (partialSize != spec.sizeBytes) {
-            throw ModelDownloadException(
+            return ModelDownloadError.Network(
                 "The ${spec.displayName} download was interrupted: $partialSize of ${spec.sizeBytes} bytes received.",
-                retryable = true,
-            )
+            ).left()
         }
         if (downloadedSha256 != spec.sha256) {
             discardPartial(spec)
-            error("The ${spec.displayName} download failed checksum verification.")
+            return ModelDownloadError.Model("The ${spec.displayName} download failed checksum verification.").left()
         }
         fileSystem.atomicMove(partialPath(spec), finalPath(spec))
         fileSystem.delete(partialIdentityPath(spec), mustExist = false)
         fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
         val lastModifiedAtMillis = fileSystem.metadataOrNull(finalPath(spec))?.lastModifiedAtMillis
         writeVerificationRecord(spec, lastModifiedAtMillis)
+        return Unit.right()
     }
 
     private fun verifyAndCache(spec: ModelSpec, path: Path, lastModifiedAtMillis: Long?): Boolean {

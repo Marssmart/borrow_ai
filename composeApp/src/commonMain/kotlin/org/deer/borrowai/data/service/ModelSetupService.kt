@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service
 
+import arrow.core.Either
+import org.deer.borrowai.data.service.model.ModelDownloadError
+
 enum class ModelSetupPhase {
     NOT_STARTED,
     CHOOSING_MODEL,
@@ -32,7 +35,7 @@ data class ModelSetupState(
 interface ModelSetupService {
     val state: MutableModelSetupState
 
-    suspend fun prepare()
+    suspend fun prepare(): Either<ModelDownloadError, Unit>
 
     suspend fun downloadOverMobileData()
 }

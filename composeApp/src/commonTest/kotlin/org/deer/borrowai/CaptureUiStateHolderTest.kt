@@ -2,13 +2,14 @@ package org.deer.borrowai
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import arrow.core.left
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
-import org.deer.borrowai.data.service.PlaybackRequestResult
+import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
 
@@ -103,8 +104,8 @@ class CaptureUiStateHolderTest {
             return RecordingResult(elapsedMillis = 0L, transcription = "")
         }
 
-        override fun requestPlayback(target: PlaybackTarget) = PlaybackRequestResult.MemoryNotFound
-        override fun confirmPendingPlayback() = PlaybackRequestResult.NoPendingConfirmation
+        override fun requestPlayback(target: PlaybackTarget) = PlaybackError.MemoryNotFound.left()
+        override fun confirmPendingPlayback() = PlaybackError.NoPendingConfirmation.left()
         override fun cancelPendingPlayback() = false
         override fun stopPlayback() = Unit
         override fun close() = Unit

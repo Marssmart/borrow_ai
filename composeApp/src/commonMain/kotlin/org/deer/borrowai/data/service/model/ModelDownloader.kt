@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -31,7 +34,16 @@ interface ModelDownloader {
         destination: Path,
         expectedSizeBytes: Long,
         onProgress: (bytesDownloaded: Long) -> Unit,
-    ): String
+    ): Either<ModelDownloadError, String>
+}
+
+/** Why a model download or commit failed. [Network] is retryable; [Model] and [Storage] are not. */
+sealed interface ModelDownloadError {
+    data class Network(val message: String, val cause: Throwable? = null) : ModelDownloadError
+
+    data class Storage(val cause: Throwable) : ModelDownloadError
+
+    data class Model(val message: String) : ModelDownloadError
 }
 
 class ModelDownloadException(
@@ -47,6 +59,25 @@ class KtorModelDownloader(
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
 ) : ModelDownloader {
     override suspend fun download(
+        url: String,
+        destination: Path,
+        expectedSizeBytes: Long,
+        onProgress: (bytesDownloaded: Long) -> Unit,
+    ): Either<ModelDownloadError, String> = try {
+        downloadBytes(url, destination, expectedSizeBytes, onProgress).right()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: ModelDownloadException) {
+        if (error.retryable) {
+            ModelDownloadError.Network(error.message.orEmpty(), error).left()
+        } else {
+            ModelDownloadError.Model(error.message.orEmpty()).left()
+        }
+    } catch (error: ModelStorageException) {
+        ModelDownloadError.Storage(error).left()
+    }
+
+    private suspend fun downloadBytes(
         url: String,
         destination: Path,
         expectedSizeBytes: Long,

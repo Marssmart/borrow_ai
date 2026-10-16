@@ -7,7 +7,6 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -34,67 +33,66 @@ class KotbaseMemoryServiceTest {
         database = requireNotNull(database),
         epochClock = EpochClock { now },
         idGenerator = { ids.removeAt(0) },
-    )
+    ).getOrNull()!!
 
     @Test
     fun createPersistsAndPublishesMemory() = runTest {
         val service = openService()
         val created = service.create(
             MemoryDraft("First note", "Short summary", "Full transcription", "recordings/a.m4a"),
-        )
+        ).getOrNull()!!
 
         assertEquals("memory-1", created.id)
         assertEquals(1_800_000_000_000L, created.createdAtEpochMillis)
-        assertEquals(created, service.findById(created.id))
+        assertEquals(created, service.findById(created.id).getOrNull())
         assertEquals(listOf(created), service.getState().value)
     }
 
     @Test
     fun blankTitleAndNullRecordingPathRoundTrip() = runTest {
         val service = openService()
-        val created = service.create(MemoryDraft("", "", ""))
+        val created = service.create(MemoryDraft("", "", "")).getOrNull()!!
 
-        val found = service.findById(created.id)
+        val found = service.findById(created.id).getOrNull()
         assertEquals("", found?.title)
-        assertNull(found?.recordingPath)
+        assertEquals(null, found?.recordingPath)
     }
 
     @Test
     fun updateReplacesFieldsAndKeepsCreationTime() = runTest {
         val service = openService()
-        val created = service.create(MemoryDraft("Old", "Old summary", "Old text"))
+        val created = service.create(MemoryDraft("Old", "Old summary", "Old text")).getOrNull()!!
 
-        val updated = service.update(
-            created.id,
-            MemoryDraft("New", "New summary", "New text", "recordings/b.m4a"),
+        assertTrue(
+            service.update(created.id, MemoryDraft("New", "New summary", "New text", "recordings/b.m4a")).isRight(),
         )
 
+        val updated = service.findById(created.id).getOrNull()
         assertEquals("New", updated?.title)
         assertEquals("recordings/b.m4a", updated?.recordingPath)
         assertEquals(created.createdAtEpochMillis, updated?.createdAtEpochMillis)
-        assertEquals(updated, service.findById(created.id))
         assertEquals(listOf(updated), service.getState().value)
     }
 
     @Test
-    fun updateMissingIdReturnsNull() = runTest {
+    fun updateMissingIdReturnsLeft() = runTest {
         val service = openService()
 
-        assertNull(service.update("missing", MemoryDraft("t", "s", "x")))
+        assertTrue(service.update("missing", MemoryDraft("t", "s", "x")).isLeft())
         assertTrue(service.getState().value.isEmpty())
     }
 
     @Test
     fun deleteRemovesMemoryAndReportsResult() = runTest {
         val service = openService()
-        val created = service.create(MemoryDraft("To delete", "", ""))
+        val created = service.create(MemoryDraft("To delete", "", "")).getOrNull()!!
 
-        assertTrue(service.delete(created.id))
-        assertEquals(true, service.findById(created.id)?.deleted)
+        assertTrue(service.delete(created.id).isRight())
+        assertEquals(true, service.findById(created.id).getOrNull()?.deleted)
         assertTrue(service.getState().value.isEmpty())
-        assertFalse(service.delete(created.id))
+        assertTrue(service.delete(created.id).isLeft())
         assertTrue(service.purge(created.id))
-        assertNull(service.findById(created.id))
+        assertTrue(service.findById(created.id).isLeft())
     }
 
     @Test
@@ -105,7 +103,7 @@ class KotbaseMemoryServiceTest {
             database = requireNotNull(database),
             epochClock = EpochClock { times.removeAt(0) },
             idGenerator = { ids.removeAt(0) },
-        )
+        ).getOrNull()!!
 
         service.create(MemoryDraft("oldest", "", ""))
         service.create(MemoryDraft("newest", "", ""))
@@ -120,12 +118,13 @@ class KotbaseMemoryServiceTest {
     @Test
     fun reopeningLoadsPersistedMemories() = runTest {
         val first = openService()
-        val created = first.create(MemoryDraft("Persisted", "s", "t", "recordings/c.m4a"))
+        val created = first.create(MemoryDraft("Persisted", "s", "t", "recordings/c.m4a")).getOrNull()!!
 
         requireNotNull(database).close()
         database = Database(databaseName)
         val reopened = openService()
 
         assertEquals(listOf(created), reopened.getState().value)
+        assertFalse(reopened.getState().value.isEmpty())
     }
 }

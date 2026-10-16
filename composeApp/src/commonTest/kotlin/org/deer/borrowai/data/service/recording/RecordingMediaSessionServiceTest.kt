@@ -7,6 +7,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import okio.FileSystem
 import okio.ForwardingFileSystem
 import okio.IOException
@@ -26,7 +29,9 @@ import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
-import org.deer.borrowai.data.service.PlaybackRequestResult
+import org.deer.borrowai.data.service.MemoryError
+import org.deer.borrowai.data.service.PlaybackError
+import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.FakeMemoryService
 
@@ -113,7 +118,7 @@ class RecordingMediaSessionServiceTest {
 
         assertEquals(1, stopCount)
         assertFalse(fs.exists("/app/files/recordings/temp_rec-1.m4a".toPath()))
-        assertNull(memories.findById("rec-1"))
+        assertTrue(memories.findById("rec-1").isLeft())
         assertIs<MediaSessionState.Idle>(session.state.value)
     }
 
@@ -288,7 +293,8 @@ class RecordingMediaSessionServiceTest {
         val fs = FakeFileSystem()
         val recorder = FakeRecorder(fileSystem = fs)
         val failingMemories = object : MemoryService by memories() {
-            override suspend fun create(draft: MemoryDraft, id: String?): Memory = error("disk full")
+            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> =
+                MemoryError.Persistence(IOException("disk full")).left()
         }
         val service = service(recorder, FakePermission(CompletableDeferred(true)), failingMemories, fs, backgroundScope)
 
@@ -307,7 +313,7 @@ class RecordingMediaSessionServiceTest {
         val gate = CompletableDeferred<Unit>()
         val delegate = memories()
         val slowMemories = object : MemoryService by delegate {
-            override suspend fun create(draft: MemoryDraft, id: String?): Memory {
+            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> {
                 gate.await()
                 return delegate.create(draft, id)
             }
@@ -337,7 +343,7 @@ class RecordingMediaSessionServiceTest {
 
         val result = service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
 
-        assertEquals(PlaybackRequestResult.Started, result)
+        assertEquals(PlaybackRequest.Started.right(), result)
         assertEquals(listOf(clipFile.toString()), player.playedPaths)
         val playing = assertIs<MediaSessionState.Playing>(service.state.value)
         assertEquals(5_000L, playing.durationMillis)
@@ -352,7 +358,7 @@ class RecordingMediaSessionServiceTest {
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
 
         assertEquals(
-            PlaybackRequestResult.RecordingUnavailable,
+            PlaybackError.RecordingUnavailable.left(),
             service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.TRANSCRIPTION)),
         )
         assertTrue(player.playedPaths.isEmpty())
@@ -362,11 +368,11 @@ class RecordingMediaSessionServiceTest {
     fun missingRecordingFileReturnsRecordingUnavailable() = runTest {
         val player = FakeAudioPlayer()
         val memories = memories()
-        val memory = memories.create(MemoryDraft(title = "", summary = "", transcription = "", recordingPath = "recordings/gone.m4a"))
+        val memory = memories.create(MemoryDraft(title = "", summary = "", transcription = "", recordingPath = "recordings/gone.m4a")).getOrNull()!!
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, FakeFileSystem(), backgroundScope, player)
 
         assertEquals(
-            PlaybackRequestResult.RecordingUnavailable,
+            PlaybackError.RecordingUnavailable.left(),
             service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING)),
         )
         assertTrue(player.playedPaths.isEmpty())
@@ -375,11 +381,11 @@ class RecordingMediaSessionServiceTest {
     @Test
     fun memoryWithoutRecordingPathReturnsRecordingUnavailable() = runTest {
         val memories = memories()
-        val memory = memories.create(MemoryDraft(title = "", summary = "", transcription = ""))
+        val memory = memories.create(MemoryDraft(title = "", summary = "", transcription = "")).getOrNull()!!
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, FakeFileSystem(), backgroundScope)
 
         assertEquals(
-            PlaybackRequestResult.RecordingUnavailable,
+            PlaybackError.RecordingUnavailable.left(),
             service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING)),
         )
     }
@@ -389,7 +395,7 @@ class RecordingMediaSessionServiceTest {
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories(), FakeFileSystem(), backgroundScope)
 
         assertEquals(
-            PlaybackRequestResult.MemoryNotFound,
+            PlaybackError.MemoryNotFound.left(),
             service.requestPlayback(PlaybackTarget("missing", PlaybackContent.RECORDING)),
         )
     }
@@ -409,7 +415,7 @@ class RecordingMediaSessionServiceTest {
         )
 
         assertEquals(
-            PlaybackRequestResult.RecordingUnavailable,
+            PlaybackError.RecordingUnavailable.left(),
             service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING)),
         )
         assertIs<MediaSessionState.Idle>(service.state.value)
@@ -504,10 +510,10 @@ class RecordingMediaSessionServiceTest {
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
         val target = PlaybackTarget(memory.id, PlaybackContent.RECORDING)
 
-        assertEquals(PlaybackRequestResult.Started, service.requestPlayback(target))
+        assertEquals(PlaybackRequest.Started.right(), service.requestPlayback(target))
         player.failOnPlay = true
 
-        assertEquals(PlaybackRequestResult.RecordingUnavailable, service.requestPlayback(target))
+        assertEquals(PlaybackError.RecordingUnavailable.left(), service.requestPlayback(target))
         assertIs<MediaSessionState.Idle>(service.state.value)
     }
 
@@ -561,8 +567,8 @@ class RecordingMediaSessionServiceTest {
         service.startRecording()
         runCurrent()
         val target = PlaybackTarget(memory.id, PlaybackContent.RECORDING)
-        assertEquals(PlaybackRequestResult.ConfirmationRequired(target), service.requestPlayback(target))
-        assertEquals(PlaybackRequestResult.Started, service.confirmPendingPlayback())
+        assertEquals(PlaybackRequest.ConfirmationRequired(target).right(), service.requestPlayback(target))
+        assertEquals(PlaybackRequest.Started.right(), service.confirmPendingPlayback())
         runCurrent()
 
         assertEquals(1, recorder.stopCount)
@@ -583,7 +589,7 @@ class RecordingMediaSessionServiceTest {
         service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
         memories.delete(memory.id)
 
-        assertEquals(PlaybackRequestResult.MemoryNotFound, service.confirmPendingPlayback())
+        assertEquals(PlaybackError.MemoryNotFound.left(), service.confirmPendingPlayback())
         assertIs<MediaSessionState.Recording>(service.state.value).also {
             assertNull(it.pendingPlayback)
         }
@@ -602,7 +608,7 @@ class RecordingMediaSessionServiceTest {
 
         assertTrue(service.cancelPendingPlayback())
         assertNull(assertIs<MediaSessionState.Recording>(service.state.value).pendingPlayback)
-        assertEquals(PlaybackRequestResult.NoPendingConfirmation, service.confirmPendingPlayback())
+        assertEquals(PlaybackError.NoPendingConfirmation.left(), service.confirmPendingPlayback())
     }
 
     @Test
@@ -623,7 +629,7 @@ class RecordingMediaSessionServiceTest {
     private suspend fun savedRecording(memories: FakeMemoryService, fs: FakeFileSystem): Memory {
         val memory = memories.create(
             MemoryDraft(title = "", summary = "", transcription = "", recordingPath = "recordings/clip.m4a"),
-        )
+        ).getOrNull()!!
         fs.createDirectories(root / "recordings")
         fs.write(root / "recordings" / "clip.m4a") { writeUtf8("audio") }
         return memory

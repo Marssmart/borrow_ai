@@ -1,5 +1,11 @@
 package org.deer.borrowai.data.service.kotbase
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.raise.either
+import arrow.core.raise.ensure
+import arrow.core.right
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -13,12 +19,14 @@ import kotbase.Meta
 import kotbase.MutableDocument
 import kotbase.Ordering
 import kotbase.QueryBuilder
+import kotbase.Result
 import kotbase.SelectResult
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.StatefulMemoryService
 
 /**
@@ -34,11 +42,11 @@ class KotbaseMemoryService private constructor(
 ) : StatefulMemoryService() {
     private val mutex = Mutex()
 
-    override suspend fun findById(id: String): Memory? = withContext(Dispatchers.Default) {
-        database.getDocument(id)?.toMemory()
+    override suspend fun findById(id: String): Either<MemoryError, Memory> = withContext(Dispatchers.Default) {
+        readMemory(id)
     }
 
-    override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
+    override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> = mutex.withLock {
         val memory = Memory(
             id = id ?: idGenerator(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
@@ -47,39 +55,26 @@ class KotbaseMemoryService private constructor(
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
         )
-        writeAndPublish {
-            database.save(memory.toDocument())
-        }
-        memory
+        writeAndPublish { database.save(memory.toDocument()) }.map { memory }
     }
 
-    override suspend fun update(id: String, draft: MemoryDraft): Memory? = mutex.withLock {
-        val existing = withContext(Dispatchers.Default) { database.getDocument(id)?.toMemory() }
-            ?.takeIf { !it.deleted }
-            ?: return@withLock null
-        val updated = existing.copy(
-            title = draft.title,
-            summary = draft.summary,
-            transcription = draft.transcription,
-            recordingPath = draft.recordingPath,
-        )
-        writeAndPublish {
-            database.save(updated.toDocument())
+    override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
+        either {
+            val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
+            val updated = existing.copy(
+                title = draft.title,
+                summary = draft.summary,
+                transcription = draft.transcription,
+                recordingPath = draft.recordingPath,
+            )
+            writeAndPublish { database.save(updated.toDocument()) }.bind()
         }
-        updated
     }
 
-    override suspend fun delete(id: String): Boolean = mutex.withLock {
-        withContext(NonCancellable) {
-            val marked = withContext(Dispatchers.Default) {
-                val memory = database.getDocument(id)?.toMemory()
-                    ?.takeIf { !it.deleted }
-                    ?: return@withContext false
-                database.save(memory.copy(deleted = true).toDocument())
-                true
-            }
-            if (marked) publishMemories()
-            marked
+    override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
+        either {
+            val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
+            writeAndPublish { database.save(existing.copy(deleted = true).toDocument()) }.bind()
         }
     }
 
@@ -97,7 +92,7 @@ class KotbaseMemoryService private constructor(
         }
     }
 
-    override suspend fun findAll(): List<Memory> = withContext(Dispatchers.Default) {
+    override suspend fun findAll(): Either<MemoryError, List<Memory>> = withContext(Dispatchers.Default) {
         readAll()
     }
 
@@ -105,41 +100,73 @@ class KotbaseMemoryService private constructor(
      * Runs [write] and refreshes the published state as one unit. Cancellation is deferred until
      * both finish, so a committed write never leaves [getState] stale.
      */
-    private suspend fun writeAndPublish(write: () -> Unit) = withContext(NonCancellable) {
-        withContext(Dispatchers.Default) { write() }
-        publishMemories()
+    private suspend fun writeAndPublish(write: () -> Unit): Either<MemoryError, Unit> = withContext(NonCancellable) {
+        val written = withContext(Dispatchers.Default) { persisting(write) }
+        if (written.isRight()) publishMemories()
+        written
     }
 
-    private suspend fun publishMemories() {
-        memories.value = withContext(Dispatchers.Default) { readAll() }.filterNot(Memory::deleted)
+    private suspend fun publishMemories(): Either<MemoryError, Unit> =
+        withContext(Dispatchers.Default) { readAll() }
+            .map { all -> memories.value = all.filterNot(Memory::deleted) }
+
+    /** Runs [block], mapping any non-cancellation failure to [MemoryError.Persistence]. */
+    private fun <T> persisting(block: () -> T): Either<MemoryError, T> = try {
+        block().right()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        MemoryError.Persistence(e).left()
     }
 
-    private fun readAll(): List<Memory> {
-        val query = QueryBuilder
-            .select(
-                SelectResult.expression(Meta.id).`as`(COLUMN_ID),
-                SelectResult.property(COLUMN_CREATED_AT),
-                SelectResult.property(COLUMN_TITLE),
-                SelectResult.property(COLUMN_SUMMARY),
-                SelectResult.property(COLUMN_TRANSCRIPTION),
-                SelectResult.property(COLUMN_RECORDING_PATH),
-                SelectResult.property(COLUMN_DELETED),
-            )
-            .from(DataSource.database(database))
-            .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
-            .orderBy(Ordering.property(COLUMN_CREATED_AT).descending())
-
-        return query.execute().allResults().map { row ->
-            Memory(
-                id = row.getString(COLUMN_ID)!!,
-                createdAtEpochMillis = row.getLong(COLUMN_CREATED_AT),
-                title = row.getString(COLUMN_TITLE).orEmpty(),
-                summary = row.getString(COLUMN_SUMMARY).orEmpty(),
-                transcription = row.getString(COLUMN_TRANSCRIPTION).orEmpty(),
-                recordingPath = row.getString(COLUMN_RECORDING_PATH),
-                deleted = row.getBoolean(COLUMN_DELETED),
-            )
+    /** Reads the memory with [id], including a deleted one. */
+    private fun readMemory(id: String): Either<MemoryError, Memory> {
+        val found = persisting { database.getDocument(id)?.toMemory() }
+        return when (found) {
+            is Either.Left -> found
+            is Either.Right -> found.value?.right() ?: MemoryError.NotFound(id).left()
         }
+    }
+
+    /** Reads the memory with [id] only when it is active. */
+    private fun readActive(id: String): Either<MemoryError, Memory> = either {
+        val memory = readMemory(id).bind()
+        ensure(!memory.deleted) { MemoryError.NotFound(id) }
+        memory
+    }
+
+    private fun readAll(): Either<MemoryError, List<Memory>> = either {
+        val rows = persisting { queryRows() }.bind()
+        rows.map { row -> row.toListedMemory().bind() }
+    }
+
+    private fun queryRows(): List<Result> = QueryBuilder
+        .select(
+            SelectResult.expression(Meta.id).`as`(COLUMN_ID),
+            SelectResult.property(COLUMN_CREATED_AT),
+            SelectResult.property(COLUMN_TITLE),
+            SelectResult.property(COLUMN_SUMMARY),
+            SelectResult.property(COLUMN_TRANSCRIPTION),
+            SelectResult.property(COLUMN_RECORDING_PATH),
+            SelectResult.property(COLUMN_DELETED),
+        )
+        .from(DataSource.database(database))
+        .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
+        .orderBy(Ordering.property(COLUMN_CREATED_AT).descending())
+        .execute()
+        .allResults()
+
+    private fun Result.toListedMemory(): Either<MemoryError, Memory> {
+        val id = getString(COLUMN_ID) ?: return MemoryError.Malformed(id = "").left()
+        return Memory(
+            id = id,
+            createdAtEpochMillis = getLong(COLUMN_CREATED_AT),
+            title = getString(COLUMN_TITLE).orEmpty(),
+            summary = getString(COLUMN_SUMMARY).orEmpty(),
+            transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
+            recordingPath = getString(COLUMN_RECORDING_PATH),
+            deleted = getBoolean(COLUMN_DELETED),
+        ).right()
     }
 
     private fun Memory.toDocument(): MutableDocument = MutableDocument(id).apply {
@@ -185,14 +212,13 @@ class KotbaseMemoryService private constructor(
             database: Database,
             epochClock: EpochClock,
             idGenerator: () -> String = { Uuid.random().toString() },
-        ): KotbaseMemoryService {
+        ): Either<MemoryError, KotbaseMemoryService> {
             val service = KotbaseMemoryService(
                 database = database,
                 epochClock = epochClock,
                 idGenerator = idGenerator,
             )
-            service.publishMemories()
-            return service
+            return service.publishMemories().map { service }
         }
     }
 }
