@@ -3,6 +3,7 @@ package org.deer.borrowai
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.window.ComposeUIViewController
+import kotlinx.cinterop.ExperimentalForeignApi
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
@@ -49,6 +50,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
 }
 
 /** Keeps downloaded models out of iCloud backup; they can be downloaded again. */
+@OptIn(ExperimentalForeignApi::class)
 private fun excludeModelsFromBackup(appDirectory: String) {
     val url = NSURL.fileURLWithPath("$appDirectory/${ModelCatalog.MODEL_DIRECTORY_NAME}", isDirectory = true)
     NSFileManager.defaultManager.createDirectoryAtURL(url, withIntermediateDirectories = true, attributes = null, error = null)
