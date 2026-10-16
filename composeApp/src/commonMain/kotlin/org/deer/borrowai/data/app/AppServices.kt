@@ -68,6 +68,8 @@ class AppServices private constructor(
     }
 
     companion object {
+        private const val DEMO_RECORDINGS_ROOT_DIRECTORY = "demo"
+
         /**
          * Picks the graph for [startupModeFlag]. REAL opens the Kotbase database named [databaseName]
          * in the platform's default directory.
@@ -195,7 +197,9 @@ class AppServices private constructor(
                             memoryService = memories,
                             recorder = recorder,
                             microphonePermission = microphonePermission,
-                            recordingsRoot = recordingsRoot,
+                            // Demo audio lives under its own root so REAL reconciliation,
+                            // which scans `<root>/recordings`, never adopts it.
+                            recordingsRoot = recordingsRoot / DEMO_RECORDINGS_ROOT_DIRECTORY,
                             scope = mediaScope,
                             epochClock = epochClock,
                         ),
