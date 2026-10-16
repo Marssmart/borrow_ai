@@ -64,6 +64,10 @@ class RecordingMediaSessionService(
     private val pendingSaves = MutableStateFlow<List<Job>>(emptyList())
     private var activeRecording: ActiveRecording? = null
 
+    init {
+        audioPlayer.setInterruptionHandler { stopActivePlayback() }
+    }
+
     override val state: StateFlow<MediaSessionState> = mutableState.state
     override val idleTranscription: StateFlow<String> = mutableIdleTranscription.asStateFlow()
     override val playbackAvailable: Boolean = true
@@ -166,8 +170,14 @@ class RecordingMediaSessionService(
             if (mutableState.value is MediaSessionState.Playing) mutableState.transitionIdle()
             return PlaybackRequestResult.RecordingUnavailable
         }
-        tickerJob.cancel()
         mutableState.transitionPlaying(target = target, durationMillis = durationMillis)
+        // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
+        // after publishing either sees the close or lets close stop this playback.
+        if (closed.value) {
+            stopActivePlayback()
+            return PlaybackRequestResult.RecordingUnavailable
+        }
+        tickerJob.cancel()
         startPlaybackTicker(durationMillis)
         return PlaybackRequestResult.Started
     }

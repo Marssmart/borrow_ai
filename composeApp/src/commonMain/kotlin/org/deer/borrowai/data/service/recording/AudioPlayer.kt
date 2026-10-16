@@ -10,6 +10,12 @@ interface AudioPlayer {
 
     /** Stops playback if it is active. */
     fun stop()
+
+    /**
+     * Registers a callback for when the platform stops playback on its own, such as when another app takes audio
+     * focus. The callback runs after the player has already stopped.
+     */
+    fun setInterruptionHandler(handler: () -> Unit) {}
 }
 
 class PlaybackUnavailableException(message: String, cause: Throwable? = null) : Exception(message, cause)

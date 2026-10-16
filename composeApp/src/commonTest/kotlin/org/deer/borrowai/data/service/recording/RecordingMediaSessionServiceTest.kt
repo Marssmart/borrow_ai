@@ -470,6 +470,32 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun closeDuringPlayStopsPlaybackAndLeavesIdle() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        lateinit var service: RecordingMediaSessionService
+        var stopCount = 0
+        val player = object : AudioPlayer {
+            override fun play(absolutePath: String): Long {
+                service.close()
+                return 2_000L
+            }
+
+            override fun stop() {
+                stopCount++
+            }
+        }
+        service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        runCurrent()
+
+        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertTrue(stopCount >= 1)
+    }
+
+    @Test
     fun failedReplacementPlaybackClearsPlayingState() = runTest {
         val player = FakeAudioPlayer(durationMillis = 2_000L)
         val fs = FakeFileSystem()

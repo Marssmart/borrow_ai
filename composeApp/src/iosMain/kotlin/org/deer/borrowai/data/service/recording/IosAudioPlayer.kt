@@ -4,6 +4,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import platform.AVFAudio.AVAudioPlayer
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
 import platform.Foundation.NSURL
 
 /** Plays recorded M4A files with [AVAudioPlayer]. */
@@ -31,6 +32,12 @@ class IosAudioPlayer : AudioPlayer {
         val active = player ?: return
         player = null
         active.stop()
+        // Release the shared session so other apps' paused audio can resume.
+        AVAudioSession.sharedInstance().setActive(
+            false,
+            withOptions = AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation,
+            error = null,
+        )
     }
 
     private companion object {
