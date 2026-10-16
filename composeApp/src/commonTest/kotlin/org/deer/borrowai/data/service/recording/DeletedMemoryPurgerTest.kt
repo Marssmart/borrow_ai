@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.service.recording
 
 import kotlinx.coroutines.test.runTest
+import okio.IOException
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
@@ -9,7 +10,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 
 class DeletedMemoryPurgerTest {
@@ -64,6 +67,40 @@ class DeletedMemoryPurgerTest {
         assertEquals(0, DeletedMemoryPurger(memories, root, { true }, fs).purge())
         assertTrue(fs.exists(recordings / "abc.m4a"))
         assertEquals(true, memories.findById("abc")?.deleted)
+    }
+
+    @Test
+    fun sharedRecordingIsKeptWhileAnotherActiveMemoryUsesIt() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("abc.m4a")
+        val memories = memories()
+        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "a")
+        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "b")
+        memories.delete("a")
+
+        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertTrue(fs.exists(recordings / "abc.m4a"))
+    }
+
+    @Test
+    fun failedListingDoesNotThrowAndRetriesLater() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("abc.m4a")
+        val memories = memories()
+        memories.create(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
+        memories.delete("abc")
+        val failing = object : MemoryService by memories {
+            var fail = true
+            override suspend fun findAll(): List<Memory> {
+                if (fail) throw IOException("db unavailable")
+                return memories.findAll()
+            }
+        }
+        val purger = DeletedMemoryPurger(failing, root, { false }, fs)
+
+        assertEquals(0, purger.purge())
+        failing.fail = false
+        assertEquals(1, purger.purge())
     }
 
     @Test

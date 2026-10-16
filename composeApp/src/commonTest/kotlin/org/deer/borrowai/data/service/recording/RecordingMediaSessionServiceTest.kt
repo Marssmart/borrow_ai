@@ -61,6 +61,39 @@ class RecordingMediaSessionServiceTest {
         epochClock = EpochClock { 1_800_000_000_000L },
     )
 
+    @Test
+    fun closeDuringRecorderStartRollsBackCapture() = runTest {
+        val fs = FakeFileSystem()
+        lateinit var session: RecordingMediaSessionService
+        var stopCount = 0
+        val recorder = object : AudioRecorder {
+            override fun start(absolutePath: String) {
+                fs.write(absolutePath.toPath()) { writeUtf8("audio") }
+                session.close()
+            }
+
+            override fun stop() {
+                stopCount++
+            }
+        }
+        val memories = memories()
+        session = service(
+            recorder = recorder,
+            permission = FakePermission(CompletableDeferred(true)),
+            memories = memories,
+            fileSystem = fs,
+            scope = this,
+        )
+
+        session.startRecording(holdToRecord = false)
+        runCurrent()
+
+        assertEquals(1, stopCount)
+        assertFalse(fs.exists("/app/files/recordings/temp_rec-1.m4a".toPath()))
+        assertNull(memories.findById("rec-1"))
+        assertIs<MediaSessionState.Idle>(session.state.value)
+    }
+
     private fun service(
         recorder: AudioRecorder,
         permission: MicrophonePermission,

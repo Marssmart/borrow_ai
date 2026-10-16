@@ -8,6 +8,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okio.FileSystem
 import okio.Path
+import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
 
 /**
@@ -24,13 +25,25 @@ class DeletedMemoryPurger(
     /** Purges deleted memories. Returns how many were removed. */
     suspend fun purge(): Int {
         if (isRecording()) return 0
+        val memories = try {
+            memoryService.findAll()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            // The next scheduled run retries.
+            return 0
+        }
+        // A recording path still used by an active memory must keep its audio.
+        val activePaths = memories
+            .filterNot(Memory::deleted)
+            .mapNotNullTo(mutableSetOf(), Memory::recordingPath)
         var purged = 0
-        for (memory in memoryService.findAll()) {
+        for (memory in memories) {
             if (isRecording()) break
             if (!memory.deleted) continue
             try {
                 val recordingPath = memory.recordingPath
-                if (recordingPath != null) {
+                if (recordingPath != null && recordingPath !in activePaths) {
                     val file = recordingsRoot / recordingPath
                     if (fileSystem.exists(file)) fileSystem.delete(file)
                 }

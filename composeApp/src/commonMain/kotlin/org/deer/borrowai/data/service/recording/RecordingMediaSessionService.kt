@@ -67,7 +67,7 @@ class RecordingMediaSessionService(
         pendingStartJob.launch {
             if (!microphonePermission.request()) return@launch
             currentCoroutineContext().ensureActive()
-            beginRecording(holdToRecord)
+            beginRecording(holdToRecord) { coroutineContext.isActive }
         }
     }
 
@@ -101,7 +101,7 @@ class RecordingMediaSessionService(
         finishRecording()
     }
 
-    private fun beginRecording(holdToRecord: Boolean) {
+    private fun beginRecording(holdToRecord: Boolean, isStartStillWanted: () -> Boolean) {
         if (closed.value || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
@@ -114,6 +114,12 @@ class RecordingMediaSessionService(
             fileSystem.delete(temporaryPath, mustExist = false)
             return
         } catch (exception: RecordingUnavailableException) {
+            fileSystem.delete(temporaryPath, mustExist = false)
+            return
+        }
+        // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
+        if (closed.value || !isStartStillWanted()) {
+            runCatching { recorder.stop() }
             fileSystem.delete(temporaryPath, mustExist = false)
             return
         }
