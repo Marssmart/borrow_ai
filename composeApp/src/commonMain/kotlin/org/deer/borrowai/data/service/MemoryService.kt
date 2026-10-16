@@ -9,7 +9,8 @@ interface MemoryService {
 
     suspend fun findById(id: String): Memory?
 
-    suspend fun create(draft: MemoryDraft): Memory
+    /** Saves a new memory. When [id] is given it is used as the memory id, so a recording file can be paired with its memory. */
+    suspend fun create(draft: MemoryDraft, id: String? = null): Memory
 
     suspend fun update(id: String, draft: MemoryDraft): Memory?
 

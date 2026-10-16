@@ -24,9 +24,9 @@ class InMemoryDemoMemoryService(
         records[id]
     }
 
-    override suspend fun create(draft: MemoryDraft): Memory = mutex.withLock {
+    override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
         val memory = Memory(
-            id = nextId(),
+            id = id ?: nextId(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
             title = draft.title,
             summary = draft.summary,

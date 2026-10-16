@@ -15,7 +15,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.demo.InMemoryDemoMemoryService
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -53,7 +56,7 @@ class RecordingMediaSessionServiceTest {
     private fun service(
         recorder: AudioRecorder,
         permission: MicrophonePermission,
-        memories: InMemoryDemoMemoryService,
+        memories: MemoryService,
         fileSystem: FakeFileSystem,
         scope: CoroutineScope,
     ) = RecordingMediaSessionService(
@@ -182,5 +185,24 @@ class RecordingMediaSessionServiceTest {
 
         assertEquals(0, recorder.stopCount)
         assertTrue(memories.getState().value.isEmpty())
+    }
+
+    @Test
+    fun failedMemorySaveKeepsRecordingFileAndDoesNotThrow() = runTest {
+        val fs = FakeFileSystem()
+        val failingMemories = object : MemoryService by memories() {
+            override suspend fun create(draft: MemoryDraft, id: String?): Memory = error("disk full")
+        }
+        val recorder = FakeRecorder()
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), failingMemories, fs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        fs.write(recordingFile) { writeUtf8("audio") }
+        service.stopRecording()
+        service.awaitPendingWork()
+
+        assertTrue(fs.exists(recordingFile))
+        assertIs<MediaSessionState.Idle>(service.state.value)
     }
 }

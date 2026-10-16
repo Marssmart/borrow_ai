@@ -2,6 +2,7 @@ package org.deer.borrowai.data.service.recording
 
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okio.FileSystem
+import okio.IOException
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -98,14 +100,18 @@ class RecordingMediaSessionService(
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
         val absolutePath = recordingsRoot / relativePath
-        absolutePath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
         try {
+            absolutePath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
             recorder.start(absolutePath.toString())
+        } catch (exception: IOException) {
+            fileSystem.delete(absolutePath, mustExist = false)
+            return
         } catch (exception: RecordingUnavailableException) {
             fileSystem.delete(absolutePath, mustExist = false)
             return
         }
         activeRecording = ActiveRecording(
+            recordingId = recordingId,
             relativePath = relativePath,
             absolutePath = absolutePath,
             startedAtMillis = epochClock.nowEpochMillis(),
@@ -131,14 +137,21 @@ class RecordingMediaSessionService(
             return null
         }
         pendingSaves += scope.launch {
-            memoryService.create(
-                MemoryDraft(
-                    title = "",
-                    summary = "",
-                    transcription = "",
-                    recordingPath = recording.relativePath,
-                ),
-            )
+            try {
+                memoryService.create(
+                    draft = MemoryDraft(
+                        title = "",
+                        summary = "",
+                        transcription = "",
+                        recordingPath = recording.relativePath,
+                    ),
+                    id = recording.recordingId,
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                // The audio stays on disk. RecordingReconciler pairs it with a memory on its next sweep.
+            }
         }
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
@@ -161,6 +174,7 @@ class RecordingMediaSessionService(
     }
 
     private class ActiveRecording(
+        val recordingId: String,
         val relativePath: String,
         val absolutePath: Path,
         val startedAtMillis: Long,

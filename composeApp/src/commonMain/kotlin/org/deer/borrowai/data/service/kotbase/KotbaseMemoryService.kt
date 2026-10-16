@@ -38,9 +38,9 @@ class KotbaseMemoryService private constructor(
         database.getDocument(id)?.toMemory()
     }
 
-    override suspend fun create(draft: MemoryDraft): Memory = mutex.withLock {
+    override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
         val memory = Memory(
-            id = idGenerator(),
+            id = id ?: idGenerator(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
             title = draft.title,
             summary = draft.summary,

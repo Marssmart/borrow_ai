@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
+import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.demo.DemoModelSetupService
@@ -20,6 +21,7 @@ import org.deer.borrowai.data.service.model.UnavailableModelSetupService
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
+import org.deer.borrowai.data.service.recording.RecordingReconciler
 
 class AppServices private constructor(
     val mode: AppMode,
@@ -108,18 +110,24 @@ class AppServices private constructor(
                 val graphScope = CoroutineScope(graphJob + dispatcher)
                 val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
                 val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock)
+                val mediaSession = RecordingMediaSessionService(
+                    memoryService = memories,
+                    recorder = recorder,
+                    microphonePermission = microphonePermission,
+                    recordingsRoot = recordingsRoot,
+                    scope = mediaScope,
+                    epochClock = epochClock,
+                )
+                RecordingReconciler(
+                    memoryService = memories,
+                    recordingsRoot = recordingsRoot,
+                    isRecording = { mediaSession.state.value !is MediaSessionState.Idle },
+                ).start(scope = graphScope)
                 return AppServices(
                     mode = AppMode.REAL,
                     modelSetup = UnavailableModelSetupService(),
                     memories = memories,
-                    mediaSession = RecordingMediaSessionService(
-                        memoryService = memories,
-                        recorder = recorder,
-                        microphonePermission = microphonePermission,
-                        recordingsRoot = recordingsRoot,
-                        scope = mediaScope,
-                        epochClock = epochClock,
-                    ),
+                    mediaSession = mediaSession,
                     graphJob = graphJob,
                     closeScope = graphScope,
                     onClose = { database.close() },
@@ -157,12 +165,14 @@ class AppServices private constructor(
             recorder: AudioRecorder,
             microphonePermission: MicrophonePermission,
             dispatcher: CoroutineDispatcher,
+            mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
         ): AppServices {
             val mode = AppMode.fromStartupFlag(startupModeFlag)
             return when (mode) {
                 AppMode.DEMO -> {
                     val graphJob = SupervisorJob()
                     val graphScope = CoroutineScope(graphJob + dispatcher)
+                    val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
                     val memories = InMemoryDemoMemoryService(epochClock = epochClock)
                     AppServices(
                         mode = mode,
@@ -173,7 +183,7 @@ class AppServices private constructor(
                             recorder = recorder,
                             microphonePermission = microphonePermission,
                             recordingsRoot = recordingsRoot,
-                            scope = graphScope,
+                            scope = mediaScope,
                             epochClock = epochClock,
                         ),
                         graphJob = graphJob,
