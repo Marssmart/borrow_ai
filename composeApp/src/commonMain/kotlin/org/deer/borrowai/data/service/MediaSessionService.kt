@@ -50,12 +50,22 @@ sealed interface PlaybackRequestResult {
     data object MemoryNotFound : PlaybackRequestResult
 
     data object NoPendingConfirmation : PlaybackRequestResult
+
+    data object Unavailable : PlaybackRequestResult
 }
 
 interface MediaSessionService {
     val state: StateFlow<MediaSessionState>
 
     val idleTranscription: StateFlow<String>
+
+    /** False when this service cannot play back recorded media. Playback controls should be disabled. */
+    val playbackAvailable: Boolean
+        get() = true
+
+    /** False when this service cannot start a raw recording. Recording controls should be disabled. */
+    val recordingAvailable: Boolean
+        get() = true
 
     fun startRecording(holdToRecord: Boolean = false)
 
@@ -68,6 +78,9 @@ interface MediaSessionService {
     fun cancelPendingPlayback(): Boolean
 
     fun stopPlayback()
+
+    /** Stops accepting work and returns after any save started before [close] has finished. */
+    suspend fun awaitPendingWork() {}
 
     fun close()
 }

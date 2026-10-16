@@ -4,9 +4,14 @@ import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModelProvider
+import okio.Path.Companion.toPath
 import org.deer.borrowai.data.app.AppMode
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.recording.AndroidAudioRecorder
+import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,15 +23,24 @@ class MainActivity : ComponentActivity() {
             } else {
                 null
             }
-        val services = ViewModelProvider(
+        // The permission outlives recreation, so each activity re-attaches its launcher before use.
+        val microphonePermission = ViewModelProvider(this)[MicrophonePermissionViewModel::class.java]
+            .permission
+            .also { it.attach(this) }
+        val viewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(
                 startupModeFlag = startupModeFlag,
                 epochClock = EpochClock { System.currentTimeMillis() },
+                // The service stores "recordings/<id>.m4a" relative to this root.
+                recordingsRoot = filesDir.absolutePath.toPath(),
+                recorder = AndroidAudioRecorder(applicationContext),
+                microphonePermission = microphonePermission,
             ),
-        ).get(AppServicesViewModel::class.java).services
+        ).get(AppServicesViewModel::class.java)
         setContent {
-            App(services)
+            val services by viewModel.services.collectAsState()
+            services?.let { App(it) }
         }
     }
 

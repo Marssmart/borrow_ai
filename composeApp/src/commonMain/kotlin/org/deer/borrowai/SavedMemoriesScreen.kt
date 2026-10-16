@@ -75,6 +75,7 @@ import borrowai.composeapp.generated.resources.memory_playback_confirmation_conf
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_message
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_title
 import borrowai.composeapp.generated.resources.memory_playback_error_title
+import borrowai.composeapp.generated.resources.memory_playback_unavailable_message
 import borrowai.composeapp.generated.resources.memory_playback_memory_missing_message
 import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
 import borrowai.composeapp.generated.resources.memory_return_to_recording
@@ -141,6 +142,7 @@ internal fun SavedMemoriesScreen(
                 memories = uiState.memories,
                 scrollState = stateHolder.memoriesScrollState,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
+                playbackEnabled = stateHolder.playbackAvailable,
                 onOpenMemory = stateHolder::openMemory,
                 onPlayOriginal = { stateHolder.togglePlayback(it, PlaybackContent.TRANSCRIPTION) },
                 onPlaySummary = { stateHolder.togglePlayback(it, PlaybackContent.SUMMARY) },
@@ -150,6 +152,7 @@ internal fun SavedMemoriesScreen(
                 MemoryDetailScreen(
                     memory = memory,
                     scrollState = stateHolder.detailScrollState,
+                    playbackEnabled = stateHolder.playbackAvailable,
                     playingContent = (uiState.mediaSessionState as? MediaSessionState.Playing)
                         ?.takeIf { it.target.memoryId == memory.id }
                         ?.target
@@ -204,6 +207,9 @@ internal fun SavedMemoriesScreen(
 
                             SavedMemoriesPlaybackError.REQUEST_REJECTED ->
                                 Res.string.memory_playback_request_failed_message
+
+                            SavedMemoriesPlaybackError.UNAVAILABLE ->
+                                Res.string.memory_playback_unavailable_message
                         },
                     ),
                 )
@@ -222,6 +228,7 @@ private fun MemoryListScreen(
     memories: List<Memory>,
     scrollState: ScrollState,
     playingTarget: PlaybackTarget?,
+    playbackEnabled: Boolean,
     onOpenMemory: (String) -> Unit,
     onPlayOriginal: (String) -> Unit,
     onPlaySummary: (String) -> Unit,
@@ -246,6 +253,7 @@ private fun MemoryListScreen(
                 MemoryCard(
                     memory = memory,
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
+                    playbackEnabled = playbackEnabled,
                     onOpen = { onOpenMemory(memory.id) },
                     onPlayOriginal = { onPlayOriginal(memory.id) },
                     onPlaySummary = { onPlaySummary(memory.id) },
@@ -268,6 +276,7 @@ private fun MemoryListScreen(
 private fun MemoryCard(
     memory: Memory,
     playingContent: PlaybackContent?,
+    playbackEnabled: Boolean,
     onOpen: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
@@ -330,6 +339,7 @@ private fun MemoryCard(
             )
             AudioPlaybackButtons(
                 playingContent = playingContent,
+                enabled = playbackEnabled,
                 onPlayOriginal = onPlayOriginal,
                 onPlaySummary = onPlaySummary,
             )
@@ -342,6 +352,7 @@ private fun MemoryDetailScreen(
     memory: Memory,
     scrollState: ScrollState,
     playingContent: PlaybackContent?,
+    playbackEnabled: Boolean,
     onBack: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
@@ -399,6 +410,7 @@ private fun MemoryDetailScreen(
             ) {
                 AudioPlaybackButtons(
                     playingContent = playingContent,
+                    enabled = playbackEnabled,
                     onPlayOriginal = onPlayOriginal,
                     onPlaySummary = onPlaySummary,
                 )
@@ -508,6 +520,7 @@ private fun AuroraPanel(
 @Composable
 private fun AudioPlaybackButtons(
     playingContent: PlaybackContent?,
+    enabled: Boolean,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
 ) {
@@ -517,6 +530,7 @@ private fun AudioPlaybackButtons(
     ) {
         TextButton(
             onClick = onPlayOriginal,
+            enabled = enabled,
             colors = ButtonDefaults.textButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
@@ -548,6 +562,7 @@ private fun AudioPlaybackButtons(
         }
         TextButton(
             onClick = onPlaySummary,
+            enabled = enabled,
             colors = ButtonDefaults.textButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),

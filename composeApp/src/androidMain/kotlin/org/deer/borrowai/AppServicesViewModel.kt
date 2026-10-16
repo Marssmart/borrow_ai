@@ -2,14 +2,54 @@ package org.deer.borrowai
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.recording.AudioRecorder
+import org.deer.borrowai.data.service.recording.MicrophonePermission
 
 internal class AppServicesViewModel(
-    val services: AppServices,
+    startupModeFlag: String?,
+    epochClock: EpochClock,
+    recordingsRoot: Path,
+    recorder: AudioRecorder,
+    microphonePermission: MicrophonePermission,
+    createServices: suspend () -> AppServices = {
+        AppServices.create(
+            startupModeFlag = startupModeFlag,
+            epochClock = epochClock,
+            recordingsRoot = recordingsRoot,
+            recorder = recorder,
+            microphonePermission = microphonePermission,
+        )
+    },
 ) : ViewModel() {
+    private val servicesState = MutableStateFlow<AppServices?>(null)
+    private var cleared = false
+
+    /** Null until the graph is built; REAL mode opens the database asynchronously. */
+    val services: StateFlow<AppServices?> = servicesState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val created = createServices()
+            // Creation can finish after onCleared ran; close it here instead of leaking it.
+            if (cleared) {
+                created.close()
+            } else {
+                servicesState.value = created
+            }
+        }
+    }
+
     override fun onCleared() {
-        services.close()
+        cleared = true
+        servicesState.value?.close()
         super.onCleared()
     }
 }
@@ -17,6 +57,9 @@ internal class AppServicesViewModel(
 internal class AppServicesViewModelFactory(
     private val startupModeFlag: String?,
     private val epochClock: EpochClock,
+    private val recordingsRoot: Path,
+    private val recorder: AudioRecorder,
+    private val microphonePermission: MicrophonePermission,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass != AppServicesViewModel::class.java) {
@@ -24,10 +67,11 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
-                AppServices.createFromStartupFlag(
-                    startupModeFlag = startupModeFlag,
-                    epochClock = epochClock,
-                ),
+                startupModeFlag = startupModeFlag,
+                epochClock = epochClock,
+                recordingsRoot = recordingsRoot,
+                recorder = recorder,
+                microphonePermission = microphonePermission,
             ),
         )
     }

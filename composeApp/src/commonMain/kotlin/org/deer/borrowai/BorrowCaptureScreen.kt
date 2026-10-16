@@ -101,20 +101,16 @@ internal fun BorrowCaptureScreen(
     val stateHolder = remember(mediaSessionService, modelSetupService) {
         CaptureUiStateHolder(
             mediaSessionService = mediaSessionService,
-            initiallyModelReady = modelSetupService.state.isReady,
         )
     }
     val uiState by stateHolder.uiState.state.collectAsState()
     val setupState by modelSetupService.state.state.collectAsState()
-    val modelReady = setupState.isReady
+    val canRecord = stateHolder.canRecord
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
 
-    LaunchedEffect(stateHolder, modelSetupService) {
-        launch { stateHolder.observeMediaSession() }
-        launch {
-            modelSetupService.state.state.collect { stateHolder.setModelReady(it.isReady) }
-        }
+    LaunchedEffect(stateHolder) {
+        stateHolder.observeMediaSession()
     }
 
     BoxWithConstraints(
@@ -150,7 +146,7 @@ internal fun BorrowCaptureScreen(
                 buttonSize = microphoneSize,
                 isRecording = uiState.isRecording,
                 isHoldRecording = uiState.isHoldRecording,
-                isEnabled = modelReady || uiState.isRecording,
+                isEnabled = canRecord || uiState.isRecording,
                 elapsedSeconds = uiState.elapsedSeconds,
                 statusLabel = modelStatus.takeUnless { uiState.isRecording },
                 onToggleRecording = stateHolder::toggleRecording,
@@ -168,7 +164,7 @@ internal fun BorrowCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
             ) {
-                if (modelReady || uiState.isRecording) {
+                if (canRecord || uiState.isRecording) {
                     Text(
                         text = if (uiState.isRecording) {
                             if (uiState.isHoldRecording) {

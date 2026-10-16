@@ -2,6 +2,15 @@
 
 Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioning.
 
+## [1.0.14]
+
+- Added `RecordingMediaSessionService`, which records microphone audio to `recordings/<id>.m4a` under the app's files directory on Android and iOS.
+- Recording requests microphone permission first. Stopping before the grant arrives cancels the pending start, and a denied grant leaves the service idle.
+- Stopping a recording auto-saves a memory with a blank title, summary, and transcription, and a relative `recordingPath`. A failed recording deletes its partial file and saves nothing.
+- The REAL app graph now uses `KotbaseMemoryService` and the recording service. Demo mode is unchanged.
+- Added `RECORD_AUDIO` on Android and `NSMicrophoneUsageDescription` on iOS.
+- Updated Android and iOS versioning to 1.0.14 (build 15).
+
 ## [1.0.13]
 
 - Added `KotbaseMemoryService`, a `MemoryService` backed by Kotbase (Couchbase Lite) with create, read, update, delete, and list operations.
