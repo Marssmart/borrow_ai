@@ -11,17 +11,19 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okio.FileSystem
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import org.deer.borrowai.data.app.AppServices
@@ -57,7 +59,9 @@ class AppServicesViewModelTest {
             microphonePermission = FakeMicrophonePermission(),
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)
-        val services = assertNotNull(first.services.value)
+        val services = runBlocking {
+            withTimeout(GRAPH_TIMEOUT_MILLIS) { first.services.filterNotNull().first() }
+        }
         val recreatedActivityViewModel = ViewModelProvider(store, factory)
             .get(AppServicesViewModel::class.java)
 
@@ -108,6 +112,11 @@ class AppServicesViewModelTest {
             late.mediaSession.startRecording()
         }
         assertEquals(MediaSessionState.Idle, late.mediaSession.state.value)
+    }
+
+    private companion object {
+        // The real graph's initial database read runs on Dispatchers.Default, so wait for publication.
+        const val GRAPH_TIMEOUT_MILLIS = 10_000L
     }
 
     private class FakeRecorder : AudioRecorder {
