@@ -49,7 +49,7 @@ class AppServicesViewModelTest {
     fun serviceGraphSurvivesProviderRecreationAndClosesWithItsStore() {
         val store = ViewModelStore()
         val factory = AppServicesViewModelFactory(
-            modelDevice = FakeModelDevice(),
+            createModelDevice = { FakeModelDevice() },
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
             recorder = FakeRecorder(),

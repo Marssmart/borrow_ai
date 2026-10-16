@@ -115,10 +115,13 @@ class AppServices private constructor(
                 val graphScope = CoroutineScope(graphJob + dispatcher)
                 val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
                 val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock)
+                val httpClient = createPlatformModelHttpClient()
+                // Closed when the graph completes, including the failure path where cancel() runs below.
+                graphJob.invokeOnCompletion { httpClient.close() }
                 val modelSetup = DownloadingModelSetupService(
                     totalRamBytes = modelDevice.totalRamBytes,
                     store = ModelFileStore(modelDirectoryUnder(recordingsRoot.toString())),
-                    downloader = KtorModelDownloader(createPlatformModelHttpClient()),
+                    downloader = KtorModelDownloader(httpClient),
                     network = modelDevice.network,
                     scope = graphScope,
                 )

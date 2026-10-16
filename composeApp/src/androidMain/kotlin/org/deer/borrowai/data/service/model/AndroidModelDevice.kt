@@ -15,28 +15,36 @@ class AndroidModelDevice(context: Context) : ModelDevice {
         appContext.getSystemService(ActivityManager::class.java).getMemoryInfo(it)
     }.totalMem
 
-    override val network: ModelNetworkPolicy = AndroidModelNetworkPolicy(appContext)
+    private val networkPolicy = AndroidModelNetworkPolicy(appContext)
+
+    override val network: ModelNetworkPolicy = networkPolicy
+
+    override fun close() = networkPolicy.close()
 }
 
 /** Tracks whether the default network is unmetered, so model downloads can wait for Wi-Fi. */
 private class AndroidModelNetworkPolicy(context: Context) : ModelNetworkPolicy {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val state = MutableStateFlow(currentlyUnmetered())
+    private val callback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            state.value = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        }
+
+        override fun onLost(network: Network) {
+            state.value = false
+        }
+    }
 
     override val unmetered: StateFlow<Boolean> = state
 
     init {
-        connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                state.value = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-            }
-
-            override fun onLost(network: Network) {
-                state.value = false
-            }
-        })
+        connectivity.registerDefaultNetworkCallback(callback)
     }
 
+    fun close() {
+        connectivity.unregisterNetworkCallback(callback)
+    }
     private fun currentlyUnmetered(): Boolean {
         val active = connectivity.activeNetwork ?: return false
         val capabilities = connectivity.getNetworkCapabilities(active) ?: return false

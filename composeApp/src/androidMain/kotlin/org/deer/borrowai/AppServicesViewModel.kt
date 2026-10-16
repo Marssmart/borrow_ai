@@ -54,12 +54,13 @@ internal class AppServicesViewModel(
     override fun onCleared() {
         cleared = true
         servicesState.value?.close()
+        modelDevice.close()
         super.onCleared()
     }
 }
 
 internal class AppServicesViewModelFactory(
-    private val modelDevice: ModelDevice,
+    private val createModelDevice: () -> ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
@@ -72,7 +73,7 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
-                modelDevice = modelDevice,
+                modelDevice = createModelDevice(),
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,
                 recorder = recorder,

@@ -19,8 +19,9 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
     // Stored files are relative to this root; the container path can change between installs.
     val recordingsRoot = (NSHomeDirectory() + "/Documents").toPath()
     val services by produceState<AppServices?>(initialValue = null) {
+        val modelDevice = IosModelDevice()
         val created = AppServices.create(
-            modelDevice = IosModelDevice(),
+            modelDevice = modelDevice,
             epochClock = EpochClock {
                 (NSDate().timeIntervalSince1970 * MILLIS_PER_SECOND).toLong()
             },
@@ -31,7 +32,10 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
         )
         value = created
         // Tied to the producer, so the graph closes even if the view leaves composition before a new one is made.
-        awaitDispose { created.close() }
+        awaitDispose {
+            created.close()
+            modelDevice.close()
+        }
     }
     services?.let { App(it) }
 }

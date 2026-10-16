@@ -4,4 +4,7 @@ package org.deer.borrowai.data.service.model
 interface ModelDevice {
     val totalRamBytes: Long
     val network: ModelNetworkPolicy
+
+    /** Releases platform listeners registered by [network]. The owner calls this once it is done with the device. */
+    fun close() {}
 }

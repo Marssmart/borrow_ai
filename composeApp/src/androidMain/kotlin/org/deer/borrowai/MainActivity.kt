@@ -23,7 +23,8 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(
-                modelDevice = AndroidModelDevice(applicationContext),
+                // Built only when the ViewModel is created, so recreated activities don't register a second callback.
+                createModelDevice = { AndroidModelDevice(applicationContext) },
                 epochClock = EpochClock { System.currentTimeMillis() },
                 // The service stores "recordings/<id>.m4a" relative to this root.
                 recordingsRoot = filesDir.absolutePath.toPath(),
