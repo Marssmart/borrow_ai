@@ -10,6 +10,7 @@ import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 
 /**
@@ -65,7 +66,13 @@ class RecordingReconciler(
             if (id in pairedIds || relativePath in pairedPaths) continue
             try {
                 // Re-check, because a save may have completed after the snapshot above was taken.
-                if (memoryService.findById(id).isRight()) continue
+                // Only a confirmed NotFound means the memory is missing. Other failures may hide an existing
+                // document, so creating then could overwrite it; the next sweep retries.
+                val isMissing = memoryService.findById(id).fold(
+                    ifLeft = { it is MemoryError.NotFound },
+                    ifRight = { false },
+                )
+                if (!isMissing) continue
                 val result = memoryService.create(
                     draft = MemoryDraft(
                         title = "",

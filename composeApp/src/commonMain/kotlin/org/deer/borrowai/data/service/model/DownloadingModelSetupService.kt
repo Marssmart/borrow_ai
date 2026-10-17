@@ -6,6 +6,8 @@ import arrow.core.right
 import arrow.core.raise.either
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -17,7 +19,6 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.MutableModelSetupState
-import org.deer.borrowai.data.service.MutableJob
 
 /**
  * Chooses the tier models from the device RAM and downloads them to static files.
@@ -34,8 +35,7 @@ class DownloadingModelSetupService(
     private val modelsForRam: (totalRamBytes: Long) -> TierModels = ModelCatalog::modelsForRam,
 ) : ModelSetupService {
     private val setupMutex = Mutex()
-    private val setupJob = MutableJob(scope)
-    private var lastFailure: ModelDownloadError? = null
+    private var setupAttempt: Deferred<Either<ModelDownloadError, Unit>>? = null
 
     override val state = MutableModelSetupState()
 
@@ -48,17 +48,12 @@ class DownloadingModelSetupService(
     }
 
     override suspend fun prepare(): Either<ModelDownloadError, Unit> {
-        setupMutex.withLock {
+        val attempt = setupMutex.withLock {
             if (state.isReady) return Unit.right()
-            if (!setupJob.isActive()) {
-                setupJob.launch {
-                    lastFailure = runSetup().fold({ it }, { null })
-                }
-            }
+            setupAttempt?.takeIf { it.isActive }
+                ?: scope.async { runSetup() }.also { setupAttempt = it }
         }
-        setupJob.join()
-        if (state.isReady) return Unit.right()
-        return (lastFailure ?: ModelDownloadError.Network("The model setup was interrupted.")).left()
+        return attempt.await()
     }
 
     private suspend fun runSetup(): Either<ModelDownloadError, Unit> {
@@ -75,7 +70,7 @@ class DownloadingModelSetupService(
         } catch (error: Exception) {
             ModelDownloadError.Model(error.message.orEmpty()).left()
         }
-        result.onLeft { error -> state.fail(error.toFailureReason()) }
+        result.fold({ error -> state.fail(error.toFailureReason()) }, { })
         return result
     }
 
@@ -147,7 +142,7 @@ class DownloadingModelSetupService(
             return@either false
         }
         store.preparePartial(spec)
-        if (store.commitCompletePartial(spec)) {
+        if (store.commitCompletePartial(spec).bind()) {
             state.transition(phase, progress = endProgress)
             return@either false
         }

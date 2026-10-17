@@ -160,7 +160,7 @@ class ModelFileStoreTest {
     private fun installVerifiedFile(fileSystem: FakeFileSystem, store: ModelFileStore) {
         fileSystem.createDirectories(directory)
         writeFile(fileSystem, store.partialPath(model), contents)
-        store.commit(model, model.sha256)
+        check(store.commit(model, model.sha256).isRight())
     }
 
     private fun writeFile(fileSystem: FileSystem, path: Path, bytes: ByteArray) {

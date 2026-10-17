@@ -84,7 +84,11 @@ class KtorModelDownloader(
         onProgress: (bytesDownloaded: Long) -> Unit,
     ): String {
         require(expectedSizeBytes >= 0L) { "The expected model size cannot be negative." }
-        val existingBytes = fileSystem.metadataOrNull(destination)?.size ?: 0L
+        val existingBytes = try {
+            fileSystem.metadataOrNull(destination)?.size ?: 0L
+        } catch (error: OkioIOException) {
+            throw ModelStorageException("Could not read the partial model file.", error)
+        }
         return try {
             if (existingBytes > expectedSizeBytes) {
                 discardPartial(destination)

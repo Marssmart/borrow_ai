@@ -142,6 +142,34 @@ class RecordingReconcilerTest {
     }
 
     @Test
+    fun nonNotFoundLookupFailureDoesNotCreate() = runTest {
+        val fs = FakeFileSystem()
+        fs.addRecording("abc")
+        val base = memories()
+        var creates = 0
+        val failing = object : MemoryService by base {
+            override suspend fun findById(id: String): Either<MemoryError, Memory> =
+                MemoryError.Persistence(IOException("read failed")).left()
+
+            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> {
+                creates++
+                return base.create(draft, id)
+            }
+        }
+        val reconciler = RecordingReconciler(
+            memoryService = failing,
+            recordingsRoot = root,
+            isRecording = { false },
+            epochClock = EpochClock { 1_800_000_000_000L },
+            fileSystem = fs,
+        )
+
+        assertEquals(0, reconciler.reconcile())
+        assertEquals(0, creates)
+        assertTrue(fs.exists(recordings / "abc.m4a"))
+    }
+
+    @Test
     fun oldTemporaryCaptureIsDeletedAndRecentOneIsKept() = runTest {
         val fs = FakeFileSystem()
         fs.createDirectories(recordings)

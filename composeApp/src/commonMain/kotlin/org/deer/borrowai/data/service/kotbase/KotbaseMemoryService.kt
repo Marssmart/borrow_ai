@@ -98,12 +98,15 @@ class KotbaseMemoryService private constructor(
 
     /**
      * Runs [write] and refreshes the published state as one unit. Cancellation is deferred until
-     * both finish, so a committed write never leaves [getState] stale.
+     * both finish, so a committed write never leaves [getState] stale. A refresh failure is
+     * returned so the caller learns that [getState] may not reflect the write.
      */
     private suspend fun writeAndPublish(write: () -> Unit): Either<MemoryError, Unit> = withContext(NonCancellable) {
         val written = withContext(Dispatchers.Default) { persisting(write) }
-        if (written.isRight()) publishMemories()
-        written
+        when (written) {
+            is Either.Left -> written
+            is Either.Right -> publishMemories()
+        }
     }
 
     private suspend fun publishMemories(): Either<MemoryError, Unit> =
@@ -119,13 +122,17 @@ class KotbaseMemoryService private constructor(
         MemoryError.Persistence(e).left()
     }
 
+    /** Runs [block] to decode stored content, mapping validation failures to [MemoryError.Malformed]. */
+    private inline fun <T> decoding(id: String, block: () -> T): Either<MemoryError, T> = try {
+        block().right()
+    } catch (e: IllegalArgumentException) {
+        MemoryError.Malformed(id).left()
+    }
+
     /** Reads the memory with [id], including a deleted one. */
-    private fun readMemory(id: String): Either<MemoryError, Memory> {
-        val found = persisting { database.getDocument(id)?.toMemory() }
-        return when (found) {
-            is Either.Left -> found
-            is Either.Right -> found.value?.right() ?: MemoryError.NotFound(id).left()
-        }
+    private fun readMemory(id: String): Either<MemoryError, Memory> = either {
+        val document = persisting { database.getDocument(id) }.bind() ?: raise(MemoryError.NotFound(id))
+        decoding(id) { document.toMemory() }.bind() ?: raise(MemoryError.NotFound(id))
     }
 
     /** Reads the memory with [id] only when it is active. */
@@ -158,15 +165,17 @@ class KotbaseMemoryService private constructor(
 
     private fun Result.toListedMemory(): Either<MemoryError, Memory> {
         val id = getString(COLUMN_ID) ?: return MemoryError.Malformed(id = "").left()
-        return Memory(
-            id = id,
-            createdAtEpochMillis = getLong(COLUMN_CREATED_AT),
-            title = getString(COLUMN_TITLE).orEmpty(),
-            summary = getString(COLUMN_SUMMARY).orEmpty(),
-            transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
-            recordingPath = getString(COLUMN_RECORDING_PATH),
-            deleted = getBoolean(COLUMN_DELETED),
-        ).right()
+        return decoding(id) {
+            Memory(
+                id = id,
+                createdAtEpochMillis = getLong(COLUMN_CREATED_AT),
+                title = getString(COLUMN_TITLE).orEmpty(),
+                summary = getString(COLUMN_SUMMARY).orEmpty(),
+                transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
+                recordingPath = getString(COLUMN_RECORDING_PATH),
+                deleted = getBoolean(COLUMN_DELETED),
+            )
+        }
     }
 
     private fun Memory.toDocument(): MutableDocument = MutableDocument(id).apply {

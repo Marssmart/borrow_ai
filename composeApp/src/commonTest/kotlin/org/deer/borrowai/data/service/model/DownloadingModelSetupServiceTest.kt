@@ -114,9 +114,9 @@ class DownloadingModelSetupServiceTest {
         val store = store(fileSystem)
         store.prepareDirectory()
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
-        store.commit(voice, voice.sha256)
+        check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
-        store.commit(llm, llm.sha256)
+        check(store.commit(llm, llm.sha256).isRight())
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val setup = DownloadingModelSetupService(
             totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
@@ -441,9 +441,9 @@ class DownloadingModelSetupServiceTest {
         val store = store(fileSystem)
         store.prepareDirectory()
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
-        store.commit(voice, voice.sha256)
+        check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
-        store.commit(llm, llm.sha256)
+        check(store.commit(llm, llm.sha256).isRight())
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope, network = FixedNetworkPolicy(false))
 
