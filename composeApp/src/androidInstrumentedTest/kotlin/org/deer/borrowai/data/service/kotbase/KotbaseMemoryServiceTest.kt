@@ -1,15 +1,19 @@
 package org.deer.borrowai.data.service.kotbase
 
+import arrow.core.Either
 import kotbase.Database
+import kotbase.MutableDocument
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.service.MemoryError
 
 class KotbaseMemoryServiceTest {
     private var database: Database? = null
@@ -127,4 +131,51 @@ class KotbaseMemoryServiceTest {
         assertEquals(listOf(created), reopened.getState().value)
         assertFalse(reopened.getState().value.isEmpty())
     }
+
+    @Test
+    fun storedMemoryWithInvalidRecordingPathIsMalformedOnEveryRead() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Valid", "", "")).getOrNull()!!
+        saveRawMemory(id = "bad-1", recordingPath = "/absolute/recording.m4a")
+
+        assertEquals(MemoryError.Malformed("bad-1"), service.findById("bad-1").errorOrNull())
+        assertEquals(
+            MemoryError.Malformed("bad-1"),
+            service.update("bad-1", MemoryDraft("t", "s", "x")).errorOrNull(),
+        )
+        assertEquals(MemoryError.Malformed("bad-1"), service.delete("bad-1").errorOrNull())
+        assertEquals(MemoryError.Malformed("bad-1"), service.findAll().errorOrNull())
+        assertEquals(listOf(created), service.getState().value)
+    }
+
+    @Test
+    fun closedDatabaseReportsPersistenceFailureOnWriteAndRead() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Before close", "", "")).getOrNull()!!
+        val closing = requireNotNull(database)
+        closing.close()
+
+        val createFailure = service.create(MemoryDraft("After close", "", "")).errorOrNull()
+        val findFailure = service.findById(created.id).errorOrNull()
+        database = Database(databaseName)
+
+        assertIs<MemoryError.Persistence>(createFailure)
+        assertIs<MemoryError.Persistence>(findFailure)
+    }
+
+    private fun saveRawMemory(id: String, recordingPath: String) {
+        requireNotNull(database).save(
+            MutableDocument(id).apply {
+                setString("type", "memory")
+                setLong("createdAtEpochMillis", 1_800_000_000_001L)
+                setString("title", "Raw")
+                setString("summary", "")
+                setString("transcription", "")
+                setString("recordingPath", recordingPath)
+                setBoolean("deleted", false)
+            },
+        )
+    }
+
+    private fun <T> Either<MemoryError, T>.errorOrNull(): MemoryError? = (this as? Either.Left)?.value
 }

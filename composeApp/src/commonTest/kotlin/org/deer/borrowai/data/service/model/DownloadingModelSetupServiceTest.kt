@@ -1,10 +1,13 @@
 package org.deer.borrowai.data.service.model
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.right
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -18,8 +21,10 @@ import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.fakefilesystem.FakeFileSystem
+import kotlin.coroutines.coroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -92,7 +97,7 @@ class DownloadingModelSetupServiceTest {
         val first = RecordingDownloader(fileSystem, listOf(voice, llm))
         val firstSetup = service(fileSystem, first, backgroundScope)
 
-        firstSetup.prepare()
+        assertEquals(Unit.right(), firstSetup.prepare())
 
         assertEquals(ModelSetupPhase.READY, firstSetup.state.value.phase)
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), first.requestedUrls)
@@ -102,7 +107,7 @@ class DownloadingModelSetupServiceTest {
 
         val secondDownloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val secondSetup = service(fileSystem, secondDownloader, backgroundScope)
-        secondSetup.prepare()
+        assertEquals(Unit.right(), secondSetup.prepare())
 
         assertEquals(ModelSetupPhase.READY, secondSetup.state.value.phase)
         assertEquals(emptyList(), secondDownloader.requestedUrls)
@@ -311,7 +316,10 @@ class DownloadingModelSetupServiceTest {
         }
         val setup = service(fileSystem, downloader, backgroundScope)
 
-        setup.prepare()
+        assertEquals(
+            ModelDownloadError.Network("Model download failed with HTTP 500.").left(),
+            setup.prepare(),
+        )
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
@@ -333,10 +341,32 @@ class DownloadingModelSetupServiceTest {
         }
         val setup = service(fileSystem, downloader, backgroundScope)
 
-        setup.prepare()
+        val result = setup.prepare()
 
+        val error = assertIs<Either.Left<ModelDownloadError>>(result).value
+        assertIs<ModelDownloadError.Storage>(error)
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.STORAGE, setup.state.value.failureReason)
+    }
+
+    @Test
+    fun cancelledWorkerCancelsAwaitingCaller() = runTest {
+        val fileSystem = FakeFileSystem()
+        val gate = CompletableDeferred<Unit>()
+        val downloader = GatedDownloader(fileSystem, listOf(voice, llm), gate)
+        val worker = CoroutineScope(coroutineContext + Job())
+        val setup = service(fileSystem, downloader, worker)
+
+        val caller = launch { setup.prepare() }
+        runCurrent()
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+
+        worker.cancel()
+        runCurrent()
+        caller.join()
+
+        assertTrue(caller.isCancelled)
+        assertFalse(setup.state.value.phase == ModelSetupPhase.READY)
     }
 
     @Test
