@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.19]
+
+- Added the `SummarizationService` boundary. It returns `Either<SummarizationError, String>` with explicit variants for a missing model, a missing engine, and engine failure.
+- Recordings only request a summary when the transcription is non-blank. A failed summarizer leaves the summary blank, so the recording still saves.
+
 ## [1.0.18]
 
 - Added the `TranscriptionService` boundary. It returns `Either<TranscriptionError, String>` with explicit variants for a missing model, a missing engine, invalid audio, and engine failure.
