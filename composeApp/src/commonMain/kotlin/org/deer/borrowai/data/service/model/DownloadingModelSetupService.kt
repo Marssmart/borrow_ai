@@ -79,6 +79,7 @@ class DownloadingModelSetupService(
     }
 
     private suspend fun setupModels(): Either<ModelDownloadError, Unit> = either {
+        store.removeObsoleteFiles(ModelCatalog.OBSOLETE_FILE_NAMES)
         val chosen = modelsForRam(totalRamBytes)
         val allSpeechPresent = (chosen.live + chosen.voice).all { store.isPresent(it) }
         if (allSpeechPresent && store.isPresent(chosen.llm)) {
@@ -136,24 +137,28 @@ class DownloadingModelSetupService(
         startProgress: Float,
         endProgress: Float,
     ): Either<ModelDownloadError, Boolean> = either {
-        val totalBytes = specs.sumOf { it.sizeBytes }.toFloat()
+        val totalBytes = specs.sumOf { it.sizeBytes }
         var offsetBytes = 0L
         var downloadedAny = false
         for (spec in specs) {
-            val fileStart = startProgress + (endProgress - startProgress) * (offsetBytes / totalBytes)
+            val bundleOffset = offsetBytes
+            val fileStart = startProgress + (endProgress - startProgress) * (offsetBytes.toFloat() / totalBytes)
             offsetBytes += spec.sizeBytes
-            val fileEnd = startProgress + (endProgress - startProgress) * (offsetBytes / totalBytes)
+            val fileEnd = startProgress + (endProgress - startProgress) * (offsetBytes.toFloat() / totalBytes)
             val downloaded = downloadModel(
                 spec,
                 phase,
                 fileStart,
                 fileEnd,
                 alreadyPresent = store.isPresent(spec),
+                bundleOffsetBytes = bundleOffset,
+                bundleTotalBytes = totalBytes,
             ).bind()
             downloadedAny = downloadedAny || downloaded
         }
         downloadedAny
     }
+
 
     private fun ModelDownloadError.toFailureReason(): ModelSetupFailureReason = when (this) {
         is ModelDownloadError.Network -> ModelSetupFailureReason.NETWORK
@@ -186,24 +191,36 @@ class DownloadingModelSetupService(
         publish(ModelSetupPhase.READY, 1f)
     }
 
+    /**
+     * Downloads one file. Byte counts are reported against the whole step bundle: [bundleOffsetBytes] is where this
+     * file starts within the bundle and [bundleTotalBytes] is the bundle size, so the live ring stays monotonic.
+     */
     private suspend fun downloadModel(
         spec: ModelSpec,
         phase: ModelSetupPhase,
         startProgress: Float,
         endProgress: Float,
         alreadyPresent: Boolean,
+        bundleOffsetBytes: Long = 0L,
+        bundleTotalBytes: Long = spec.sizeBytes,
     ): Either<ModelDownloadError, Boolean> = either {
+        val completedBytes = bundleOffsetBytes + spec.sizeBytes
         if (alreadyPresent) {
-            transition(phase, progress = endProgress)
+            transition(phase, progress = endProgress, bytesDownloaded = completedBytes, bytesTotal = bundleTotalBytes)
             return@either false
         }
         store.preparePartial(spec)
         if (store.commitCompletePartial(spec).bind()) {
-            transition(phase, progress = endProgress)
+            transition(phase, progress = endProgress, bytesDownloaded = completedBytes, bytesTotal = bundleTotalBytes)
             return@either false
         }
         awaitTransferAllowed(startProgress)
-        transition(phase, progress = startProgress)
+        transition(
+            phase,
+            progress = startProgress,
+            bytesDownloaded = bundleOffsetBytes,
+            bytesTotal = bundleTotalBytes,
+        )
         val downloadedSha256 = downloader.download(
             spec.downloadUrl,
             store.partialPath(spec),
@@ -213,14 +230,15 @@ class DownloadingModelSetupService(
             transition(
                 phase = phase,
                 progress = startProgress + (endProgress - startProgress) * fraction,
-                bytesDownloaded = bytes,
-                bytesTotal = spec.sizeBytes,
+                bytesDownloaded = bundleOffsetBytes + bytes,
+                bytesTotal = bundleTotalBytes,
             )
         }.bind()
         store.commit(spec, downloadedSha256).bind()
-        transition(phase, progress = endProgress)
+        transition(phase, progress = endProgress, bytesDownloaded = completedBytes, bytesTotal = bundleTotalBytes)
         true
     }
+
 
     /** Holds a required transfer until the network is unmetered or the user consents to mobile data for this run. */
     private suspend fun awaitTransferAllowed(progress: Float) {
