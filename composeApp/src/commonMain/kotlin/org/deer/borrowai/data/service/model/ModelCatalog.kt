@@ -61,6 +61,9 @@ object ModelCatalog {
     const val VOICE_FILE_NAME = "voice-encoder.int8.onnx"
     const val LLM_FILE_NAME = "llm-model.gguf"
 
+    /** Whisper.cpp GGML files written by earlier catalog versions; the sherpa-onnx runtime cannot load them. */
+    val OBSOLETE_FILE_NAMES = listOf("voice-model.bin", "live-voice-model.bin")
+
     private const val TOKENS_SIZE_BYTES = 816_730L
     private const val TOKENS_SHA256 = "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
 

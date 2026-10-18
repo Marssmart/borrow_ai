@@ -79,7 +79,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
-            implementation(files(sherpaOnnxAar))
+            implementation(files(sherpaOnnxAar).builtBy(downloadSherpaOnnxAar))
         }
 
         // Kotbase needs the native Couchbase Lite library, so its CRUD tests run on a device.
