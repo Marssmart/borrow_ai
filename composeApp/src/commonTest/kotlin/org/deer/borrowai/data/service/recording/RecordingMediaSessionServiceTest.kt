@@ -131,6 +131,7 @@ class RecordingMediaSessionServiceTest {
         audioPlayer: AudioPlayer = FakeAudioPlayer(),
         epochClock: EpochClock = EpochClock { 1_800_000_000_000L },
         monotonicMillis: () -> Long = { 0L },
+        liveTranscriber: LiveTranscriber? = null,
     ) = RecordingMediaSessionService(
         memoryService = memories,
         recorder = recorder,
@@ -142,7 +143,81 @@ class RecordingMediaSessionServiceTest {
         fileSystem = fileSystem,
         idGenerator = { "rec-1" },
         monotonicMillis = monotonicMillis,
+        liveTranscriber = liveTranscriber,
     )
+
+    private class FakeLiveTranscriber : LiveTranscriber {
+        var starts = 0
+        var stops = 0
+        private var onPartial: ((String) -> Unit)? = null
+
+        override fun start(onPartial: (String) -> Unit): Boolean {
+            starts++
+            this.onPartial = onPartial
+            return true
+        }
+
+        override fun stop() {
+            stops++
+            onPartial = null
+        }
+
+        fun emit(text: String) {
+            onPartial?.invoke(text)
+        }
+    }
+
+    private object ThrowingLiveTranscriber : LiveTranscriber {
+        override fun start(onPartial: (String) -> Unit): Boolean = throw IllegalStateException("model missing")
+
+        override fun stop() = Unit
+    }
+
+    @Test
+    fun livePartialTextIsShownWhileRecordingAndClearedOnStop() = runTest {
+        val transcriber = FakeLiveTranscriber()
+        val recorder = FakeRecorder()
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories(),
+            FakeFileSystem(),
+            backgroundScope,
+            liveTranscriber = transcriber,
+        )
+
+        service.startRecording(holdToRecord = true)
+        runCurrent()
+        transcriber.emit("hello there")
+
+        assertEquals(1, transcriber.starts)
+        assertEquals("hello there", assertIs<MediaSessionState.Recording>(service.state.value).transcription)
+
+        service.stopRecording()
+        runCurrent()
+
+        assertEquals(1, transcriber.stops)
+        assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun liveTranscriberFailureKeepsRecordingNormally() = runTest {
+        val recorder = FakeRecorder()
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories(),
+            FakeFileSystem(),
+            backgroundScope,
+            liveTranscriber = ThrowingLiveTranscriber,
+        )
+
+        service.startRecording(holdToRecord = true)
+        runCurrent()
+
+        assertEquals("", assertIs<MediaSessionState.Recording>(service.state.value).transcription)
+        assertEquals(listOf("/app/files/recordings/temp_rec-1.m4a"), recorder.startedPaths)
+    }
 
     @Test
     fun recordingAndPlaybackAvailableWithoutModel() = runTest {

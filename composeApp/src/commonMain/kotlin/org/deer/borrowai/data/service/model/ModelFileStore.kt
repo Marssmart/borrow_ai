@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.model
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import kotlin.random.Random
 import okio.FileSystem
 import okio.HashingSource
 import okio.Path
@@ -210,8 +211,9 @@ class ModelFileStore(
             return
         }
         val recordPath = verifiedRecordPath(spec)
-        val temporaryPath = modelDirectory / (spec.fileName + VERIFIED_TEMP_SUFFIX)
-        fileSystem.delete(temporaryPath, mustExist = false)
+        // Unique temp names keep concurrent writers (e.g. live transcription and setup) from moving each other's file.
+        val suffix = Random.nextLong().toULong().toString(16)
+        val temporaryPath = modelDirectory / (spec.fileName + VERIFIED_TEMP_SUFFIX + "." + suffix)
         val sink = fileSystem.sink(temporaryPath).buffer()
         try {
             sink.writeUtf8(
