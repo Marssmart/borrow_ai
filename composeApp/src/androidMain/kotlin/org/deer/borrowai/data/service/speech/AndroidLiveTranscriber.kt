@@ -131,14 +131,31 @@ internal class AndroidLiveTranscriber(
                 // Live text is best-effort; ending here leaves the recording running without a transcript.
                 Log.w(LOG_TAG, "Live transcription failed; recording continues without a live transcript", t)
             } finally {
-                synchronized(lock) {
+                // Capture runs on this thread, so the read loop has already exited and the microphone can be released.
+                val audio = synchronized(lock) {
                     stopLocked()
-                    record = null
+                    record.also { record = null }
                 }
-                decoder?.shutdownNow()
-                runCatching { decoder?.awaitTermination(DECODER_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
-                runCatching { record?.release() }
-                runCatching { recognizer?.release() }
+                runCatching { audio?.release() }
+                val pendingDecoder = decoder
+                val pendingRecognizer = recognizer
+                if (pendingDecoder == null) {
+                    runCatching { pendingRecognizer?.release() }
+                } else {
+                    pendingDecoder.shutdownNow()
+                    val terminated = runCatching {
+                        pendingDecoder.awaitTermination(DECODER_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    }.getOrDefault(false)
+                    if (terminated) {
+                        runCatching { pendingRecognizer?.release() }
+                    } else {
+                        // Native inference may still be using the recognizer, so release it only after the decoder stops.
+                        Thread({
+                            runCatching { pendingDecoder.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS) }
+                            runCatching { pendingRecognizer?.release() }
+                        }, "live-transcriber-release").apply { isDaemon = true }.start()
+                    }
+                }
                 finished.countDown()
             }
         }
@@ -177,6 +194,10 @@ internal class AndroidLiveTranscriber(
                                 if (active && session === this@Session) onPartial(text)
                             }
                         }
+                    } catch (t: Throwable) {
+                        // Runs on the executor, outside Session.run()'s try/catch. Stop the session so capture cleanup runs.
+                        Log.w(LOG_TAG, "Live decode failed; stopping live transcription", t)
+                        synchronized(lock) { stopLocked() }
                     } finally {
                         decodeQueued.set(false)
                     }
