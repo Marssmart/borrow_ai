@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
+import okio.IOException
 import okio.Path
 import org.deer.borrowai.data.service.model.ModelCatalog
 import org.deer.borrowai.data.service.model.ModelFileStore
@@ -16,44 +17,63 @@ import org.deer.borrowai.data.service.model.ModelSpec
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.recording.LiveAudioWindow
 import org.deer.borrowai.data.service.recording.LiveTranscriber
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Creates a [LiveTranscriber] backed by the Whisper tiny int8 model, or returns null when the native runtime or any
- * live model file is unavailable. Callers keep recording normally when this returns null.
+ * Creates a [LiveTranscriber] that resolves the Whisper model files each time a recording starts, on its background
+ * thread. Models downloaded after app launch are picked up without a restart, and recording never waits on setup.
+ * When the native runtime or any live model file is unavailable, the transcriber stays silent and recording continues.
  */
-internal fun createLiveTranscriberIfAvailable(modelDirectory: Path, totalRamBytes: Long): LiveTranscriber? {
+internal fun createLiveTranscriber(modelDirectory: Path, totalRamBytes: Long): LiveTranscriber =
+    AndroidLiveTranscriber { resolveLiveModelPaths(modelDirectory, totalRamBytes) }
+
+internal data class LiveModelPaths(val encoder: String, val decoder: String, val tokens: String)
+
+private fun resolveLiveModelPaths(modelDirectory: Path, totalRamBytes: Long): LiveModelPaths? {
     if (!SherpaOnnxRuntime.isAvailable) return null
     val specs = ModelCatalog.modelsForRam(totalRamBytes).live
     val store = ModelFileStore(modelDirectory)
     val encoder = specs.firstOrNull { it.fileName.endsWith("-encoder.int8.onnx") } ?: return null
     val decoder = specs.firstOrNull { it.fileName.endsWith("-decoder.int8.onnx") } ?: return null
     val tokens = specs.firstOrNull { it.fileName.endsWith("-tokens.txt") } ?: return null
-    val present = listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) }
+    val present = try {
+        listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) }
+    } catch (error: IOException) {
+        // Presence checks hash files and can fail on storage errors; live text is optional, so skip it.
+        Log.w(LOG_TAG, "Could not verify live transcription models; recording without a live transcript", error)
+        return null
+    }
     if (!present) return null
-    return AndroidLiveTranscriber(
-        encoderPath = store.finalPath(encoder).toString(),
-        decoderPath = store.finalPath(decoder).toString(),
-        tokensPath = store.finalPath(tokens).toString(),
+    return LiveModelPaths(
+        encoder = store.finalPath(encoder).toString(),
+        decoder = store.finalPath(decoder).toString(),
+        tokens = store.finalPath(tokens).toString(),
     )
 }
 
 /**
  * Streams microphone audio into a rolling window and re-decodes it about once per second with a Whisper tiny
  * recognizer. Whisper is not truly streaming, so partial text is the decode of the latest window, emitted only
- * when it changes. Failures end live transcription silently; the saved recording is unaffected.
+ * when it changes. Capture and decoding run on separate threads so slow inference cannot drop audio. Failures end
+ * live transcription silently; the saved recording is unaffected.
  */
 internal class AndroidLiveTranscriber(
-    private val encoderPath: String,
-    private val decoderPath: String,
-    private val tokensPath: String,
+    private val resolveModelPaths: () -> LiveModelPaths?,
 ) : LiveTranscriber {
     private val lock = Any()
     private var session: Session? = null
 
     override fun start(onPartial: (String) -> Unit): Boolean {
-        val next = Session()
+        val next: Session
         synchronized(lock) {
-            session?.active = false
+            val previous = session
+            // The new session waits for the previous capture to release the microphone before opening it.
+            next = Session(previous?.finished)
+            previous?.stopLocked()
             session = next
         }
         val thread = Thread({ next.run(onPartial) }, "live-transcriber")
@@ -64,64 +84,117 @@ internal class AndroidLiveTranscriber(
 
     override fun stop() {
         synchronized(lock) {
-            session?.active = false
+            session?.stopLocked()
             session = null
         }
     }
 
-    private inner class Session {
-        @Volatile
-        var active: Boolean = true
+    private inner class Session(private val previousFinished: CountDownLatch?) {
+        /** Counted down once this session has released the microphone and recognizer. */
+        val finished = CountDownLatch(1)
+
+        // Guarded by [lock]. Lets stop() halt capture even while the worker is still setting up.
+        private var active: Boolean = true
+        private var record: AudioRecord? = null
+
+        /** Must be called with [lock] held. */
+        fun stopLocked() {
+            active = false
+            runCatching { record?.stop() }
+        }
+
+        private fun isActive(): Boolean = synchronized(lock) { active }
 
         fun run(onPartial: (String) -> Unit) {
             var recognizer: OfflineRecognizer? = null
-            var record: AudioRecord? = null
+            var decoder: ExecutorService? = null
             try {
-                recognizer = createRecognizer()
-                record = createAudioRecord() ?: return
-                record.startRecording()
-                val window = LiveAudioWindow(WINDOW_SAMPLES)
-                val chunk = ShortArray(CHUNK_SAMPLES)
-                var samplesSinceDecode = 0
-                var lastText = ""
-                while (active) {
-                    val read = record.read(chunk, 0, chunk.size)
-                    if (read < 0) break
-                    if (read == 0) continue
-                    window.appendPcm16(chunk, read)
-                    samplesSinceDecode += read
-                    if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES || window.size < MIN_DECODE_SAMPLES) continue
-                    samplesSinceDecode = 0
-                    val text = decode(recognizer, window.snapshot())
-                    if (text.isNotBlank() && text != lastText) {
-                        lastText = text
-                        // Checked under the lock so stop() guarantees no callback after it returns.
-                        synchronized(lock) {
-                            if (active && session === this) onPartial(text)
-                        }
+                previousFinished?.await()
+                if (!isActive()) return
+                val paths = resolveModelPaths() ?: return
+                recognizer = createRecognizer(paths)
+                if (!isActive()) return
+                val audio = createAudioRecord() ?: return
+                synchronized(lock) {
+                    if (!active) {
+                        audio.release()
+                        return
                     }
+                    record = audio
                 }
+                audio.startRecording()
+                decoder = Executors.newSingleThreadExecutor { task ->
+                    Thread(task, "live-transcriber-decode").apply { isDaemon = true }
+                }
+                capture(audio, recognizer, decoder, onPartial)
             } catch (t: Throwable) {
                 // Live text is best-effort; ending here leaves the recording running without a transcript.
-                Log.w(TAG, "Live transcription failed; recording continues without a live transcript", t)
+                Log.w(LOG_TAG, "Live transcription failed; recording continues without a live transcript", t)
             } finally {
-                runCatching { record?.stop() }
+                synchronized(lock) {
+                    stopLocked()
+                    record = null
+                }
+                decoder?.shutdownNow()
+                runCatching { decoder?.awaitTermination(DECODER_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
                 runCatching { record?.release() }
                 runCatching { recognizer?.release() }
+                finished.countDown()
             }
         }
 
-        private fun createRecognizer(): OfflineRecognizer {
+        private fun capture(
+            audio: AudioRecord,
+            recognizer: OfflineRecognizer,
+            decoder: ExecutorService,
+            onPartial: (String) -> Unit,
+        ) {
+            val window = LiveAudioWindow(WINDOW_SAMPLES)
+            val windowLock = Any()
+            val chunk = ShortArray(CHUNK_SAMPLES)
+            val decodeQueued = AtomicBoolean(false)
+            var samplesSinceDecode = 0
+            var lastText = ""
+            while (isActive()) {
+                val read = audio.read(chunk, 0, chunk.size)
+                if (read < 0) break
+                if (read == 0) continue
+                synchronized(windowLock) { window.appendPcm16(chunk, read) }
+                samplesSinceDecode += read
+                if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES) continue
+                if (window.size < MIN_DECODE_SAMPLES) continue
+                samplesSinceDecode = 0
+                // Capture never waits for inference. If a decode is still running, the newest audio is decoded next.
+                if (!decodeQueued.compareAndSet(false, true)) continue
+                decoder.execute {
+                    try {
+                        val samples = synchronized(windowLock) { window.snapshot() }
+                        val text = decode(recognizer, samples)
+                        if (text.isNotBlank() && text != lastText) {
+                            lastText = text
+                            // Checked under the lock so stop() guarantees no callback after it returns.
+                            synchronized(lock) {
+                                if (active && session === this@Session) onPartial(text)
+                            }
+                        }
+                    } finally {
+                        decodeQueued.set(false)
+                    }
+                }
+            }
+        }
+
+        private fun createRecognizer(paths: LiveModelPaths): OfflineRecognizer {
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
                 modelConfig = OfflineModelConfig(
                     whisper = OfflineWhisperModelConfig(
-                        encoder = encoderPath,
-                        decoder = decoderPath,
+                        encoder = paths.encoder,
+                        decoder = paths.decoder,
                         language = "",
                         task = "transcribe",
                     ),
-                    tokens = tokensPath,
+                    tokens = paths.tokens,
                     numThreads = THREADS,
                     debug = false,
                     provider = "cpu",
@@ -167,7 +240,6 @@ internal class AndroidLiveTranscriber(
     }
 
     private companion object {
-        const val TAG = "AndroidLiveTranscriber"
         const val SAMPLE_RATE = 16_000
         const val FEATURE_DIM = 80
         const val THREADS = 2
@@ -175,5 +247,8 @@ internal class AndroidLiveTranscriber(
         const val DECODE_INTERVAL_SAMPLES = SAMPLE_RATE
         const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 2
         const val WINDOW_SAMPLES = SAMPLE_RATE * 30
+        const val DECODER_SHUTDOWN_TIMEOUT_SECONDS = 5L
     }
 }
+
+private const val LOG_TAG = "AndroidLiveTranscriber"

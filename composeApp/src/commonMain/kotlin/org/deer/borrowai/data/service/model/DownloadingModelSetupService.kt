@@ -74,7 +74,7 @@ class DownloadingModelSetupService(
         } catch (error: Exception) {
             ModelDownloadError.Model(error.message.orEmpty()).left()
         }
-        result.fold({ error -> fail(error.toFailureReason()) }, { })
+        result.fold({ error -> fail(error.toFailureReason(), error.describe()) }, { })
         return result
     }
 
@@ -180,8 +180,16 @@ class DownloadingModelSetupService(
         )
     }
 
-    private fun fail(reason: ModelSetupFailureReason) {
-        mutableState.update { it.copy(phase = ModelSetupPhase.FAILED, failureReason = reason) }
+    private fun ModelDownloadError.describe(): String = when (this) {
+        is ModelDownloadError.Network -> "Network: $message${cause?.let { " ($it)" }.orEmpty()}"
+        is ModelDownloadError.Storage -> "Storage: $cause"
+        is ModelDownloadError.Model -> "Model: $message"
+    }
+
+    private fun fail(reason: ModelSetupFailureReason, detail: String) {
+        mutableState.update {
+            it.copy(phase = ModelSetupPhase.FAILED, failureReason = reason, failureDetail = detail)
+        }
     }
 
     private fun publish(phase: ModelSetupPhase, progress: Float) = transition(phase, progress)
