@@ -92,9 +92,12 @@ internal class AndroidLiveTranscriber(
                     if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES || window.size < MIN_DECODE_SAMPLES) continue
                     samplesSinceDecode = 0
                     val text = decode(recognizer, window.snapshot())
-                    if (active && text.isNotBlank() && text != lastText) {
+                    if (text.isNotBlank() && text != lastText) {
                         lastText = text
-                        onPartial(text)
+                        // Checked under the lock so stop() guarantees no callback after it returns.
+                        synchronized(lock) {
+                            if (active && session === this) onPartial(text)
+                        }
                     }
                 }
             } catch (_: Throwable) {
