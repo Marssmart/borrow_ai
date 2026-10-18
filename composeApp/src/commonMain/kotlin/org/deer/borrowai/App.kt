@@ -11,14 +11,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import org.deer.borrowai.data.app.AppServices
 import kotlinx.coroutines.launch
 
@@ -46,21 +48,24 @@ private object BorrowBackground {
     )
     val topGlowColor = Color(0xFF58B5AE)
     val bottomGlowColor = Color(0xFF8589E0)
+    val topGlowSize = 380.dp
+    val bottomGlowSize = 440.dp
 
     const val TOP_GLOW_ALPHA = 0.38f
     const val BOTTOM_GLOW_ALPHA = 0.25f
 }
 
+private const val MAIN_PAGE_COUNT = 2
+private const val CAPTURE_PAGE = 0
+private const val MEMORIES_PAGE = 1
+
 @Composable
 fun App(services: AppServices) {
     val mainPagerState = rememberPagerState(
-        pageCount = { AppShellStateHolder.MAIN_PAGE_COUNT },
+        pageCount = { MAIN_PAGE_COUNT },
     )
     val scope = rememberCoroutineScope()
-    val appStateHolder = remember(mainPagerState, scope) {
-        AppShellStateHolder(mainPagerState, scope)
-    }
-    val appUiState by appStateHolder.uiState.collectAsState()
+    var isMemoryDetailVisible by remember { mutableStateOf(false) }
     LaunchedEffect(services.modelSetup) {
         services.modelSetup.prepare()
     }
@@ -76,7 +81,7 @@ fun App(services: AppServices) {
             ) {
                 Box(
                     modifier = Modifier.align(Alignment.TopEnd)
-                        .size(AppShellStateHolder.BACKGROUND_TOP_GLOW_SIZE)
+                        .size(BorrowBackground.topGlowSize)
                         .background(
                             Brush.radialGradient(
                                 listOf(
@@ -90,7 +95,7 @@ fun App(services: AppServices) {
                 )
                 Box(
                     modifier = Modifier.align(Alignment.BottomStart)
-                        .size(AppShellStateHolder.BACKGROUND_BOTTOM_GLOW_SIZE)
+                        .size(BorrowBackground.bottomGlowSize)
                         .background(
                             Brush.radialGradient(
                                 listOf(
@@ -103,12 +108,12 @@ fun App(services: AppServices) {
                         ),
                 )
                 HorizontalPager(
-                    state = appStateHolder.mainPagerState,
+                    state = mainPagerState,
                     modifier = Modifier.fillMaxSize(),
-                    userScrollEnabled = !appUiState.isMemoryDetailVisible,
+                    userScrollEnabled = !isMemoryDetailVisible,
                 ) { page ->
                     when (page) {
-                        AppShellStateHolder.CAPTURE_PAGE -> BorrowCaptureScreen(
+                        CAPTURE_PAGE -> BorrowCaptureScreen(
                             mediaSessionService = services.mediaSession,
                             modelSetupService = services.modelSetup,
                             onDownloadOverMobileData = {
@@ -116,10 +121,12 @@ fun App(services: AppServices) {
                             },
                         )
 
-                        AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
+                        MEMORIES_PAGE -> SavedMemoriesScreen(
                             services = services,
-                            onReturnToCapture = appStateHolder::returnToCapture,
-                            onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
+                            onReturnToCapture = {
+                                scope.launch { mainPagerState.animateScrollToPage(CAPTURE_PAGE) }
+                            },
+                            onDetailVisibilityChanged = { isMemoryDetailVisible = it },
                         )
                     }
                 }
