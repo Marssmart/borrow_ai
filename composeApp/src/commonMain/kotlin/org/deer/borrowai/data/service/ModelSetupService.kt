@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.service
 
 import arrow.core.Either
+import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.service.model.ModelDownloadError
 
 enum class ModelSetupPhase {
@@ -33,7 +34,7 @@ data class ModelSetupState(
 }
 
 interface ModelSetupService {
-    val state: MutableModelSetupState
+    val state: StateFlow<ModelSetupState>
 
     suspend fun prepare(): Either<ModelDownloadError, Unit>
 
