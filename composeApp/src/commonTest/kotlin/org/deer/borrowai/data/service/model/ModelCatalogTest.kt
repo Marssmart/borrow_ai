@@ -3,7 +3,6 @@ package org.deer.borrowai.data.service.model
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class ModelCatalogTest {
@@ -28,16 +27,29 @@ class ModelCatalogTest {
     @Test
     fun eachTierPicksItsVoiceAndLlmModels() {
         val legacy = ModelCatalog.modelsFor(ModelTier.LEGACY)
-        assertEquals("Whisper Tiny", legacy.voice.displayName)
+        assertEquals("Whisper Tiny", legacy.voice.first().displayName)
         assertEquals("Gemma 2B", legacy.llm.displayName)
 
         val mid = ModelCatalog.modelsFor(ModelTier.MID)
-        assertEquals("Whisper Base", mid.voice.displayName)
+        assertEquals("Whisper Base", mid.voice.first().displayName)
         assertEquals("Gemma 7B", mid.llm.displayName)
 
         val latest = ModelCatalog.modelsFor(ModelTier.LATEST)
-        assertEquals("Whisper Large v3", latest.voice.displayName)
+        assertEquals("Whisper Large v3", latest.voice.first().displayName)
         assertEquals("Gemma 9B", latest.llm.displayName)
+    }
+
+    @Test
+    fun speechModelsAreEncoderDecoderAndTokensFiles() {
+        ModelTier.entries.forEach { tier ->
+            val models = ModelCatalog.modelsFor(tier)
+            listOf(models.live, models.voice).forEach { files ->
+                assertEquals(3, files.size, tier.name)
+                assertTrue(files.any { it.fileName.endsWith("-encoder.int8.onnx") }, tier.name)
+                assertTrue(files.any { it.fileName.endsWith("-decoder.int8.onnx") }, tier.name)
+                assertTrue(files.any { it.fileName.endsWith("-tokens.txt") }, tier.name)
+            }
+        }
     }
 
     @Test
@@ -49,35 +61,29 @@ class ModelCatalogTest {
 
     @Test
     fun catalogEntriesAreHttpsWithPositiveSizesAndStaticFileNames() {
-        val allModels = ModelTier.entries.flatMap { tier ->
-            ModelCatalog.modelsFor(tier).let { listOf(it.voice, it.llm) }
-        }
-        allModels.forEach { model ->
-            assertTrue(model.downloadUrl.startsWith("https://"), model.downloadUrl)
-            assertTrue(model.sizeBytes > 0L, model.displayName)
-        }
         ModelTier.entries.forEach { tier ->
             val models = ModelCatalog.modelsFor(tier)
-            assertEquals(ModelRole.VOICE, models.voice.role)
+            (models.live + models.voice + listOf(models.llm)).forEach { model ->
+                assertTrue(model.downloadUrl.startsWith("https://"), model.downloadUrl)
+                assertTrue(model.sizeBytes > 0L, model.displayName)
+            }
+            models.voice.forEach { assertEquals(ModelRole.VOICE, it.role, it.displayName) }
+            models.live.forEach { assertEquals(ModelRole.LIVE_VOICE, it.role, it.displayName) }
             assertEquals(ModelRole.LLM, models.llm.role)
-            assertEquals(ModelCatalog.VOICE_FILE_NAME, models.voice.fileName)
             assertEquals(ModelCatalog.LLM_FILE_NAME, models.llm.fileName)
+            assertEquals(models.voice.map { it.fileName }.distinct().size, models.voice.size)
         }
-        assertNotEquals(ModelCatalog.VOICE_FILE_NAME, ModelCatalog.LLM_FILE_NAME)
     }
 
     @Test
-    fun liveModelSharesTheVoiceFileOnlyOnLegacyTier() {
+    fun liveModelSharesTheVoiceFilesOnlyOnLegacyTier() {
         val legacy = ModelCatalog.modelsFor(ModelTier.LEGACY)
-        assertEquals(ModelRole.LIVE_VOICE, legacy.live.role)
-        assertEquals(ModelCatalog.VOICE_FILE_NAME, legacy.live.fileName)
-        assertEquals(legacy.voice.sha256, legacy.live.sha256)
+        assertEquals(legacy.voice.map { it.fileName }, legacy.live.map { it.fileName })
+        assertEquals(legacy.voice.map { it.sha256 }, legacy.live.map { it.sha256 })
 
         listOf(ModelTier.MID, ModelTier.LATEST).forEach { tier ->
             val models = ModelCatalog.modelsFor(tier)
-            assertEquals(ModelRole.LIVE_VOICE, models.live.role)
-            assertEquals(ModelCatalog.LIVE_FILE_NAME, models.live.fileName)
-            assertNotEquals(models.voice.fileName, models.live.fileName)
+            assertTrue(models.live.none { it.fileName in models.voice.map { v -> v.fileName } }, tier.name)
         }
     }
 
@@ -86,7 +92,7 @@ class ModelCatalogTest {
         val hex = Regex("[0-9a-f]+")
         ModelTier.entries.forEach { tier ->
             val models = ModelCatalog.modelsFor(tier)
-            listOf(models.voice, models.llm).forEach { model ->
+            (models.live + models.voice + listOf(models.llm)).forEach { model ->
                 assertEquals(40, model.revision.length, model.displayName)
                 assertTrue(hex.matches(model.revision), model.displayName)
                 assertEquals(64, model.sha256.length, model.displayName)

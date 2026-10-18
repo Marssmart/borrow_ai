@@ -55,7 +55,7 @@ class DownloadingModelSetupServiceTest {
         url = "https://example.test/llm.gguf",
         sizeBytes = 90_000L,
     )
-    private val tierModels = TierModels(ModelTier.LEGACY, live, voice, llm)
+    private val tierModels = TierModels(ModelTier.LEGACY, listOf(live), listOf(voice), llm)
     private val modelDirectory: Path = "/app/models".toPath()
 
     private fun spec(
@@ -129,7 +129,7 @@ class DownloadingModelSetupServiceTest {
             sizeBytes = voice.sizeBytes,
             sha256 = voice.sha256,
         )
-        val models = TierModels(ModelTier.LEGACY, sharedLive, voice, llm)
+        val models = TierModels(ModelTier.LEGACY, listOf(sharedLive), listOf(voice), llm)
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
 
         assertEquals(Unit.right(), service(fileSystem, downloader, backgroundScope, models = models).prepare())
@@ -303,7 +303,7 @@ class DownloadingModelSetupServiceTest {
             fileSystem,
             RecordingDownloader(fileSystem, listOf(live, badVoice, llm)),
             backgroundScope,
-            models = TierModels(ModelTier.LEGACY, live, badVoice, llm),
+            models = TierModels(ModelTier.LEGACY, listOf(live), listOf(badVoice), llm),
         )
 
         setup.prepare()
@@ -540,6 +540,115 @@ class DownloadingModelSetupServiceTest {
             sink.writeUtf8(text)
         } finally {
             sink.close()
+        }
+    }
+
+    @Test
+    fun obsoleteGgmlFilesAndTheirSidecarsAreRemovedOnLaunch() = runTest {
+        val fileSystem = FakeFileSystem()
+        val store = store(fileSystem)
+        store.prepareDirectory()
+        for (name in ModelCatalog.OBSOLETE_FILE_NAMES) {
+            writeBytes(fileSystem, modelDirectory / name, ByteArray(8))
+            writeBytes(fileSystem, modelDirectory / (name + ".part"), ByteArray(4))
+            writeBytes(fileSystem, modelDirectory / (name + ".verified"), ByteArray(2))
+        }
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
+
+        assertEquals(Unit.right(), service(fileSystem, downloader, backgroundScope).prepare())
+
+        for (name in ModelCatalog.OBSOLETE_FILE_NAMES) {
+            assertFalse(fileSystem.exists(modelDirectory / name))
+            assertFalse(fileSystem.exists(modelDirectory / (name + ".part")))
+            assertFalse(fileSystem.exists(modelDirectory / (name + ".verified")))
+        }
+    }
+
+    @Test
+    fun progressIsWeightedBySizeAcrossUnequalFilesInOneStep() = runTest {
+        val fileSystem = FakeFileSystem()
+        val encoder = spec("Encoder", ModelRole.LIVE_VOICE, "live-encoder.int8.onnx", "https://example.test/enc.onnx", 30_000L)
+        val tokens = spec("Tokens", ModelRole.LIVE_VOICE, "live-tokens.txt", "https://example.test/tokens.txt", 10_000L)
+        val models = TierModels(ModelTier.LEGACY, listOf(encoder, tokens), listOf(voice), llm)
+        val downloader = RecordingDownloader(fileSystem, listOf(encoder, tokens, voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope, models = models)
+        val liveStates = mutableListOf<ModelSetupState>()
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            setup.state.collect { state ->
+                if (state.phase == ModelSetupPhase.DOWNLOADING_LIVE_VOICE) liveStates += state
+            }
+        }
+
+        assertEquals(Unit.right(), setup.prepare())
+        collector.cancel()
+
+        val sized = liveStates.filter { it.bytesTotal > 0L }
+        assertTrue(sized.isNotEmpty())
+        assertTrue(sized.all { it.bytesTotal == 40_000L })
+        val downloaded = sized.map { it.bytesDownloaded }
+        assertEquals(downloaded.sorted(), downloaded, "bytes must never move backwards")
+        assertEquals(40_000L, downloaded.max())
+        assertTrue(downloaded.contains(30_000L), "encoder completion should land at 30k of 40k")
+    }
+
+    @Test
+    fun missingComponentOfAPartlyCachedBundleIsDownloadedAlone() = runTest {
+        val fileSystem = FakeFileSystem()
+        val store = store(fileSystem)
+        store.prepareDirectory()
+        val encoder = spec("Encoder", ModelRole.LIVE_VOICE, "live-encoder.int8.onnx", "https://example.test/enc.onnx", 30_000L)
+        val tokens = spec("Tokens", ModelRole.LIVE_VOICE, "live-tokens.txt", "https://example.test/tokens.txt", 10_000L)
+        writeBytes(fileSystem, store.partialPath(tokens), ByteArray(10_000))
+        check(store.commit(tokens, tokens.sha256).isRight())
+        val models = TierModels(ModelTier.LEGACY, listOf(encoder, tokens), listOf(voice), llm)
+        val downloader = RecordingDownloader(fileSystem, listOf(encoder, tokens, voice, llm))
+        val setup = service(fileSystem, downloader, backgroundScope, models = models)
+
+        assertEquals(Unit.right(), setup.prepare())
+
+        assertEquals(listOf(encoder.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+    }
+
+    @Test
+    fun retryAfterLaterFailureDoesNotRedownloadCompletedFiles() = runTest {
+        val fileSystem = FakeFileSystem()
+        val encoder = spec("Encoder", ModelRole.LIVE_VOICE, "live-encoder.int8.onnx", "https://example.test/enc.onnx", 30_000L)
+        val tokens = spec("Tokens", ModelRole.LIVE_VOICE, "live-tokens.txt", "https://example.test/tokens.txt", 10_000L)
+        val models = TierModels(ModelTier.LEGACY, listOf(encoder, tokens), listOf(voice), llm)
+        val inner = RecordingDownloader(fileSystem, listOf(encoder, tokens, voice, llm))
+        val flaky = FailOnceDownloader(inner, failingUrl = voice.downloadUrl)
+        val setup = service(fileSystem, flaky, backgroundScope, models = models)
+
+        assertIs<Either.Left<ModelDownloadError>>(setup.prepare())
+        assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
+
+        assertEquals(Unit.right(), setup.prepare())
+
+        assertEquals(
+            listOf(encoder.downloadUrl, tokens.downloadUrl, voice.downloadUrl, llm.downloadUrl),
+            inner.requestedUrls,
+        )
+        assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
+    }
+
+    private class FailOnceDownloader(
+        private val delegate: ModelDownloader,
+        private val failingUrl: String,
+    ) : ModelDownloader {
+        private var failed = false
+
+        override suspend fun download(
+            url: String,
+            destination: Path,
+            expectedSizeBytes: Long,
+            onProgress: (Long) -> Unit,
+        ): Either<ModelDownloadError, String> {
+            if (url == failingUrl && !failed) {
+                failed = true
+                return ModelDownloadError.Network("Simulated drop").left()
+            }
+            return delegate.download(url, destination, expectedSizeBytes, onProgress)
         }
     }
 
