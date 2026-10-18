@@ -187,6 +187,7 @@ class DownloadingModelSetupService(
     }
 
     private fun fail(reason: ModelSetupFailureReason, detail: String) {
+        logModelSetupFailure(detail)
         mutableState.update {
             it.copy(phase = ModelSetupPhase.FAILED, failureReason = reason, failureDetail = detail)
         }
