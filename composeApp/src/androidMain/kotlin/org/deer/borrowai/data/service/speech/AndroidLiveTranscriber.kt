@@ -27,13 +27,38 @@ internal fun createLiveTranscriberIfAvailable(modelDirectory: Path, totalRamByte
     val encoder = specs.firstOrNull { it.fileName.endsWith("-encoder.int8.onnx") } ?: return null
     val decoder = specs.firstOrNull { it.fileName.endsWith("-decoder.int8.onnx") } ?: return null
     val tokens = specs.firstOrNull { it.fileName.endsWith("-tokens.txt") } ?: return null
-    val present = listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) }
+    // A storage error counts as "models unavailable"; recording continues without live text.
+    val present = runCatching { listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) } }
+        .getOrDefault(false)
     if (!present) return null
     return AndroidLiveTranscriber(
         encoderPath = store.finalPath(encoder).toString(),
         decoderPath = store.finalPath(decoder).toString(),
         tokensPath = store.finalPath(tokens).toString(),
     )
+}
+
+/**
+ * Resolves the live model when recording starts, so models downloaded after startup are picked up. Once resolved, the
+ * same [AndroidLiveTranscriber] is reused for later sessions.
+ */
+internal class LazyLiveTranscriber(
+    private val modelDirectory: Path,
+    private val totalRamBytes: Long,
+) : LiveTranscriber {
+    private val lock = Any()
+    private var delegate: LiveTranscriber? = null
+
+    override fun start(onPartial: (String) -> Unit): Boolean {
+        val resolved = synchronized(lock) {
+            delegate ?: createLiveTranscriberIfAvailable(modelDirectory, totalRamBytes)?.also { delegate = it }
+        } ?: return false
+        return resolved.start(onPartial)
+    }
+
+    override fun stop() {
+        synchronized(lock) { delegate }?.stop()
+    }
 }
 
 /**
@@ -52,7 +77,7 @@ internal class AndroidLiveTranscriber(
     override fun start(onPartial: (String) -> Unit): Boolean {
         val next = Session()
         synchronized(lock) {
-            session?.active = false
+            session?.stopCapture()
             session = next
         }
         val thread = Thread({ next.run(onPartial) }, "live-transcriber")
@@ -63,7 +88,7 @@ internal class AndroidLiveTranscriber(
 
     override fun stop() {
         synchronized(lock) {
-            session?.active = false
+            session?.stopCapture()
             session = null
         }
     }
@@ -72,14 +97,32 @@ internal class AndroidLiveTranscriber(
         @Volatile
         var active: Boolean = true
 
+        @Volatile
+        private var capture: AudioRecord? = null
+
+        /** Stops the loop and the microphone right away so a blocked read returns. */
+        fun stopCapture() {
+            active = false
+            runCatching { capture?.stop() }
+        }
+
         fun run(onPartial: (String) -> Unit) {
             var recognizer: OfflineRecognizer? = null
             var record: AudioRecord? = null
             try {
                 recognizer = createRecognizer()
-                record = createAudioRecord() ?: return
-                record.startRecording()
+                val created = createAudioRecord() ?: return
+                record = created
+                // Checked and started under the lock so a stop() during model load cannot leave the mic running.
+                val started = synchronized(lock) {
+                    if (!active) return@synchronized false
+                    capture = created
+                    created.startRecording()
+                    true
+                }
+                if (!started) return
                 val window = LiveAudioWindow(WINDOW_SAMPLES)
+
                 val chunk = ShortArray(CHUNK_SAMPLES)
                 var samplesSinceDecode = 0
                 var lastText = ""

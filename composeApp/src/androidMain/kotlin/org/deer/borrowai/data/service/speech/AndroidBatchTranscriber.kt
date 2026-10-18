@@ -13,6 +13,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okio.Path
 import org.deer.borrowai.data.service.model.ModelCatalog
@@ -32,7 +34,9 @@ internal fun createBatchTranscriberIfAvailable(modelDirectory: Path, totalRamByt
     val encoder = specs.firstOrNull { it.fileName.endsWith("-encoder.int8.onnx") } ?: return null
     val decoder = specs.firstOrNull { it.fileName.endsWith("-decoder.int8.onnx") } ?: return null
     val tokens = specs.firstOrNull { it.fileName.endsWith("-tokens.txt") } ?: return null
-    val present = listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) }
+    // A storage error counts as "models unavailable"; the saved recording stays without a transcript.
+    val present = runCatching { listOf(encoder, decoder, tokens).all { spec: ModelSpec -> store.isPresent(spec) } }
+        .getOrDefault(false)
     if (!present) return null
     return AndroidBatchTranscriber(
         encoderPath = store.finalPath(encoder).toString(),
@@ -42,32 +46,56 @@ internal fun createBatchTranscriberIfAvailable(modelDirectory: Path, totalRamByt
 }
 
 /**
+ * Resolves the batch model when it is first needed, so models downloaded after startup are picked up. Once resolved,
+ * the same [AndroidBatchTranscriber] is reused so its transcription lock is shared.
+ */
+internal class LazyBatchTranscriber(
+    private val modelDirectory: Path,
+    private val totalRamBytes: Long,
+) : BatchTranscriber {
+    private val lock = Any()
+    private var delegate: BatchTranscriber? = null
+
+    override suspend fun transcribe(recordingPath: Path): String? {
+        val resolved = synchronized(lock) {
+            delegate ?: createBatchTranscriberIfAvailable(modelDirectory, totalRamBytes)?.also { delegate = it }
+        } ?: return null
+        return resolved.transcribe(recordingPath)
+    }
+}
+
+/**
  * Decodes a finished M4A recording to 16 kHz mono and transcribes it in 30-second windows with the batch Whisper
- * model. Whisper decodes one window at a time, so window boundaries can split words.
+ * model. Whisper decodes one window at a time, so window boundaries can split words. Transcriptions run one at a time
+ * so concurrent saves do not each load a native model.
  */
 internal class AndroidBatchTranscriber(
     private val encoderPath: String,
     private val decoderPath: String,
     private val tokensPath: String,
 ) : BatchTranscriber {
-    override suspend fun transcribe(recordingPath: Path): String? = withContext(Dispatchers.Default) {
-        var recognizer: OfflineRecognizer? = null
-        try {
-            val created = createRecognizer()
-            recognizer = created
-            val texts = mutableListOf<String>()
-            decodeToWindows(recordingPath.toString()) { window ->
-                val text = decode(created, window)
-                if (text.isNotBlank()) texts += text
+    private val gate = Mutex()
+
+    override suspend fun transcribe(recordingPath: Path): String? = gate.withLock {
+        withContext(Dispatchers.Default) {
+            var recognizer: OfflineRecognizer? = null
+            try {
+                val created = createRecognizer()
+                recognizer = created
+                val texts = mutableListOf<String>()
+                decodeToWindows(recordingPath.toString()) { window ->
+                    val text = decode(created, window)
+                    if (text.isNotBlank()) texts += text
+                }
+                texts.joinToString(" ")
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (_: Throwable) {
+                // Batch transcription is best-effort; the saved recording stays without a transcript.
+                null
+            } finally {
+                runCatching { recognizer?.release() }
             }
-            texts.joinToString(" ")
-        } catch (failure: CancellationException) {
-            throw failure
-        } catch (_: Throwable) {
-            // Batch transcription is best-effort; the saved recording stays without a transcript.
-            null
-        } finally {
-            runCatching { recognizer?.release() }
         }
     }
 

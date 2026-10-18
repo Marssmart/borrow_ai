@@ -3,19 +3,17 @@ package org.deer.borrowai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
-import org.deer.borrowai.data.service.speech.createBatchTranscriberIfAvailable
-import org.deer.borrowai.data.service.speech.createLiveTranscriberIfAvailable
+import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
+import org.deer.borrowai.data.service.speech.LazyLiveTranscriber
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
@@ -28,17 +26,8 @@ internal class AppServicesViewModel(
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
     private val createServices: suspend () -> AppServices = {
-        // Model file checks can hash large files, so keep them off the main thread.
-        val (liveTranscriber, batchTranscriber) = withContext(Dispatchers.IO) {
-            val modelDirectory = modelDirectoryUnder(recordingsRoot.toString())
-            createLiveTranscriberIfAvailable(
-                modelDirectory = modelDirectory,
-                totalRamBytes = modelDevice.totalRamBytes,
-            ) to createBatchTranscriberIfAvailable(
-                modelDirectory = modelDirectory,
-                totalRamBytes = modelDevice.totalRamBytes,
-            )
-        }
+        // Transcribers resolve their model files when first used, so models downloaded after launch are picked up.
+        val modelDirectory = modelDirectoryUnder(recordingsRoot.toString())
         AppServices.create(
             modelDevice = modelDevice,
             epochClock = epochClock,
@@ -46,8 +35,8 @@ internal class AppServicesViewModel(
             recorder = recorder,
             audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
-            liveTranscriber = liveTranscriber,
-            batchTranscriber = batchTranscriber,
+            liveTranscriber = LazyLiveTranscriber(modelDirectory, modelDevice.totalRamBytes),
+            batchTranscriber = LazyBatchTranscriber(modelDirectory, modelDevice.totalRamBytes),
         )
     },
 ) : ViewModel() {
