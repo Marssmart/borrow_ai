@@ -17,7 +17,7 @@ import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
-import org.deer.borrowai.data.service.PlaybackRequestResult
+import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 
 internal data class SavedMemoriesUiState(
@@ -109,34 +109,11 @@ internal class SavedMemoriesStateHolder(
             return
         }
 
-        when (mediaSessionService.requestPlayback(target)) {
-            PlaybackRequestResult.Started -> Unit
-            is PlaybackRequestResult.ConfirmationRequired -> Unit
-
-            PlaybackRequestResult.MemoryNotFound ->
-                setPlaybackError(SavedMemoriesPlaybackError.MEMORY_NOT_FOUND)
-
-            PlaybackRequestResult.RecordingUnavailable ->
-                setPlaybackError(SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE)
-
-            PlaybackRequestResult.NoPendingConfirmation ->
-                setPlaybackError(SavedMemoriesPlaybackError.REQUEST_REJECTED)
-        }
+        mediaSessionService.requestPlayback(target).fold({ setPlaybackError(it) }, {})
     }
 
     fun confirmPendingPlayback() {
-        when (mediaSessionService.confirmPendingPlayback()) {
-            PlaybackRequestResult.Started -> Unit
-            is PlaybackRequestResult.ConfirmationRequired -> Unit
-            PlaybackRequestResult.MemoryNotFound ->
-                setPlaybackError(SavedMemoriesPlaybackError.MEMORY_NOT_FOUND)
-
-            PlaybackRequestResult.RecordingUnavailable ->
-                setPlaybackError(SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE)
-
-            PlaybackRequestResult.NoPendingConfirmation ->
-                setPlaybackError(SavedMemoriesPlaybackError.REQUEST_REJECTED)
-        }
+        mediaSessionService.confirmPendingPlayback().fold({ setPlaybackError(it) }, {})
     }
 
     fun cancelPendingPlayback() {
@@ -168,8 +145,14 @@ internal class SavedMemoriesStateHolder(
         }
     }
 
-    private fun setPlaybackError(error: SavedMemoriesPlaybackError) {
-        mutableUiState.update { it.copy(playbackError = error) }
+    private fun setPlaybackError(error: PlaybackError) {
+        mutableUiState.update { it.copy(playbackError = error.toUiError()) }
+    }
+
+    private fun PlaybackError.toUiError(): SavedMemoriesPlaybackError = when (this) {
+        PlaybackError.MemoryNotFound -> SavedMemoriesPlaybackError.MEMORY_NOT_FOUND
+        PlaybackError.RecordingUnavailable -> SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE
+        PlaybackError.NoPendingConfirmation -> SavedMemoriesPlaybackError.REQUEST_REJECTED
     }
 
     internal companion object {

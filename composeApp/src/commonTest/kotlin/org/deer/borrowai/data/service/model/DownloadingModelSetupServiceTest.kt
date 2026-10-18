@@ -1,8 +1,13 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -16,8 +21,10 @@ import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.fakefilesystem.FakeFileSystem
+import kotlin.coroutines.coroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -90,7 +97,7 @@ class DownloadingModelSetupServiceTest {
         val first = RecordingDownloader(fileSystem, listOf(voice, llm))
         val firstSetup = service(fileSystem, first, backgroundScope)
 
-        firstSetup.prepare()
+        assertEquals(Unit.right(), firstSetup.prepare())
 
         assertEquals(ModelSetupPhase.READY, firstSetup.state.value.phase)
         assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), first.requestedUrls)
@@ -100,7 +107,7 @@ class DownloadingModelSetupServiceTest {
 
         val secondDownloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val secondSetup = service(fileSystem, secondDownloader, backgroundScope)
-        secondSetup.prepare()
+        assertEquals(Unit.right(), secondSetup.prepare())
 
         assertEquals(ModelSetupPhase.READY, secondSetup.state.value.phase)
         assertEquals(emptyList(), secondDownloader.requestedUrls)
@@ -112,9 +119,9 @@ class DownloadingModelSetupServiceTest {
         val store = store(fileSystem)
         store.prepareDirectory()
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
-        store.commit(voice, voice.sha256)
+        check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
-        store.commit(llm, llm.sha256)
+        check(store.commit(llm, llm.sha256).isRight())
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val setup = DownloadingModelSetupService(
             totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
@@ -303,13 +310,16 @@ class DownloadingModelSetupServiceTest {
                 destination: Path,
                 expectedSizeBytes: Long,
                 onProgress: (Long) -> Unit,
-            ): String {
-                throw ModelDownloadException("Model download failed with HTTP 500.", retryable = true)
+            ): Either<ModelDownloadError, String> {
+                return Either.Left(ModelDownloadError.Network("Model download failed with HTTP 500."))
             }
         }
         val setup = service(fileSystem, downloader, backgroundScope)
 
-        setup.prepare()
+        assertEquals(
+            ModelDownloadError.Network("Model download failed with HTTP 500.").left(),
+            setup.prepare(),
+        )
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
@@ -325,16 +335,38 @@ class DownloadingModelSetupServiceTest {
                 destination: Path,
                 expectedSizeBytes: Long,
                 onProgress: (Long) -> Unit,
-            ): String {
-                throw okio.IOException("Unable to access model storage.")
+            ): Either<ModelDownloadError, String> {
+                return Either.Left(ModelDownloadError.Storage(okio.IOException("Unable to access model storage.")))
             }
         }
         val setup = service(fileSystem, downloader, backgroundScope)
 
-        setup.prepare()
+        val result = setup.prepare()
 
+        val error = assertIs<Either.Left<ModelDownloadError>>(result).value
+        assertIs<ModelDownloadError.Storage>(error)
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.STORAGE, setup.state.value.failureReason)
+    }
+
+    @Test
+    fun cancelledWorkerCancelsAwaitingCaller() = runTest {
+        val fileSystem = FakeFileSystem()
+        val gate = CompletableDeferred<Unit>()
+        val downloader = GatedDownloader(fileSystem, listOf(voice, llm), gate)
+        val worker = CoroutineScope(coroutineContext + Job())
+        val setup = service(fileSystem, downloader, worker)
+
+        val caller = launch { setup.prepare() }
+        runCurrent()
+        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+
+        worker.cancel()
+        runCurrent()
+        caller.join()
+
+        assertTrue(caller.isCancelled)
+        assertFalse(setup.state.value.phase == ModelSetupPhase.READY)
     }
 
     @Test
@@ -439,9 +471,9 @@ class DownloadingModelSetupServiceTest {
         val store = store(fileSystem)
         store.prepareDirectory()
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
-        store.commit(voice, voice.sha256)
+        check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
-        store.commit(llm, llm.sha256)
+        check(store.commit(llm, llm.sha256).isRight())
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope, network = FixedNetworkPolicy(false))
 
@@ -516,14 +548,14 @@ class DownloadingModelSetupServiceTest {
             destination: Path,
             expectedSizeBytes: Long,
             onProgress: (Long) -> Unit,
-        ): String {
+        ): Either<ModelDownloadError, String> {
             downloadCounts[url] = (downloadCounts[url] ?: 0) + 1
             val model = specs.first { it.downloadUrl == url }
             gate.await()
             val bytes = ByteArray(model.sizeBytes.toInt())
             writeBytes(fileSystem, destination, bytes)
             onProgress(model.sizeBytes)
-            return sha256Hex(bytes)
+            return sha256Hex(bytes).right()
         }
     }
 
@@ -540,7 +572,7 @@ class DownloadingModelSetupServiceTest {
             destination: Path,
             expectedSizeBytes: Long,
             onProgress: (Long) -> Unit,
-        ): String {
+        ): Either<ModelDownloadError, String> {
             requestedUrls += url
             val model = specs.first { it.downloadUrl == url }
             assertEquals(model.sizeBytes, expectedSizeBytes)
@@ -558,7 +590,7 @@ class DownloadingModelSetupServiceTest {
             } finally {
                 sink.close()
             }
-            return hashing.hash.hex()
+            return hashing.hash.hex().right()
         }
     }
 }

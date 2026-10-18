@@ -4,6 +4,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -21,15 +24,15 @@ class FakeMemoryService(
 
     override fun getState(): StateFlow<List<Memory>> = memories
 
-    override suspend fun findById(id: String): Memory? = mutex.withLock {
-        records[id]
+    override suspend fun findById(id: String): Either<MemoryError, Memory> = mutex.withLock {
+        records[id]?.right() ?: MemoryError.NotFound(id).left()
     }
 
-    override suspend fun findAll(): List<Memory> = mutex.withLock {
-        records.values.toList()
+    override suspend fun findAll(): Either<MemoryError, List<Memory>> = mutex.withLock {
+        records.values.toList().right()
     }
 
-    override suspend fun create(draft: MemoryDraft, id: String?): Memory = mutex.withLock {
+    override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> = mutex.withLock {
         val memory = Memory(
             id = id ?: nextId(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
@@ -40,11 +43,11 @@ class FakeMemoryService(
         )
         records[memory.id] = memory
         publishMemories()
-        memory
+        memory.right()
     }
 
-    override suspend fun update(id: String, draft: MemoryDraft): Memory? = mutex.withLock {
-        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock null
+    override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
+        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
         val updated = existing.copy(
             title = draft.title,
             summary = draft.summary,
@@ -53,14 +56,14 @@ class FakeMemoryService(
         )
         records[id] = updated
         publishMemories()
-        updated
+        Unit.right()
     }
 
-    override suspend fun delete(id: String): Boolean = mutex.withLock {
-        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock false
+    override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
+        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
         records[id] = existing.copy(deleted = true)
         publishMemories()
-        true
+        Unit.right()
     }
 
     override suspend fun purge(id: String): Boolean = mutex.withLock {

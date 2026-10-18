@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.17]
+
+- The service layer now models failures and responses with Arrow `Either` (Left = failure, Right = success).
+- `ModelDownloader`, `ModelFileStore`, and `ModelSetupService.prepare` return `Either<ModelDownloadError, _>`. Cancellation still propagates as an exception.
+- `MediaSessionService` playback returns `Either<PlaybackError, PlaybackRequest>`. `ConfirmationRequired` is a normal step, so it is on the Right side.
+- `MemoryService` returns `Either<MemoryError, _>` for lookups, listing, create, update, and delete. A malformed row is reported as a Left instead of being dropped silently.
+- Updated Android and iOS versioning to 1.0.17 (build 18).
+
 ## [1.0.16]
 
 - Removed demo mode: the `BORROW_AI_DATA_MODE` flag, `AppMode`, the demo services, the demo badge, and their tests.

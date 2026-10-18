@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import okio.FileSystem
 import okio.HashingSource
 import okio.Path
@@ -74,40 +77,48 @@ class ModelFileStore(
      * Completes an interrupted download when its partial file already has the full catalog size.
      * A matching digest is committed; a full-size mismatch is discarded so a later request starts over.
      */
-    fun commitCompletePartial(spec: ModelSpec): Boolean {
+    fun commitCompletePartial(spec: ModelSpec): Either<ModelDownloadError, Boolean> = try {
         val partialPath = partialPath(spec)
-        if (fileSystem.metadataOrNull(partialPath)?.size != spec.sizeBytes) return false
-        val digest = digestFile(partialPath)
-        if (digest != spec.sha256) {
-            discardPartial(spec)
-            writePartialIdentity(spec, PartialIdentity.from(spec))
-            return false
+        if (fileSystem.metadataOrNull(partialPath)?.size != spec.sizeBytes) {
+            false.right()
+        } else {
+            val digest = digestFile(partialPath)
+            if (digest != spec.sha256) {
+                discardPartial(spec)
+                writePartialIdentity(spec, PartialIdentity.from(spec))
+                false.right()
+            } else {
+                commit(spec, digest).map { true }
+            }
         }
-        commit(spec, digest)
-        return true
+    } catch (error: okio.IOException) {
+        ModelDownloadError.Storage(error).left()
     }
 
     /**
      * Moves the partial file into the static name once its size and digest match. A short partial file is kept so
-     * the next attempt can resume it; a full-size file with the wrong digest is discarded.
+     * the next attempt can resume it (retryable [ModelDownloadError.Network]); a full-size file with the wrong digest
+     * is discarded ([ModelDownloadError.Model]).
      */
-    fun commit(spec: ModelSpec, downloadedSha256: String) {
+    fun commit(spec: ModelSpec, downloadedSha256: String): Either<ModelDownloadError, Unit> = try {
         val partialSize = fileSystem.metadataOrNull(partialPath(spec))?.size
         if (partialSize != spec.sizeBytes) {
-            throw ModelDownloadException(
+            ModelDownloadError.Network(
                 "The ${spec.displayName} download was interrupted: $partialSize of ${spec.sizeBytes} bytes received.",
-                retryable = true,
-            )
-        }
-        if (downloadedSha256 != spec.sha256) {
+            ).left()
+        } else if (downloadedSha256 != spec.sha256) {
             discardPartial(spec)
-            error("The ${spec.displayName} download failed checksum verification.")
+            ModelDownloadError.Model("The ${spec.displayName} download failed checksum verification.").left()
+        } else {
+            fileSystem.atomicMove(partialPath(spec), finalPath(spec))
+            fileSystem.delete(partialIdentityPath(spec), mustExist = false)
+            fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
+            val lastModifiedAtMillis = fileSystem.metadataOrNull(finalPath(spec))?.lastModifiedAtMillis
+            writeVerificationRecord(spec, lastModifiedAtMillis)
+            Unit.right()
         }
-        fileSystem.atomicMove(partialPath(spec), finalPath(spec))
-        fileSystem.delete(partialIdentityPath(spec), mustExist = false)
-        fileSystem.delete(partialIdentityTempPath(spec), mustExist = false)
-        val lastModifiedAtMillis = fileSystem.metadataOrNull(finalPath(spec))?.lastModifiedAtMillis
-        writeVerificationRecord(spec, lastModifiedAtMillis)
+    } catch (error: okio.IOException) {
+        ModelDownloadError.Storage(error).left()
     }
 
     private fun verifyAndCache(spec: ModelSpec, path: Path, lastModifiedAtMillis: Long?): Boolean {

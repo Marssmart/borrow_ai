@@ -1,5 +1,6 @@
 package org.deer.borrowai.data.service
 
+import arrow.core.Either
 import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Memory
 
@@ -43,19 +44,22 @@ sealed interface MediaSessionState {
     ) : MediaSessionState
 }
 
-sealed interface PlaybackRequestResult {
-    data object Started : PlaybackRequestResult
+/** A playback request that was accepted. Asking for confirmation is a normal step, not a failure. */
+sealed interface PlaybackRequest {
+    data object Started : PlaybackRequest
 
     data class ConfirmationRequired(
         val target: PlaybackTarget,
-    ) : PlaybackRequestResult
+    ) : PlaybackRequest
+}
 
-    data object MemoryNotFound : PlaybackRequestResult
+sealed interface PlaybackError {
+    data object MemoryNotFound : PlaybackError
 
     /** The memory has no raw recording, or its file is missing or cannot be played on this device. */
-    data object RecordingUnavailable : PlaybackRequestResult
+    data object RecordingUnavailable : PlaybackError
 
-    data object NoPendingConfirmation : PlaybackRequestResult
+    data object NoPendingConfirmation : PlaybackError
 }
 
 interface MediaSessionService {
@@ -75,9 +79,9 @@ interface MediaSessionService {
 
     fun stopRecording(): RecordingResult?
 
-    fun requestPlayback(target: PlaybackTarget): PlaybackRequestResult
+    fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest>
 
-    fun confirmPendingPlayback(): PlaybackRequestResult
+    fun confirmPendingPlayback(): Either<PlaybackError, PlaybackRequest>
 
     fun cancelPendingPlayback(): Boolean
 

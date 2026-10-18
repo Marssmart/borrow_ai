@@ -1,7 +1,13 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
+import arrow.core.raise.either
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -13,7 +19,6 @@ import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.MutableModelSetupState
-import org.deer.borrowai.data.service.MutableJob
 
 /**
  * Chooses the tier models from the device RAM and downloads them to static files.
@@ -30,7 +35,7 @@ class DownloadingModelSetupService(
     private val modelsForRam: (totalRamBytes: Long) -> TierModels = ModelCatalog::modelsForRam,
 ) : ModelSetupService {
     private val setupMutex = Mutex()
-    private val setupJob = MutableJob(scope)
+    private var setupAttempt: Deferred<Either<ModelDownloadError, Unit>>? = null
 
     override val state = MutableModelSetupState()
 
@@ -42,65 +47,75 @@ class DownloadingModelSetupService(
         }
     }
 
-    override suspend fun prepare() {
-        setupMutex.withLock {
-            if (state.isReady) return
-            if (!setupJob.isActive()) setupJob.launch { runSetup() }
+    override suspend fun prepare(): Either<ModelDownloadError, Unit> {
+        val attempt = setupMutex.withLock {
+            if (state.isReady) return Unit.right()
+            setupAttempt?.takeIf { it.isActive }
+                ?: scope.async { runSetup() }.also { setupAttempt = it }
         }
-        setupJob.join()
+        return attempt.await()
     }
 
-    private suspend fun runSetup() {
-        try {
+    private suspend fun runSetup(): Either<ModelDownloadError, Unit> {
+        val result = try {
             mobileDataConsent.value = false
             store.prepareDirectory()
-            val chosen = modelsForRam(totalRamBytes)
-            val voicePresent = store.isPresent(chosen.voice)
-            val llmPresent = store.isPresent(chosen.llm)
-            if (voicePresent && llmPresent) {
-                publishFastReady()
-                return
-            }
-
-            publish(ModelSetupPhase.CHOOSING_MODEL, 0f)
-            delay(choosingHoldMillis)
-            publish(
-                ModelSetupPhase.DOWNLOADING_VOICE,
-                ModelSetupMilestones.CHOOSING_END,
-            )
-            val voiceDownloaded = downloadModel(
-                chosen.voice,
-                ModelSetupPhase.DOWNLOADING_VOICE,
-                ModelSetupMilestones.CHOOSING_END,
-                ModelSetupMilestones.VOICE_DOWNLOAD_END,
-                alreadyPresent = voicePresent,
-            )
-
-            publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
-            if (voiceDownloaded) delay(loadingHoldMillis)
-
-            publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END)
-            downloadModel(
-                chosen.llm,
-                ModelSetupPhase.DOWNLOADING_LLM,
-                ModelSetupMilestones.VOICE_LOAD_END,
-                ModelSetupMilestones.LLM_DOWNLOAD_END,
-                alreadyPresent = llmPresent,
-            )
-
-            publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END)
+            setupModels()
         } catch (error: CancellationException) {
             throw error
+        } catch (error: ModelStorageException) {
+            ModelDownloadError.Storage(error).left()
+        } catch (error: okio.IOException) {
+            ModelDownloadError.Storage(error).left()
         } catch (error: Exception) {
-            state.fail(
-                when {
-                    (error as? ModelDownloadException)?.retryable == true -> ModelSetupFailureReason.NETWORK
-                    error is ModelStorageException || error is okio.IOException ->
-                        ModelSetupFailureReason.STORAGE
-                    else -> ModelSetupFailureReason.MODEL
-                },
-            )
+            ModelDownloadError.Model(error.message.orEmpty()).left()
         }
+        result.fold({ error -> state.fail(error.toFailureReason()) }, { })
+        return result
+    }
+
+    private suspend fun setupModels(): Either<ModelDownloadError, Unit> = either {
+        val chosen = modelsForRam(totalRamBytes)
+        val voicePresent = store.isPresent(chosen.voice)
+        val llmPresent = store.isPresent(chosen.llm)
+        if (voicePresent && llmPresent) {
+            publishFastReady()
+            return@either
+        }
+
+        publish(ModelSetupPhase.CHOOSING_MODEL, 0f)
+        delay(choosingHoldMillis)
+        publish(
+            ModelSetupPhase.DOWNLOADING_VOICE,
+            ModelSetupMilestones.CHOOSING_END,
+        )
+        val voiceDownloaded = downloadModel(
+            chosen.voice,
+            ModelSetupPhase.DOWNLOADING_VOICE,
+            ModelSetupMilestones.CHOOSING_END,
+            ModelSetupMilestones.VOICE_DOWNLOAD_END,
+            alreadyPresent = voicePresent,
+        ).bind()
+
+        publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
+        if (voiceDownloaded) delay(loadingHoldMillis)
+
+        publish(ModelSetupPhase.DOWNLOADING_LLM, ModelSetupMilestones.VOICE_LOAD_END)
+        downloadModel(
+            chosen.llm,
+            ModelSetupPhase.DOWNLOADING_LLM,
+            ModelSetupMilestones.VOICE_LOAD_END,
+            ModelSetupMilestones.LLM_DOWNLOAD_END,
+            alreadyPresent = llmPresent,
+        ).bind()
+
+        publish(ModelSetupPhase.READY, ModelSetupMilestones.LLM_DOWNLOAD_END)
+    }
+
+    private fun ModelDownloadError.toFailureReason(): ModelSetupFailureReason = when (this) {
+        is ModelDownloadError.Network -> ModelSetupFailureReason.NETWORK
+        is ModelDownloadError.Storage -> ModelSetupFailureReason.STORAGE
+        is ModelDownloadError.Model -> ModelSetupFailureReason.MODEL
     }
 
     private fun publish(phase: ModelSetupPhase, progress: Float) {
@@ -121,15 +136,15 @@ class DownloadingModelSetupService(
         startProgress: Float,
         endProgress: Float,
         alreadyPresent: Boolean,
-    ): Boolean {
+    ): Either<ModelDownloadError, Boolean> = either {
         if (alreadyPresent) {
             state.transition(phase, progress = endProgress)
-            return false
+            return@either false
         }
         store.preparePartial(spec)
-        if (store.commitCompletePartial(spec)) {
+        if (store.commitCompletePartial(spec).bind()) {
             state.transition(phase, progress = endProgress)
-            return false
+            return@either false
         }
         awaitTransferAllowed(startProgress)
         state.transition(phase, progress = startProgress)
@@ -145,10 +160,10 @@ class DownloadingModelSetupService(
                 bytesDownloaded = bytes,
                 bytesTotal = spec.sizeBytes,
             )
-        }
-        store.commit(spec, downloadedSha256)
+        }.bind()
+        store.commit(spec, downloadedSha256).bind()
         state.transition(phase, progress = endProgress)
-        return true
+        true
     }
 
     /** Holds a required transfer until the network is unmetered or the user consents to mobile data for this run. */

@@ -8,9 +8,11 @@ ktor = "3.3.3"
 okio = "3.18.2"
 kotbase = "3.2.4-1.2.0"
 androidx-test = "1.6.1"
+arrow = "2.2.2"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

@@ -1,11 +1,16 @@
 package org.deer.borrowai.data.service.model
 
+import arrow.core.Either
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
 import okio.Path
@@ -18,7 +23,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class KtorModelDownloaderTest {
     private val url = "https://example.test/model.bin"
@@ -26,6 +33,26 @@ class KtorModelDownloaderTest {
     private val body = ByteArray(200_000) { (it % 251).toByte() }
 
     private fun sha256Hex(bytes: ByteArray): String = Buffer().write(bytes).readByteString().sha256().hex()
+
+    private suspend fun KtorModelDownloader.downloadOrFail(
+        url: String,
+        destination: Path,
+        expectedSizeBytes: Long,
+        onProgress: (Long) -> Unit = {},
+    ): String = when (val result = download(url, destination, expectedSizeBytes, onProgress)) {
+        is Either.Left -> fail("Expected a successful download but got ${result.value}")
+        is Either.Right -> result.value
+    }
+
+    private suspend fun KtorModelDownloader.downloadError(
+        url: String,
+        destination: Path,
+        expectedSizeBytes: Long,
+        onProgress: (Long) -> Unit = {},
+    ): ModelDownloadError = when (val result = download(url, destination, expectedSizeBytes, onProgress)) {
+        is Either.Left -> result.value
+        is Either.Right -> fail("Expected a failed download but got digest ${result.value}")
+    }
 
     private fun FakeFileSystem.writePartial(path: Path, bytes: ByteArray) {
         createDirectories(path.parent!!)
@@ -53,7 +80,7 @@ class KtorModelDownloaderTest {
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
         val progress = mutableListOf<Long>()
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) { progress += it }
+        val digest = KtorModelDownloader(client, fileSystem).downloadOrFail(url, destination, body.size.toLong()) { progress += it }
 
         assertContentEquals(body, fileSystem.readAll(destination))
         assertEquals(sha256Hex(body), digest)
@@ -69,15 +96,13 @@ class KtorModelDownloaderTest {
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
         val progress = mutableListOf<Long>()
 
-        val error = assertFailsWith<ModelDownloadException> {
-            KtorModelDownloader(client, fileSystem).download(
-                url,
-                destination,
-                expectedSizeBytes = body.size.toLong() - 1L,
-            ) { progress += it }
-        }
+        val error = KtorModelDownloader(client, fileSystem).downloadError(
+            url,
+            destination,
+            expectedSizeBytes = body.size.toLong() - 1L,
+        ) { progress += it }
 
-        assertFalse(error.retryable)
+        assertIs<ModelDownloadError.Model>(error)
         assertFalse(fileSystem.exists(destination))
         assertTrue(progress.isNotEmpty())
         assertTrue(progress.last() < body.size.toLong())
@@ -104,11 +129,9 @@ class KtorModelDownloaderTest {
             },
         )
 
-        val error = assertFailsWith<ModelDownloadException> {
-            KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
-        }
+        val error = KtorModelDownloader(client, fileSystem).downloadError(url, destination, body.size.toLong())
 
-        assertFalse(error.retryable)
+        assertIs<ModelDownloadError.Model>(error)
         assertFalse(fileSystem.exists(destination))
         client.close()
     }
@@ -119,11 +142,9 @@ class KtorModelDownloaderTest {
         fileSystem.createDirectories(destination.parent!!)
         val client = HttpClient(MockEngine { respond(content = "nope", status = HttpStatusCode.NotFound) })
 
-        val error = assertFailsWith<ModelDownloadException> {
-            KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
-        }
+        val error = KtorModelDownloader(client, fileSystem).downloadError(url, destination, body.size.toLong())
 
-        assertFalse(error.retryable)
+        assertIs<ModelDownloadError.Model>(error)
         assertFalse(fileSystem.exists(destination))
         client.close()
     }
@@ -138,10 +159,8 @@ class KtorModelDownloaderTest {
             val fileSystem = FakeFileSystem()
             fileSystem.createDirectories(destination.parent!!)
             val client = HttpClient(MockEngine { respond(content = "error", status = status) })
-            val error = assertFailsWith<ModelDownloadException> {
-                KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
-            }
-            assertTrue(error.retryable, "HTTP ${status.value} should be retried")
+            val error = KtorModelDownloader(client, fileSystem).downloadError(url, destination, body.size.toLong())
+            assertIs<ModelDownloadError.Network>(error, "HTTP ${status.value} should be retried")
             client.close()
         }
     }
@@ -167,7 +186,7 @@ class KtorModelDownloaderTest {
         )
         val progress = mutableListOf<Long>()
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) { progress += it }
+        val digest = KtorModelDownloader(client, fileSystem).downloadOrFail(url, destination, body.size.toLong()) { progress += it }
 
         assertEquals("bytes=$prefixLength-", requestedRange)
         assertContentEquals(body, fileSystem.readAll(destination))
@@ -209,11 +228,24 @@ class KtorModelDownloaderTest {
             },
         )
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
+        val digest = KtorModelDownloader(client, fileSystem).downloadOrFail(url, destination, body.size.toLong())
 
         assertEquals(2, requests)
         assertContentEquals(body, fileSystem.readAll(destination))
         assertEquals(sha256Hex(body), digest)
+        client.close()
+    }
+
+    @Test
+    fun cancellationPropagatesInsteadOfReturningLeft() = runTest {
+        val client = HttpClient(MockEngine { awaitCancellation() })
+        val downloader = KtorModelDownloader(client, FakeFileSystem())
+
+        val job = launch { downloader.download(url, destination, body.size.toLong()) {} }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertTrue(job.isCancelled)
         client.close()
     }
 
@@ -223,7 +255,7 @@ class KtorModelDownloaderTest {
         fileSystem.writePartial(destination, body.copyOfRange(0, 1_000))
         val client = HttpClient(MockEngine { respond(content = body, status = HttpStatusCode.OK) })
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
+        val digest = KtorModelDownloader(client, fileSystem).downloadOrFail(url, destination, body.size.toLong())
 
         assertContentEquals(body, fileSystem.readAll(destination))
         assertEquals(sha256Hex(body), digest)
@@ -247,7 +279,7 @@ class KtorModelDownloaderTest {
             },
         )
 
-        val digest = KtorModelDownloader(client, fileSystem).download(url, destination, body.size.toLong()) {}
+        val digest = KtorModelDownloader(client, fileSystem).downloadOrFail(url, destination, body.size.toLong())
 
         assertEquals(2, requests)
         assertContentEquals(body, fileSystem.readAll(destination))

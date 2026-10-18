@@ -10,6 +10,7 @@ import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 
 /**
@@ -40,7 +41,13 @@ class RecordingReconciler(
 
     private suspend fun sweep(recordingsDirectory: Path): Int {
         if (!fileSystem.exists(recordingsDirectory)) return 0
-        val memories = memoryService.findAll()
+        val memories = memoryService.findAll().fold(
+            ifLeft = {
+                // A malformed row blocks reconciliation until it is repaired; the next sweep retries.
+                return 0
+            },
+            ifRight = { it },
+        )
         val pairedIds = memories.mapTo(mutableSetOf()) { it.id }
         val pairedPaths = memories.mapNotNullTo(mutableSetOf()) { it.recordingPath }
         var created = 0
@@ -59,8 +66,14 @@ class RecordingReconciler(
             if (id in pairedIds || relativePath in pairedPaths) continue
             try {
                 // Re-check, because a save may have completed after the snapshot above was taken.
-                if (memoryService.findById(id) != null) continue
-                memoryService.create(
+                // Only a confirmed NotFound means the memory is missing. Other failures may hide an existing
+                // document, so creating then could overwrite it; the next sweep retries.
+                val isMissing = memoryService.findById(id).fold(
+                    ifLeft = { it is MemoryError.NotFound },
+                    ifRight = { false },
+                )
+                if (!isMissing) continue
+                val result = memoryService.create(
                     draft = MemoryDraft(
                         title = "",
                         summary = "",
@@ -69,7 +82,7 @@ class RecordingReconciler(
                     ),
                     id = id,
                 )
-                created++
+                if (result.isRight()) created++
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
