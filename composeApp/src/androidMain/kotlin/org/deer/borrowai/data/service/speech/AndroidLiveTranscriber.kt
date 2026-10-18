@@ -67,14 +67,17 @@ internal class AndroidLiveTranscriber(
     private val lock = Any()
     private var session: Session? = null
 
+    // Kept across stop() so a restart still waits for an unfinished previous teardown.
+    private var lastFinished: CountDownLatch? = null
+
     override fun start(onPartial: (String) -> Unit): Boolean {
         val next: Session
         synchronized(lock) {
-            val previous = session
             // The new session waits for the previous capture to release the microphone before opening it.
-            next = Session(previous?.finished)
-            previous?.stopLocked()
+            next = Session(lastFinished)
+            session?.stopLocked()
             session = next
+            lastFinished = next.finished
         }
         val thread = Thread({ next.run(onPartial) }, "live-transcriber")
         thread.isDaemon = true
