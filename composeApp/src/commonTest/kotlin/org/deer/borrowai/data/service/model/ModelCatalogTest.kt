@@ -67,6 +67,21 @@ class ModelCatalogTest {
     }
 
     @Test
+    fun liveModelSharesTheVoiceFileOnlyOnLegacyTier() {
+        val legacy = ModelCatalog.modelsFor(ModelTier.LEGACY)
+        assertEquals(ModelRole.LIVE_VOICE, legacy.live.role)
+        assertEquals(ModelCatalog.VOICE_FILE_NAME, legacy.live.fileName)
+        assertEquals(legacy.voice.sha256, legacy.live.sha256)
+
+        listOf(ModelTier.MID, ModelTier.LATEST).forEach { tier ->
+            val models = ModelCatalog.modelsFor(tier)
+            assertEquals(ModelRole.LIVE_VOICE, models.live.role)
+            assertEquals(ModelCatalog.LIVE_FILE_NAME, models.live.fileName)
+            assertNotEquals(models.voice.fileName, models.live.fileName)
+        }
+    }
+
+    @Test
     fun everyModelIsPinnedToAnImmutableRevisionWithAVerifiableDigest() {
         val hex = Regex("[0-9a-f]+")
         ModelTier.entries.forEach { tier ->

@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.service.model
 
 enum class ModelRole {
+    LIVE_VOICE,
     VOICE,
     LLM,
 }
@@ -25,8 +26,13 @@ data class ModelSpec(
     val sha256: String,
 )
 
+/**
+ * [live] is a small, fast speech model for transcribing while recording.
+ * [voice] is the tier's high-quality speech model for transcribing saved memories.
+ */
 data class TierModels(
     val tier: ModelTier,
+    val live: ModelSpec,
     val voice: ModelSpec,
     val llm: ModelSpec,
 )
@@ -49,14 +55,27 @@ object ModelTierSelector {
 
 object ModelCatalog {
     const val MODEL_DIRECTORY_NAME = "models"
+    const val LIVE_FILE_NAME = "live-voice-model.bin"
     const val VOICE_FILE_NAME = "voice-model.bin"
     const val LLM_FILE_NAME = "llm-model.gguf"
 
     private const val WHISPER_CPP_REVISION = "5359861c739e955e79d9a303bcbc70fb988958b1"
 
+    private val liveModel: ModelSpec = ModelSpec(
+        displayName = "Whisper Tiny",
+        role = ModelRole.LIVE_VOICE,
+        fileName = LIVE_FILE_NAME,
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/$WHISPER_CPP_REVISION/ggml-tiny.bin",
+        revision = WHISPER_CPP_REVISION,
+        sizeBytes = 77_691_713L,
+        sha256 = "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+    )
+
     private val models: Map<ModelTier, TierModels> = mapOf(
         ModelTier.LEGACY to TierModels(
             tier = ModelTier.LEGACY,
+            // Tiny is both the live and voice model here, so it shares the voice file and is downloaded once.
+            live = liveModel.copy(fileName = VOICE_FILE_NAME),
             voice = voice(
                 displayName = "Whisper Tiny",
                 url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/$WHISPER_CPP_REVISION/ggml-tiny.bin",
@@ -74,6 +93,7 @@ object ModelCatalog {
         ),
         ModelTier.MID to TierModels(
             tier = ModelTier.MID,
+            live = liveModel,
             voice = voice(
                 displayName = "Whisper Base",
                 url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/$WHISPER_CPP_REVISION/ggml-base.bin",
@@ -91,6 +111,7 @@ object ModelCatalog {
         ),
         ModelTier.LATEST to TierModels(
             tier = ModelTier.LATEST,
+            live = liveModel,
             voice = voice(
                 displayName = "Whisper Large v3",
                 url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/$WHISPER_CPP_REVISION/ggml-large-v3.bin",

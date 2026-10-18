@@ -67,6 +67,7 @@ import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.capture_download_over_mobile_data
 import borrowai.composeapp.generated.resources.capture_elapsed_duration
 import borrowai.composeapp.generated.resources.capture_model_choosing
+import borrowai.composeapp.generated.resources.capture_model_downloading_live
 import borrowai.composeapp.generated.resources.capture_model_downloading_summarization
 import borrowai.composeapp.generated.resources.capture_model_downloading_transcription
 import borrowai.composeapp.generated.resources.capture_model_failed_model
@@ -76,6 +77,7 @@ import borrowai.composeapp.generated.resources.capture_model_failed_network_deta
 import borrowai.composeapp.generated.resources.capture_model_failed_storage
 import borrowai.composeapp.generated.resources.capture_model_failed_storage_detail
 import borrowai.composeapp.generated.resources.capture_model_loading_transcription
+import borrowai.composeapp.generated.resources.capture_model_progress_live
 import borrowai.composeapp.generated.resources.capture_model_progress_summarization
 import borrowai.composeapp.generated.resources.capture_model_progress_transcription
 import borrowai.composeapp.generated.resources.capture_model_waiting_for_network
@@ -149,6 +151,7 @@ internal fun BorrowCaptureScreen(
                 isEnabled = canRecord || uiState.isRecording,
                 elapsedSeconds = uiState.elapsedSeconds,
                 statusLabel = modelStatus.takeUnless { uiState.isRecording },
+                downloadProgress = liveDownloadProgress(setupState),
                 onToggleRecording = stateHolder::toggleRecording,
                 onStartHoldRecording = stateHolder::startHoldRecording,
                 onStopHoldRecording = stateHolder::stopHoldRecording,
@@ -218,6 +221,7 @@ private fun MicrophoneButton(
     isEnabled: Boolean,
     elapsedSeconds: Int,
     statusLabel: String?,
+    downloadProgress: Float?,
     onToggleRecording: () -> Unit,
     onStartHoldRecording: () -> Unit,
     onStopHoldRecording: () -> Unit,
@@ -300,6 +304,18 @@ private fun MicrophoneButton(
                 radius = buttonRadius + CaptureUiStateHolder.BUTTON_HALO_EXTRA_RADIUS.toPx(),
                 style = Stroke(width = CaptureUiStateHolder.BUTTON_BORDER_WIDTH.toPx()),
             )
+            downloadProgress?.let { progress ->
+                val arcRadius = buttonRadius + CaptureUiStateHolder.BUTTON_HALO_EXTRA_RADIUS.toPx()
+                drawArc(
+                    color = pulseColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                    useCenter = false,
+                    topLeft = Offset(center.x - arcRadius, center.y - arcRadius),
+                    size = Size(arcRadius * 2f, arcRadius * 2f),
+                    style = Stroke(width = CaptureUiStateHolder.BUTTON_BORDER_WIDTH.toPx(), cap = StrokeCap.Round),
+                )
+            }
             if (isEnabled) {
                 drawCircle(
                     color = pulseColor.copy(
@@ -465,6 +481,14 @@ private fun formatDurationParts(totalSeconds: Int): Pair<String, String> {
     return minutes.toString().padStart(2, '0') to seconds.toString().padStart(2, '0')
 }
 
+/** Fraction of the live model downloaded, or null when no live download is in progress. */
+private fun liveDownloadProgress(state: ModelSetupState): Float? =
+    if (state.phase == ModelSetupPhase.DOWNLOADING_LIVE_VOICE && state.bytesTotal > 0L) {
+        state.bytesDownloaded.toFloat() / state.bytesTotal.toFloat()
+    } else {
+        null
+    }
+
 @Composable
 private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phase) {
     ModelSetupPhase.NOT_STARTED,
@@ -472,6 +496,17 @@ private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phas
     ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK ->
         stringResource(Res.string.capture_model_waiting_for_unmetered_network)
     ModelSetupPhase.WAITING_FOR_NETWORK -> stringResource(Res.string.capture_model_waiting_for_network)
+    ModelSetupPhase.DOWNLOADING_LIVE_VOICE -> {
+        if (state.bytesTotal > 0L) {
+            stringResource(
+                Res.string.capture_model_progress_live,
+                formatMegabytes(state.bytesDownloaded),
+                formatMegabytes(state.bytesTotal),
+            )
+        } else {
+            stringResource(Res.string.capture_model_downloading_live)
+        }
+    }
     ModelSetupPhase.DOWNLOADING_VOICE -> {
         if (state.bytesTotal > 0L) {
             stringResource(

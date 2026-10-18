@@ -10,8 +10,10 @@
     <string name="capture_elapsed_duration">%1$s:%2$s</string>
     <string name="capture_models_unavailable">Recording unavailable until model setup is complete</string>
     <string name="capture_model_choosing">Choosing model for your device</string>
-    <string name="capture_model_downloading_transcription">Downloading transcription model</string>
-    <string name="capture_model_progress_transcription">Transcription %1$s / %2$s MB</string>
+    <string name="capture_model_downloading_live">Downloading Live Transcription Model</string>
+    <string name="capture_model_progress_live">Live transcription %1$s / %2$s MB</string>
+    <string name="capture_model_downloading_transcription">Downloading High-Quality Transcription Model</string>
+    <string name="capture_model_progress_transcription">High-quality transcription %1$s / %2$s MB</string>
     <string name="capture_model_loading_transcription">Preparing transcription model</string>
     <string name="capture_model_downloading_summarization">Downloading summarization model</string>
     <string name="capture_model_progress_summarization">Summarization %1$s / %2$s MB</string>

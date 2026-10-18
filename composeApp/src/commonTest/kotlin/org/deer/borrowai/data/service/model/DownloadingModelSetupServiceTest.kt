@@ -34,6 +34,13 @@ import org.deer.borrowai.data.service.ModelSetupState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DownloadingModelSetupServiceTest {
+    private val live = spec(
+        displayName = "Test Live",
+        role = ModelRole.LIVE_VOICE,
+        fileName = ModelCatalog.LIVE_FILE_NAME,
+        url = "https://example.test/live.bin",
+        sizeBytes = 50_000L,
+    )
     private val voice = spec(
         displayName = "Test Voice",
         role = ModelRole.VOICE,
@@ -48,7 +55,7 @@ class DownloadingModelSetupServiceTest {
         url = "https://example.test/llm.gguf",
         sizeBytes = 90_000L,
     )
-    private val tierModels = TierModels(ModelTier.LEGACY, voice, llm)
+    private val tierModels = TierModels(ModelTier.LEGACY, live, voice, llm)
     private val modelDirectory: Path = "/app/models".toPath()
 
     private fun spec(
@@ -94,18 +101,18 @@ class DownloadingModelSetupServiceTest {
     @Test
     fun firstLaunchDownloadsBothModelsToStaticPathsAndNextLaunchSkipsThem() = runTest {
         val fileSystem = FakeFileSystem()
-        val first = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val first = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val firstSetup = service(fileSystem, first, backgroundScope)
 
         assertEquals(Unit.right(), firstSetup.prepare())
 
         assertEquals(ModelSetupPhase.READY, firstSetup.state.value.phase)
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), first.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), first.requestedUrls)
         assertEquals(40_000L, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertEquals(90_000L, fileSystem.metadata(modelDirectory / ModelCatalog.LLM_FILE_NAME).size)
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
 
-        val secondDownloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val secondDownloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val secondSetup = service(fileSystem, secondDownloader, backgroundScope)
         assertEquals(Unit.right(), secondSetup.prepare())
 
@@ -114,15 +121,34 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun liveAndVoiceSharingOneFileDownloadItOnce() = runTest {
+        val fileSystem = FakeFileSystem()
+        val sharedLive = live.copy(
+            fileName = voice.fileName,
+            downloadUrl = voice.downloadUrl,
+            sizeBytes = voice.sizeBytes,
+            sha256 = voice.sha256,
+        )
+        val models = TierModels(ModelTier.LEGACY, sharedLive, voice, llm)
+        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+
+        assertEquals(Unit.right(), service(fileSystem, downloader, backgroundScope, models = models).prepare())
+
+        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+    }
+
+    @Test
     fun alreadyPresentModelsReachReadyWithoutHolds() = runTest {
         val fileSystem = FakeFileSystem()
         val store = store(fileSystem)
         store.prepareDirectory()
+        writeBytes(fileSystem, store.partialPath(live), ByteArray(live.sizeBytes.toInt()))
+        check(store.commit(live, live.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
         check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
         check(store.commit(llm, llm.sha256).isRight())
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = DownloadingModelSetupService(
             totalRamBytes = 4L * ModelTierSelector.BYTES_PER_GIB,
             store = store,
@@ -158,7 +184,7 @@ class DownloadingModelSetupServiceTest {
         val setup = DownloadingModelSetupService(
             totalRamBytes = 12L * ModelTierSelector.BYTES_PER_GIB,
             store = store(fileSystem),
-            downloader = RecordingDownloader(fileSystem, listOf(voice, llm)),
+            downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm)),
             network = FixedNetworkPolicy(true),
             scope = backgroundScope,
             choosingHoldMillis = 0L,
@@ -180,7 +206,7 @@ class DownloadingModelSetupServiceTest {
         fileSystem.createDirectories(modelDirectory)
         store(fileSystem).preparePartial(voice)
         writeText(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), "partial")
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
 
         service(fileSystem, downloader, backgroundScope).prepare()
 
@@ -194,12 +220,12 @@ class DownloadingModelSetupServiceTest {
         fileSystem.createDirectories(modelDirectory)
         store(fileSystem).preparePartial(voice)
         writeBytes(fileSystem, modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"), ByteArray(voice.sizeBytes.toInt()))
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope)
 
         setup.prepare()
 
-        assertEquals(listOf(llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
@@ -215,12 +241,12 @@ class DownloadingModelSetupServiceTest {
             modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part"),
             ByteArray(voice.sizeBytes.toInt()) { 1 },
         )
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope)
 
         setup.prepare()
 
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(voice.sizeBytes, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
         assertFalse(fileSystem.exists(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")))
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
@@ -231,11 +257,11 @@ class DownloadingModelSetupServiceTest {
         val fileSystem = FakeFileSystem()
         fileSystem.createDirectories(modelDirectory)
         writeText(fileSystem, modelDirectory / ModelCatalog.VOICE_FILE_NAME, "stale")
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
 
         service(fileSystem, downloader, backgroundScope).prepare()
 
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(40_000L, fileSystem.metadata(modelDirectory / ModelCatalog.VOICE_FILE_NAME).size)
     }
 
@@ -245,7 +271,7 @@ class DownloadingModelSetupServiceTest {
         fileSystem.createDirectories(modelDirectory)
         val voicePath = modelDirectory / ModelCatalog.VOICE_FILE_NAME
         writeBytes(fileSystem, voicePath, ByteArray(40_000) { 1 })
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         var voiceHashCount = 0
         val store = ModelFileStore(modelDirectory, fileSystem) { path ->
             if (path == voicePath) voiceHashCount++
@@ -264,7 +290,7 @@ class DownloadingModelSetupServiceTest {
         )
         setup.prepare()
 
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
         assertEquals(1, voiceHashCount)
     }
@@ -275,9 +301,9 @@ class DownloadingModelSetupServiceTest {
         val badVoice = voice.copy(sha256 = "0".repeat(64))
         val setup = service(
             fileSystem,
-            RecordingDownloader(fileSystem, listOf(badVoice, llm)),
+            RecordingDownloader(fileSystem, listOf(live, badVoice, llm)),
             backgroundScope,
-            models = TierModels(ModelTier.LEGACY, badVoice, llm),
+            models = TierModels(ModelTier.LEGACY, live, badVoice, llm),
         )
 
         setup.prepare()
@@ -291,14 +317,14 @@ class DownloadingModelSetupServiceTest {
     @Test
     fun incompleteDownloadFailsAndKeepsThePartialFileForResume() = runTest {
         val fileSystem = FakeFileSystem()
-        val setup = service(fileSystem, RecordingDownloader(fileSystem, listOf(voice, llm), shortBy = 1L), backgroundScope)
+        val setup = service(fileSystem, RecordingDownloader(fileSystem, listOf(live, voice, llm), shortBy = 1L), backgroundScope)
 
         setup.prepare()
 
         assertEquals(ModelSetupPhase.FAILED, setup.state.value.phase)
         assertEquals(ModelSetupFailureReason.NETWORK, setup.state.value.failureReason)
-        assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.VOICE_FILE_NAME))
-        assertEquals(39_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.VOICE_FILE_NAME + ".part")).size)
+        assertFalse(fileSystem.exists(modelDirectory / ModelCatalog.LIVE_FILE_NAME))
+        assertEquals(49_999L, fileSystem.metadata(modelDirectory / (ModelCatalog.LIVE_FILE_NAME + ".part")).size)
     }
 
     @Test
@@ -353,13 +379,13 @@ class DownloadingModelSetupServiceTest {
     fun cancelledWorkerCancelsAwaitingCaller() = runTest {
         val fileSystem = FakeFileSystem()
         val gate = CompletableDeferred<Unit>()
-        val downloader = GatedDownloader(fileSystem, listOf(voice, llm), gate)
+        val downloader = GatedDownloader(fileSystem, listOf(live, voice, llm), gate)
         val worker = CoroutineScope(coroutineContext + Job())
         val setup = service(fileSystem, downloader, worker)
 
         val caller = launch { setup.prepare() }
         runCurrent()
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_LIVE_VOICE, setup.state.value.phase)
 
         worker.cancel()
         runCurrent()
@@ -376,7 +402,7 @@ class DownloadingModelSetupServiceTest {
         val progress = mutableListOf<Float>()
         val setup = service(
             fileSystem,
-            RecordingDownloader(fileSystem, listOf(voice, llm), chunkBytes = 10_000L),
+            RecordingDownloader(fileSystem, listOf(live, voice, llm), chunkBytes = 10_000L),
             backgroundScope,
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -393,6 +419,7 @@ class DownloadingModelSetupServiceTest {
             listOf(
                 ModelSetupPhase.NOT_STARTED,
                 ModelSetupPhase.CHOOSING_MODEL,
+                ModelSetupPhase.DOWNLOADING_LIVE_VOICE,
                 ModelSetupPhase.DOWNLOADING_VOICE,
                 ModelSetupPhase.LOADING_VOICE,
                 ModelSetupPhase.DOWNLOADING_LLM,
@@ -409,7 +436,7 @@ class DownloadingModelSetupServiceTest {
         val observed = mutableListOf<ModelSetupState>()
         val setup = service(
             fileSystem,
-            RecordingDownloader(fileSystem, listOf(voice, llm), chunkBytes = 10_000L),
+            RecordingDownloader(fileSystem, listOf(live, voice, llm), chunkBytes = 10_000L),
             backgroundScope,
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -431,7 +458,7 @@ class DownloadingModelSetupServiceTest {
     fun meteredNetworkHoldsTheTransferUntilMobileDataIsConsented() = runTest {
         val fileSystem = FakeFileSystem()
         val network = FixedNetworkPolicy(false)
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope, network = network)
 
         val prepare = launch { setup.prepare() }
@@ -444,14 +471,14 @@ class DownloadingModelSetupServiceTest {
         prepare.join()
 
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
     }
 
     @Test
     fun unmeteredNetworkReleasesTheHeldTransferWithoutConsent() = runTest {
         val fileSystem = FakeFileSystem()
         val network = FixedNetworkPolicy(false)
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope, network = network)
 
         val prepare = launch { setup.prepare() }
@@ -462,7 +489,7 @@ class DownloadingModelSetupServiceTest {
         prepare.join()
 
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
-        assertEquals(listOf(voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
+        assertEquals(listOf(live.downloadUrl, voice.downloadUrl, llm.downloadUrl), downloader.requestedUrls)
     }
 
     @Test
@@ -470,11 +497,13 @@ class DownloadingModelSetupServiceTest {
         val fileSystem = FakeFileSystem()
         val store = store(fileSystem)
         store.prepareDirectory()
+        writeBytes(fileSystem, store.partialPath(live), ByteArray(live.sizeBytes.toInt()))
+        check(store.commit(live, live.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(voice), ByteArray(voice.sizeBytes.toInt()))
         check(store.commit(voice, voice.sha256).isRight())
         writeBytes(fileSystem, store.partialPath(llm), ByteArray(llm.sizeBytes.toInt()))
         check(store.commit(llm, llm.sha256).isRight())
-        val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
+        val downloader = RecordingDownloader(fileSystem, listOf(live, voice, llm))
         val setup = service(fileSystem, downloader, backgroundScope, network = FixedNetworkPolicy(false))
 
         setup.prepare()
@@ -487,7 +516,7 @@ class DownloadingModelSetupServiceTest {
     fun cancelledPrepareCallerLeavesTheSharedDownloadRunningOnce() = runTest {
         val fileSystem = FakeFileSystem()
         val gate = CompletableDeferred<Unit>()
-        val downloader = GatedDownloader(fileSystem, listOf(voice, llm), gate)
+        val downloader = GatedDownloader(fileSystem, listOf(live, voice, llm), gate)
         val setup = service(fileSystem, downloader, backgroundScope)
 
         val first = launch { setup.prepare() }
@@ -496,13 +525,13 @@ class DownloadingModelSetupServiceTest {
         first.cancel()
         runCurrent()
 
-        assertEquals(ModelSetupPhase.DOWNLOADING_VOICE, setup.state.value.phase)
+        assertEquals(ModelSetupPhase.DOWNLOADING_LIVE_VOICE, setup.state.value.phase)
         gate.complete(Unit)
         second.join()
 
         assertTrue(first.isCancelled)
         assertEquals(ModelSetupPhase.READY, setup.state.value.phase)
-        assertEquals(mapOf(voice.downloadUrl to 1, llm.downloadUrl to 1), downloader.downloadCounts)
+        assertEquals(mapOf(live.downloadUrl to 1, voice.downloadUrl to 1, llm.downloadUrl to 1), downloader.downloadCounts)
     }
 
     private fun writeText(fileSystem: FileSystem, path: Path, text: String) {
