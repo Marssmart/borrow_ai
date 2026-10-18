@@ -141,22 +141,17 @@ internal class AndroidLiveTranscriber(
                 val pendingRecognizer = recognizer
                 if (pendingDecoder == null) {
                     runCatching { pendingRecognizer?.release() }
+                    finished.countDown()
                 } else {
+                    // Native inference may still be using the recognizer. Wait off this thread for the decoder to stop
+                    // before releasing it, and only then let the next session start.
                     pendingDecoder.shutdownNow()
-                    val terminated = runCatching {
-                        pendingDecoder.awaitTermination(DECODER_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    }.getOrDefault(false)
-                    if (terminated) {
+                    Thread({
+                        runCatching { pendingDecoder.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS) }
                         runCatching { pendingRecognizer?.release() }
-                    } else {
-                        // Native inference may still be using the recognizer, so release it only after the decoder stops.
-                        Thread({
-                            runCatching { pendingDecoder.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS) }
-                            runCatching { pendingRecognizer?.release() }
-                        }, "live-transcriber-release").apply { isDaemon = true }.start()
-                    }
+                        finished.countDown()
+                    }, "live-transcriber-release").apply { isDaemon = true }.start()
                 }
-                finished.countDown()
             }
         }
 
@@ -268,7 +263,6 @@ internal class AndroidLiveTranscriber(
         const val DECODE_INTERVAL_SAMPLES = SAMPLE_RATE
         const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 2
         const val WINDOW_SAMPLES = SAMPLE_RATE * 30
-        const val DECODER_SHUTDOWN_TIMEOUT_SECONDS = 5L
     }
 }
 
