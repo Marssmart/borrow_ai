@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.20]
+
+- Finished recordings are transcribed in batch on Android with the Whisper model for the device tier. Batch transcription runs after a recording is saved and does not affect the live transcript.
+- M4A recordings are decoded to 16 kHz mono before batch transcription. Long recordings are processed in 30 s windows.
+- Updated Android and iOS versioning to 1.0.20 (build 21).
+
 ## [1.0.17]
 
 - The service layer now models failures and responses with Arrow `Either` (Left = failure, Right = success).
