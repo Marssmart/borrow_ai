@@ -4,6 +4,8 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
@@ -218,6 +220,12 @@ internal class SavedMemoriesStateHolder(
         val MEMORY_PANEL_FLAT_ELEVATION = 0.dp
         val MEMORY_PANEL_BORDER_WIDTH = 1.dp
         const val MEMORY_PANEL_BORDER_ALPHA = 0.96f
+
+        val MEMORY_PENDING_CARD_BRUSH = Brush.verticalGradient(
+            listOf(Color(0xFFFFFAF1), Color(0xFFFDF3E2)),
+        )
+        val MEMORY_PENDING_CARD_BORDER_COLOR = Color(0xFFD6AA6E).copy(alpha = 0.45f)
+        const val MEMORY_PENDING_TEXT_ALPHA = 0.8f
 
         val MEMORY_AUDIO_GLYPH_SIZE = 34.dp
         val MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING = PaddingValues(horizontal = 9.dp, vertical = 4.dp)
