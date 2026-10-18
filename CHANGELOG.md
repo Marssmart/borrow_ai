@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.22]
+
+- Added `AGENTS.md` with contributor rules (every MR must update the changelog and bump the version) and a summary of the app's architecture and core concepts for AI agents.
+- Updated Android and iOS versioning to 1.0.22 (build 23).
+
 ## [1.0.21]
 
 - Live transcription on Android is merged with the hardened transcriber from 1.0.20. Its capture and decode behaviour is unchanged from 1.0.18.
