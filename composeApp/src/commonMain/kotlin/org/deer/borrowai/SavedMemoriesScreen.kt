@@ -52,8 +52,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.Memory
@@ -118,17 +116,20 @@ internal fun SavedMemoriesScreen(
             scope = scope,
         )
     }
-    val uiState by stateHolder.uiState.collectAsState()
+    val memories by stateHolder.memories.collectAsState()
+    val mediaSessionState by stateHolder.mediaSessionState.collectAsState()
+    val selectedMemoryId by stateHolder.selectedMemoryId.collectAsState()
+    val playbackError by stateHolder.playbackError.collectAsState()
     val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
     val currentOnReturnToCapture by rememberUpdatedState(onReturnToCapture)
-    val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
+    val selectedMemory = memories.firstOrNull { it.id == selectedMemoryId }
 
     androidx.compose.runtime.LaunchedEffect(stateHolder.pagerState) {
         snapshotFlow { stateHolder.pagerState.settledPage }.collect(stateHolder::onPagerPageSettled)
     }
     androidx.compose.runtime.LaunchedEffect(stateHolder) {
         var hasReportedDetailVisible = false
-        stateHolder.uiState.map { it.hasOpenedDetail }.distinctUntilChanged().collect { isVisible ->
+        stateHolder.isDetailVisible.collect { isVisible ->
             if (isVisible || hasReportedDetailVisible) {
                 currentOnDetailVisibilityChanged(isVisible)
                 hasReportedDetailVisible = isVisible
@@ -139,13 +140,13 @@ internal fun SavedMemoriesScreen(
     HorizontalPager(
         state = stateHolder.pagerState,
         modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = uiState.detailSwipeEnabled,
+        userScrollEnabled = selectedMemoryId != null,
     ) { page ->
         when (page) {
             SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
-                memories = uiState.memories,
+                memories = memories,
                 scrollState = stateHolder.memoriesScrollState,
-                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
+                playingTarget = (mediaSessionState as? MediaSessionState.Playing)?.target,
                 onOpenMemory = stateHolder::openMemory,
                 onPlayOriginal = { stateHolder.togglePlayback(it, PlaybackContent.TRANSCRIPTION) },
                 onPlaySummary = { stateHolder.togglePlayback(it, PlaybackContent.SUMMARY) },
@@ -156,7 +157,7 @@ internal fun SavedMemoriesScreen(
                 MemoryDetailScreen(
                     memory = memory,
                     scrollState = stateHolder.detailScrollState,
-                    playingContent = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                    playingContent = (mediaSessionState as? MediaSessionState.Playing)
                         ?.takeIf { it.target.memoryId == memory.id }
                         ?.target
                         ?.content,
@@ -180,7 +181,7 @@ internal fun SavedMemoriesScreen(
         }
     }
 
-    val pendingPlayback = (uiState.mediaSessionState as? MediaSessionState.Recording)
+    val pendingPlayback = (mediaSessionState as? MediaSessionState.Recording)
         ?.pendingPlayback
     if (pendingPlayback != null) {
         AlertDialog(
@@ -200,7 +201,7 @@ internal fun SavedMemoriesScreen(
         )
     }
 
-    uiState.playbackError?.takeIf { pendingPlayback == null }?.let { error ->
+    playbackError?.takeIf { pendingPlayback == null }?.let { error ->
         AlertDialog(
             onDismissRequest = stateHolder::dismissPlaybackError,
             title = { Text(stringResource(Res.string.memory_playback_error_title)) },
