@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.18]
+
+- Added the `TranscriptionService` boundary. It returns `Either<TranscriptionError, String>` with explicit variants for a missing model, a missing engine, invalid audio, and engine failure.
+- Until a speech-to-text engine ships, transcription reports `EngineUnavailable` instead of saving an empty transcript as if it succeeded.
+
 ## [1.0.17]
 
 - The service layer now models failures and responses with Arrow `Either` (Left = failure, Right = success).
