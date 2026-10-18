@@ -55,7 +55,7 @@ class DownloadingModelSetupServiceTest {
         url = "https://example.test/llm.gguf",
         sizeBytes = 90_000L,
     )
-    private val tierModels = TierModels(ModelTier.LEGACY, live, voice, llm)
+    private val tierModels = TierModels(ModelTier.LEGACY, listOf(live), listOf(voice), llm)
     private val modelDirectory: Path = "/app/models".toPath()
 
     private fun spec(
@@ -129,7 +129,7 @@ class DownloadingModelSetupServiceTest {
             sizeBytes = voice.sizeBytes,
             sha256 = voice.sha256,
         )
-        val models = TierModels(ModelTier.LEGACY, sharedLive, voice, llm)
+        val models = TierModels(ModelTier.LEGACY, listOf(sharedLive), listOf(voice), llm)
         val downloader = RecordingDownloader(fileSystem, listOf(voice, llm))
 
         assertEquals(Unit.right(), service(fileSystem, downloader, backgroundScope, models = models).prepare())
@@ -303,7 +303,7 @@ class DownloadingModelSetupServiceTest {
             fileSystem,
             RecordingDownloader(fileSystem, listOf(live, badVoice, llm)),
             backgroundScope,
-            models = TierModels(ModelTier.LEGACY, live, badVoice, llm),
+            models = TierModels(ModelTier.LEGACY, listOf(live), listOf(badVoice), llm),
         )
 
         setup.prepare()
