@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.deer.borrowai.data.service.MediaSessionService
+import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
@@ -141,7 +142,7 @@ internal fun BorrowCaptureScreen(
                 elapsedSeconds = captureState.elapsedSeconds,
                 statusLabel = modelStatus.takeUnless { captureState.isRecording },
                 onToggleRecording = {
-                    if (captureState.isRecording) {
+                    if (mediaSessionService.state.value is MediaSessionState.Recording) {
                         mediaSessionService.stopRecording()
                     } else if (canRecord) {
                         mediaSessionService.startRecording(holdToRecord = false)
