@@ -23,11 +23,10 @@ sealed interface TranscriptionError {
     data class Engine(val cause: Throwable) : TranscriptionError
 }
 
-/**
- * Default binding until a platform speech-to-text engine is wired. Reports [TranscriptionError.EngineUnavailable]
- * so callers see an explicit failure instead of an empty transcript.
- */
+/** Placeholder binding until a platform speech-to-text engine is wired. Always returns a fixed transcript. */
 object UnavailableTranscriptionService : TranscriptionService {
+    const val TEXT = "Transcription unavailable"
+
     override suspend fun transcribe(relativePath: String): Either<TranscriptionError, String> =
-        Either.Left(TranscriptionError.EngineUnavailable)
+        Either.Right(TEXT)
 }
