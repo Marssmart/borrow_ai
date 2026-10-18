@@ -4,13 +4,20 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionService
@@ -19,15 +26,6 @@ import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
-
-internal data class SavedMemoriesUiState(
-    val memories: List<Memory> = emptyList(),
-    val mediaSessionState: MediaSessionState = MediaSessionState.Idle,
-    val selectedMemoryId: String? = null,
-    val detailSwipeEnabled: Boolean = false,
-    val hasOpenedDetail: Boolean = false,
-    val playbackError: SavedMemoriesPlaybackError? = null,
-)
 
 internal enum class SavedMemoriesPlaybackError {
     MEMORY_NOT_FOUND,
@@ -43,34 +41,48 @@ internal class SavedMemoriesStateHolder(
     val detailScrollState: ScrollState,
     private val scope: CoroutineScope,
 ) {
-    private val mutableUiState = MutableStateFlow(SavedMemoriesUiState())
+    /** Memories sorted newest first, derived from the memory service. */
+    val memories: StateFlow<List<Memory>> = memoryService.getState()
+        .map { memories -> memories.sortedByDescending(Memory::createdAtEpochMillis) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    val uiState = mutableUiState.asStateFlow()
+    val mediaSessionState: StateFlow<MediaSessionState> = mediaSessionService.state
+
+    private val mutableSelectedMemoryId = MutableStateFlow<String?>(null)
+
+    /** The memory shown on the detail page. Non-null also means detail swiping is enabled. */
+    val selectedMemoryId: StateFlow<String?> = mutableSelectedMemoryId.asStateFlow()
+
+    /** True once the pager has settled on the detail page for the selected memory. */
+    val isDetailVisible: Flow<Boolean> = combine(
+        selectedMemoryId,
+        snapshotFlow { pagerState.settledPage },
+    ) { selectedId, settledPage ->
+        selectedId != null && settledPage == MEMORY_DETAIL_PAGE
+    }.distinctUntilChanged()
+
+    private val mutablePlaybackError = MutableStateFlow<SavedMemoriesPlaybackError?>(null)
+
+    val playbackError: StateFlow<SavedMemoriesPlaybackError?> = mutablePlaybackError.asStateFlow()
 
     /** Playback buttons are disabled when the media service cannot play recorded media. */
     val playbackAvailable: Boolean get() = mediaSessionService.playbackAvailable
 
     init {
         scope.launch {
-            memoryService.getState().collect { memories ->
-                updateMemories(memories)
-            }
-        }
-        scope.launch {
-            mediaSessionService.state.collect { mediaSessionState ->
-                mutableUiState.update { it.copy(mediaSessionState = mediaSessionState) }
+            memories.collect { orderedMemories ->
+                val selectedId = mutableSelectedMemoryId.value
+                if (selectedId != null && orderedMemories.none { it.id == selectedId }) {
+                    closeDetailState()
+                    scope.launch { pagerState.animateScrollToPage(MEMORY_LIST_PAGE) }
+                }
             }
         }
     }
 
     fun openMemory(memoryId: String) {
-        if (uiState.value.memories.none { it.id == memoryId }) return
-        mutableUiState.update {
-            it.copy(
-                selectedMemoryId = memoryId,
-                detailSwipeEnabled = true,
-            )
-        }
+        if (memories.value.none { it.id == memoryId }) return
+        mutableSelectedMemoryId.value = memoryId
         scope.launch {
             detailScrollState.scrollTo(0)
             pagerState.animateScrollToPage(MEMORY_DETAIL_PAGE)
@@ -78,9 +90,7 @@ internal class SavedMemoriesStateHolder(
     }
 
     fun onPagerPageSettled(page: Int) {
-        if (page == MEMORY_DETAIL_PAGE) {
-            mutableUiState.update { it.copy(hasOpenedDetail = true) }
-        } else if (page == MEMORY_LIST_PAGE && uiState.value.hasOpenedDetail) {
+        if (page == MEMORY_LIST_PAGE && mutableSelectedMemoryId.value != null) {
             closeDetailState()
         }
     }
@@ -103,7 +113,7 @@ internal class SavedMemoriesStateHolder(
     fun togglePlayback(memoryId: String, content: PlaybackContent) {
         if (!playbackAvailable) return
         val target = PlaybackTarget(memoryId = memoryId, content = content)
-        val currentPlayback = uiState.value.mediaSessionState as? MediaSessionState.Playing
+        val currentPlayback = mediaSessionState.value as? MediaSessionState.Playing
         if (currentPlayback?.target == target) {
             mediaSessionService.stopPlayback()
             return
@@ -121,32 +131,15 @@ internal class SavedMemoriesStateHolder(
     }
 
     fun dismissPlaybackError() {
-        mutableUiState.update { it.copy(playbackError = null) }
+        mutablePlaybackError.value = null
     }
 
     private fun closeDetailState() {
-        mutableUiState.update {
-            it.copy(
-                selectedMemoryId = null,
-                detailSwipeEnabled = false,
-                hasOpenedDetail = false,
-            )
-        }
-    }
-
-    private fun updateMemories(memories: List<Memory>) {
-        val orderedMemories = memories.sortedByDescending(Memory::createdAtEpochMillis)
-        mutableUiState.update { it.copy(memories = orderedMemories) }
-
-        val selectedMemoryId = uiState.value.selectedMemoryId
-        if (selectedMemoryId != null && orderedMemories.none { it.id == selectedMemoryId }) {
-            closeDetailState()
-            scope.launch { pagerState.animateScrollToPage(MEMORY_LIST_PAGE) }
-        }
+        mutableSelectedMemoryId.value = null
     }
 
     private fun setPlaybackError(error: PlaybackError) {
-        mutableUiState.update { it.copy(playbackError = error.toUiError()) }
+        mutablePlaybackError.value = error.toUiError()
     }
 
     private fun PlaybackError.toUiError(): SavedMemoriesPlaybackError = when (this) {
