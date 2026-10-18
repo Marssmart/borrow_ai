@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.20]
+
+- Finished recordings are transcribed in batch on Android with the Whisper model for the device tier. Batch transcription runs after a recording is saved and does not affect the live transcript.
+- M4A recordings are decoded to 16 kHz mono before batch transcription. Long recordings are processed in 30 s windows.
+- Updated Android and iOS versioning to 1.0.20 (build 21).
+
 ## [1.0.19]
 
 - Fixed model downloads failing on flaky mobile networks. Android model downloads now allow longer socket stalls (60 s) and connect timeouts (30 s) instead of OkHttp's short default read timeout.

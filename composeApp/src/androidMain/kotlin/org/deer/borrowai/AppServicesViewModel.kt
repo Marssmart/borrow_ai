@@ -12,6 +12,7 @@ import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
+import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
 import org.deer.borrowai.data.service.speech.createLiveTranscriber
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
@@ -38,6 +39,7 @@ internal class AppServicesViewModel(
             audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
             liveTranscriber = liveTranscriber,
+            batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
         )
     },
 ) : ViewModel() {
