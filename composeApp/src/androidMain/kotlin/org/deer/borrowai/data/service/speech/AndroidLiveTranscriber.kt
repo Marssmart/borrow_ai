@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.speech
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -100,8 +101,9 @@ internal class AndroidLiveTranscriber(
                         }
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (t: Throwable) {
                 // Live text is best-effort; ending here leaves the recording running without a transcript.
+                Log.w(TAG, "Live transcription failed; recording continues without a live transcript", t)
             } finally {
                 runCatching { record?.stop() }
                 runCatching { record?.release() }
@@ -165,6 +167,7 @@ internal class AndroidLiveTranscriber(
     }
 
     private companion object {
+        const val TAG = "AndroidLiveTranscriber"
         const val SAMPLE_RATE = 16_000
         const val FEATURE_DIM = 80
         const val THREADS = 2
