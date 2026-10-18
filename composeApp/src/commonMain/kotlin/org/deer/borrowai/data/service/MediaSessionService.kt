@@ -65,8 +65,6 @@ sealed interface PlaybackError {
 interface MediaSessionService {
     val state: StateFlow<MediaSessionState>
 
-    val idleTranscription: StateFlow<String>
-
     /** False when this service cannot play back recorded media. Playback controls should be disabled. */
     val playbackAvailable: Boolean
         get() = true

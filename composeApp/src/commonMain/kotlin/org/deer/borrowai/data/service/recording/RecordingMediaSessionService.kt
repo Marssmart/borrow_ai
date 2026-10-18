@@ -14,7 +14,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -61,7 +60,6 @@ class RecordingMediaSessionService(
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
 ) : MediaSessionService {
     private val mutableState = MutableMediaSessionState()
-    private val mutableIdleTranscription = MutableStateFlow("")
     private val closed = MutableStateFlow(false)
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
@@ -73,7 +71,6 @@ class RecordingMediaSessionService(
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.state
-    override val idleTranscription: StateFlow<String> = mutableIdleTranscription.asStateFlow()
     override val playbackAvailable: Boolean = true
 
     override fun startRecording(holdToRecord: Boolean) {

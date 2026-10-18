@@ -4,7 +4,6 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.combine
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 
@@ -16,19 +15,13 @@ internal class CaptureUiStateHolder(
     /** True from a hold press until its release, even if recording has not started yet. */
     private var holdPressed = false
 
-    val uiState = MutableCaptureUiState(
-        mediaSessionService.state.value.toUiState(mediaSessionService.idleTranscription.value),
-    )
+    val uiState = MutableCaptureUiState(mediaSessionService.state.value.toUiState())
 
     /** Raw recording does not depend on the transcription model being ready. */
     val canRecord: Boolean get() = mediaSessionService.recordingAvailable
 
     suspend fun observeMediaSession() {
-        combine(mediaSessionService.state, mediaSessionService.idleTranscription) { session, idleTranscript ->
-            session to idleTranscript
-        }.collect { (session, idleTranscript) ->
-            bindMediaSession(session, idleTranscript)
-        }
+        mediaSessionService.state.collect { bindMediaSession(it) }
     }
 
     fun toggleRecording() {
@@ -60,51 +53,36 @@ internal class CaptureUiStateHolder(
     private fun startRecording(holdToRecord: Boolean) {
         if (!canRecord) return
         mediaSessionService.startRecording(holdToRecord)
-        bindMediaSession(
-            mediaSessionService.state.value,
-            mediaSessionService.idleTranscription.value,
-        )
+        bindMediaSession(mediaSessionService.state.value)
     }
 
     private fun stopRecording() {
         val result = mediaSessionService.stopRecording() ?: return
-        val transcript = mediaSessionService.idleTranscription.value
         uiState.update {
             it.copy(
                 isRecording = false,
                 isHoldRecording = false,
                 elapsedSeconds = (result.elapsedMillis / MILLIS_PER_SECOND).toInt(),
-                transcript = transcript,
+                transcript = "",
             )
         }
     }
 
-    private fun bindMediaSession(
-        mediaSessionState: MediaSessionState,
-        idleTranscript: String,
-    ) {
+    private fun bindMediaSession(mediaSessionState: MediaSessionState) {
         uiState.update { currentUiState ->
             when (mediaSessionState) {
-                MediaSessionState.Idle -> currentUiState.copy(
+                is MediaSessionState.Recording -> mediaSessionState.toUiState()
+                MediaSessionState.Idle, is MediaSessionState.Playing -> currentUiState.copy(
                     isRecording = false,
                     isHoldRecording = false,
-                    transcript = idleTranscript,
-                )
-
-                is MediaSessionState.Recording -> mediaSessionState.toUiState(idleTranscript)
-
-                is MediaSessionState.Playing -> currentUiState.copy(
-                    isRecording = false,
-                    isHoldRecording = false,
-                    transcript = idleTranscript,
+                    transcript = "",
                 )
             }
         }
     }
 
-    private fun MediaSessionState.toUiState(idleTranscript: String): MutableCaptureUiState.UiState =
+    private fun MediaSessionState.toUiState(): MutableCaptureUiState.UiState =
         when (this) {
-            MediaSessionState.Idle -> MutableCaptureUiState.UiState(transcript = idleTranscript)
             is MediaSessionState.Recording -> MutableCaptureUiState.UiState(
                 isRecording = true,
                 isHoldRecording = holdToRecord,
@@ -112,7 +90,7 @@ internal class CaptureUiStateHolder(
                 transcript = transcription,
             )
 
-            is MediaSessionState.Playing -> MutableCaptureUiState.UiState(transcript = idleTranscript)
+            MediaSessionState.Idle, is MediaSessionState.Playing -> MutableCaptureUiState.UiState()
         }
 
     internal companion object {
