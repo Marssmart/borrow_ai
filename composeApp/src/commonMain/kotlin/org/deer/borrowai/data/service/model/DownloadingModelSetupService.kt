@@ -80,9 +80,9 @@ class DownloadingModelSetupService(
 
     private suspend fun setupModels(): Either<ModelDownloadError, Unit> = either {
         val chosen = modelsForRam(totalRamBytes)
-        val voicePresent = store.isPresent(chosen.voice)
+        val livePresent = store.isPresent(chosen.live)
         val llmPresent = store.isPresent(chosen.llm)
-        if (voicePresent && llmPresent) {
+        if (livePresent && store.isPresent(chosen.voice) && llmPresent) {
             publishFastReady()
             return@either
         }
@@ -90,15 +90,28 @@ class DownloadingModelSetupService(
         publish(ModelSetupPhase.CHOOSING_MODEL, 0f)
         delay(choosingHoldMillis)
         publish(
-            ModelSetupPhase.DOWNLOADING_VOICE,
+            ModelSetupPhase.DOWNLOADING_LIVE_VOICE,
             ModelSetupMilestones.CHOOSING_END,
         )
+        downloadModel(
+            chosen.live,
+            ModelSetupPhase.DOWNLOADING_LIVE_VOICE,
+            ModelSetupMilestones.CHOOSING_END,
+            ModelSetupMilestones.LIVE_DOWNLOAD_END,
+            alreadyPresent = livePresent,
+        ).bind()
+
+        publish(
+            ModelSetupPhase.DOWNLOADING_VOICE,
+            ModelSetupMilestones.LIVE_DOWNLOAD_END,
+        )
+        // Checked after the live step, which may already have written a shared voice file.
         val voiceDownloaded = downloadModel(
             chosen.voice,
             ModelSetupPhase.DOWNLOADING_VOICE,
-            ModelSetupMilestones.CHOOSING_END,
+            ModelSetupMilestones.LIVE_DOWNLOAD_END,
             ModelSetupMilestones.VOICE_DOWNLOAD_END,
-            alreadyPresent = voicePresent,
+            alreadyPresent = store.isPresent(chosen.voice),
         ).bind()
 
         publish(ModelSetupPhase.LOADING_VOICE, ModelSetupMilestones.VOICE_DOWNLOAD_END)
@@ -201,7 +214,8 @@ class DownloadingModelSetupService(
 
         val FAST_READY_STEPS = listOf(
             ModelSetupPhase.CHOOSING_MODEL to 0f,
-            ModelSetupPhase.DOWNLOADING_VOICE to ModelSetupMilestones.CHOOSING_END,
+            ModelSetupPhase.DOWNLOADING_LIVE_VOICE to ModelSetupMilestones.CHOOSING_END,
+            ModelSetupPhase.DOWNLOADING_VOICE to ModelSetupMilestones.LIVE_DOWNLOAD_END,
             ModelSetupPhase.LOADING_VOICE to ModelSetupMilestones.VOICE_DOWNLOAD_END,
             ModelSetupPhase.DOWNLOADING_LLM to ModelSetupMilestones.VOICE_LOAD_END,
         )
