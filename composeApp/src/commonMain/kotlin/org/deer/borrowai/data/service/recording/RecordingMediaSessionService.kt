@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -27,7 +28,6 @@ import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
-import org.deer.borrowai.data.service.MutableMediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackRequest
@@ -59,7 +59,7 @@ class RecordingMediaSessionService(
     private val idGenerator: () -> String = { Uuid.random().toString() },
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
 ) : MediaSessionService {
-    private val mutableState = MutableMediaSessionState()
+    private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
@@ -70,7 +70,7 @@ class RecordingMediaSessionService(
         audioPlayer.setInterruptionHandler { stopActivePlayback() }
     }
 
-    override val state: StateFlow<MediaSessionState> = mutableState.state
+    override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
     override val playbackAvailable: Boolean = true
 
     override fun startRecording(holdToRecord: Boolean) {
@@ -95,20 +95,14 @@ class RecordingMediaSessionService(
         val memory = findMemory(target) ?: return PlaybackError.MemoryNotFound.left()
         val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackError.RecordingUnavailable.left()
 
-        return mutableState.ifRecording { recording ->
-            mutableState.transitionRecording(
-                elapsedMillis = recording.elapsedMillis,
-                transcription = recording.transcription,
-                pendingPlayback = target,
-                holdToRecord = recording.holdToRecord,
-            )
-            PlaybackRequest.ConfirmationRequired(target).right()
-        } ?: startPlayback(target, absolutePath)
+        val recording = recordingOrNull() ?: return startPlayback(target, absolutePath)
+        mutableState.value = recording.copy(pendingPlayback = target)
+        return PlaybackRequest.ConfirmationRequired(target).right()
     }
 
     override fun confirmPendingPlayback(): Either<PlaybackError, PlaybackRequest> {
         ensureOpen()
-        val target = mutableState.ifRecording { it.pendingPlayback }
+        val target = recordingOrNull()?.pendingPlayback
             ?: return PlaybackError.NoPendingConfirmation.left()
         val memory = findMemory(target)
         val absolutePath = memory?.let { playableRecordingPath(target, it) }
@@ -122,14 +116,10 @@ class RecordingMediaSessionService(
 
     override fun cancelPendingPlayback(): Boolean {
         ensureOpen()
-        return mutableState.ifRecording { recording ->
-            if (recording.pendingPlayback == null) {
-                false
-            } else {
-                clearPendingPlayback()
-                true
-            }
-        } ?: false
+        val recording = recordingOrNull() ?: return false
+        if (recording.pendingPlayback == null) return false
+        clearPendingPlayback()
+        return true
     }
 
     override fun stopPlayback() {
@@ -169,10 +159,10 @@ class RecordingMediaSessionService(
         } catch (exception: PlaybackUnavailableException) {
             // A failed replacement has already stopped any previous playback, so the state must not stay Playing.
             tickerJob.cancel()
-            if (mutableState.value is MediaSessionState.Playing) mutableState.transitionIdle()
+            if (mutableState.value is MediaSessionState.Playing) mutableState.value = MediaSessionState.Idle
             return PlaybackError.RecordingUnavailable.left()
         }
-        mutableState.transitionPlaying(target = target, durationMillis = durationMillis)
+        mutableState.value = MediaSessionState.Playing(target = target, elapsedMillis = 0L, durationMillis = durationMillis)
         // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
         // after publishing either sees the close or lets close stop this playback.
         if (closed.value) {
@@ -206,18 +196,15 @@ class RecordingMediaSessionService(
         if (mutableState.value !is MediaSessionState.Playing) return
         tickerJob.cancel()
         audioPlayer.stop()
-        mutableState.transitionIdle()
+        mutableState.value = MediaSessionState.Idle
     }
 
     private fun clearPendingPlayback() {
-        mutableState.ifRecording { recording ->
-            mutableState.transitionRecording(
-                elapsedMillis = recording.elapsedMillis,
-                transcription = recording.transcription,
-                holdToRecord = recording.holdToRecord,
-            )
-        }
+        recordingOrNull()?.let { mutableState.value = it.copy(pendingPlayback = null) }
     }
+
+    private fun recordingOrNull(): MediaSessionState.Recording? =
+        mutableState.value as? MediaSessionState.Recording
 
     private fun beginRecording(holdToRecord: Boolean, isStartStillWanted: () -> Boolean) {
         if (closed.value || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
@@ -248,7 +235,11 @@ class RecordingMediaSessionService(
             temporaryPath = temporaryPath,
             startedAtMillis = epochClock.nowEpochMillis(),
         )
-        mutableState.transitionRecording(holdToRecord = holdToRecord)
+        mutableState.value = MediaSessionState.Recording(
+            elapsedMillis = 0L,
+            transcription = "",
+            holdToRecord = holdToRecord,
+        )
         startTicker()
     }
 
@@ -260,7 +251,7 @@ class RecordingMediaSessionService(
         val recording = activeRecording ?: return null
         activeRecording = null
         tickerJob.cancel()
-        mutableState.transitionIdle()
+        mutableState.value = MediaSessionState.Idle
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
         // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
         // finished file whose memory is still being written.
