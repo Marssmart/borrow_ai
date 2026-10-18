@@ -35,6 +35,8 @@ import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
 import org.deer.borrowai.data.service.MutableJob
+import org.deer.borrowai.data.service.summarization.SummarizationService
+import org.deer.borrowai.data.service.summarization.UnavailableSummarizationService
 
 /**
  * Records microphone audio under [recordingsRoot] and saves a memory when recording stops.
@@ -59,6 +61,7 @@ class RecordingMediaSessionService(
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val idGenerator: () -> String = { Uuid.random().toString() },
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
+    private val summarizationService: SummarizationService = UnavailableSummarizationService,
 ) : MediaSessionService {
     private val mutableState = MutableMediaSessionState()
     private val mutableIdleTranscription = MutableStateFlow("")
@@ -267,13 +270,15 @@ class RecordingMediaSessionService(
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
         // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
         // finished file whose memory is still being written.
+        // Transcription is not produced yet, so this is blank until the speech-to-text engine is wired in.
+        val transcription = ""
         val save = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 memoryService.create(
                     draft = MemoryDraft(
                         title = "",
-                        summary = "",
-                        transcription = "",
+                        summary = summaryFor(transcription),
+                        transcription = transcription,
                         recordingPath = recording.relativePath,
                     ),
                     id = recording.recordingId,
@@ -301,7 +306,19 @@ class RecordingMediaSessionService(
             return null
         }
         save.start()
-        return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
+        return RecordingResult(elapsedMillis = elapsedMillis, transcription = transcription)
+    }
+
+    /**
+     * A summary is optional metadata. A blank transcription or a failed summarizer leaves the summary blank so
+     * the recording is still saved.
+     */
+    private suspend fun summaryFor(transcription: String): String {
+        if (transcription.isBlank()) return ""
+        return summarizationService.summarize(transcription).fold(
+            ifLeft = { "" },
+            ifRight = { it },
+        )
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
