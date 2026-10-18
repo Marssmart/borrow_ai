@@ -14,6 +14,7 @@ import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
+import org.deer.borrowai.data.service.speech.createBatchTranscriberIfAvailable
 import org.deer.borrowai.data.service.speech.createLiveTranscriberIfAvailable
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
@@ -28,9 +29,13 @@ internal class AppServicesViewModel(
     private val microphonePermission: MicrophonePermission,
     private val createServices: suspend () -> AppServices = {
         // Model file checks can hash large files, so keep them off the main thread.
-        val liveTranscriber = withContext(Dispatchers.IO) {
+        val (liveTranscriber, batchTranscriber) = withContext(Dispatchers.IO) {
+            val modelDirectory = modelDirectoryUnder(recordingsRoot.toString())
             createLiveTranscriberIfAvailable(
-                modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
+                modelDirectory = modelDirectory,
+                totalRamBytes = modelDevice.totalRamBytes,
+            ) to createBatchTranscriberIfAvailable(
+                modelDirectory = modelDirectory,
                 totalRamBytes = modelDevice.totalRamBytes,
             )
         }
@@ -42,6 +47,7 @@ internal class AppServicesViewModel(
             audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
             liveTranscriber = liveTranscriber,
+            batchTranscriber = batchTranscriber,
         )
     },
 ) : ViewModel() {

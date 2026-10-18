@@ -59,6 +59,7 @@ class RecordingMediaSessionService(
     private val idGenerator: () -> String = { Uuid.random().toString() },
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
     private val liveTranscriber: LiveTranscriber? = null,
+    private val batchTranscriber: BatchTranscriber? = null,
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
@@ -269,7 +270,7 @@ class RecordingMediaSessionService(
         // finished file whose memory is still being written.
         val save = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                memoryService.create(
+                val created = memoryService.create(
                     draft = MemoryDraft(
                         title = "",
                         summary = "",
@@ -277,11 +278,9 @@ class RecordingMediaSessionService(
                         recordingPath = recording.relativePath,
                     ),
                     id = recording.recordingId,
-                ).fold(
-                    // The audio stays on disk. RecordingReconciler pairs it with a memory on its next sweep.
-                    ifLeft = { },
-                    ifRight = { },
                 )
+                // The audio stays on disk when the memory could not be created. RecordingReconciler pairs it on its next sweep.
+                if (created.isRight()) transcribeIntoMemory(recording)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -302,6 +301,31 @@ class RecordingMediaSessionService(
         }
         save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
+    }
+
+    /**
+     * Transcribes the finished recording and stores the transcript on its memory. Best-effort: a missing transcriber,
+     * a failed transcription, or a blank result leaves the memory as it was saved.
+     */
+    private suspend fun transcribeIntoMemory(recording: ActiveRecording) {
+        val transcriber = batchTranscriber ?: return
+        val transcript = try {
+            transcriber.transcribe(recording.absolutePath)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            null
+        }?.takeIf { it.isNotBlank() } ?: return
+        val memory = memoryService.findById(recording.recordingId).fold({ null }, { it }) ?: return
+        memoryService.update(
+            id = recording.recordingId,
+            draft = MemoryDraft(
+                title = memory.title,
+                summary = memory.summary,
+                transcription = transcript,
+                recordingPath = memory.recordingPath,
+            ),
+        )
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
