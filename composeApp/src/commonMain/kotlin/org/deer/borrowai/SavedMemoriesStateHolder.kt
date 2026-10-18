@@ -26,14 +26,8 @@ internal data class SavedMemoriesUiState(
     val selectedMemoryId: String? = null,
     val detailSwipeEnabled: Boolean = false,
     val hasOpenedDetail: Boolean = false,
-    val playbackError: SavedMemoriesPlaybackError? = null,
+    val playbackError: PlaybackError? = null,
 )
-
-internal enum class SavedMemoriesPlaybackError {
-    MEMORY_NOT_FOUND,
-    REQUEST_REJECTED,
-    RECORDING_UNAVAILABLE,
-}
 
 internal class SavedMemoriesStateHolder(
     private val memoryService: MemoryService,
@@ -146,13 +140,7 @@ internal class SavedMemoriesStateHolder(
     }
 
     private fun setPlaybackError(error: PlaybackError) {
-        mutableUiState.update { it.copy(playbackError = error.toUiError()) }
-    }
-
-    private fun PlaybackError.toUiError(): SavedMemoriesPlaybackError = when (this) {
-        PlaybackError.MemoryNotFound -> SavedMemoriesPlaybackError.MEMORY_NOT_FOUND
-        PlaybackError.RecordingUnavailable -> SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE
-        PlaybackError.NoPendingConfirmation -> SavedMemoriesPlaybackError.REQUEST_REJECTED
+        mutableUiState.update { it.copy(playbackError = error) }
     }
 
     internal companion object {

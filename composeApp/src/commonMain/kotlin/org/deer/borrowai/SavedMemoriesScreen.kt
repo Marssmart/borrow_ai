@@ -59,6 +59,7 @@ import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
+import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.memory_audio_not_playing
@@ -208,13 +209,13 @@ internal fun SavedMemoriesScreen(
                 Text(
                     stringResource(
                         when (error) {
-                            SavedMemoriesPlaybackError.MEMORY_NOT_FOUND ->
+                            PlaybackError.MemoryNotFound ->
                                 Res.string.memory_playback_memory_missing_message
 
-                            SavedMemoriesPlaybackError.REQUEST_REJECTED ->
+                            PlaybackError.NoPendingConfirmation ->
                                 Res.string.memory_playback_request_failed_message
 
-                            SavedMemoriesPlaybackError.RECORDING_UNAVAILABLE ->
+                            PlaybackError.RecordingUnavailable ->
                                 Res.string.memory_playback_recording_unavailable_message
                         },
                     ),
