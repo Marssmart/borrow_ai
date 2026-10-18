@@ -7,9 +7,9 @@ import kotlin.test.assertEquals
 
 class UnavailableTranscriptionServiceTest {
     @Test
-    fun reportsEngineUnavailableInsteadOfEmptyText() = runTest {
+    fun returnsPlaceholderTranscript() = runTest {
         val result = UnavailableTranscriptionService.transcribe("recordings/a.m4a")
 
-        assertEquals(Either.Left(TranscriptionError.EngineUnavailable), result)
+        assertEquals(Either.Right("Transcription unavailable"), result)
     }
 }
