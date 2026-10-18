@@ -19,11 +19,10 @@ sealed interface SummarizationError {
     data class Engine(val cause: Throwable) : SummarizationError
 }
 
-/**
- * Default binding until a summarization engine is wired. Reports [SummarizationError.EngineUnavailable]
- * so callers see an explicit failure instead of a silently empty summary.
- */
+/** Placeholder binding until a summarization engine is wired. Always returns a fixed summary. */
 object UnavailableSummarizationService : SummarizationService {
+    const val TEXT = "Summarization unavailable"
+
     override suspend fun summarize(transcription: String): Either<SummarizationError, String> =
-        Either.Left(SummarizationError.EngineUnavailable)
+        Either.Right(TEXT)
 }

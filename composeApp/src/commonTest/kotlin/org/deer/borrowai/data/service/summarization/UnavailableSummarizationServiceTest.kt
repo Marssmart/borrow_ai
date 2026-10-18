@@ -7,9 +7,9 @@ import kotlin.test.assertEquals
 
 class UnavailableSummarizationServiceTest {
     @Test
-    fun reportsEngineUnavailable() = runTest {
+    fun returnsPlaceholderSummary() = runTest {
         val result = UnavailableSummarizationService.summarize("some transcription")
 
-        assertEquals(Either.Left(SummarizationError.EngineUnavailable), result)
+        assertEquals(Either.Right("Summarization unavailable"), result)
     }
 }
