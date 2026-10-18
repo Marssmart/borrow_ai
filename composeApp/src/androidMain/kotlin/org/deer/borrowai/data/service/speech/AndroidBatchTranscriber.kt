@@ -68,7 +68,7 @@ internal class LazyBatchTranscriber(
 }
 
 /**
- * Decodes a finished M4A recording to 16 kHz mono and transcribes it in 30-second windows with the batch Whisper
+ * Decodes a finished M4A recording to 16 kHz mono and transcribes it in 29-second windows with the batch Whisper
  * model. Whisper decodes one window at a time, so window boundaries can split words. Transcriptions run one at a time
  * so concurrent saves do not each load a native model.
  */
@@ -240,6 +240,7 @@ private class WindowBuffer {
     }
 
     private companion object {
-        const val WINDOW_SAMPLES = 16_000 * 30
+        // Whisper clamps input to about 29.5 seconds, so 29-second windows avoid dropping audio at each boundary.
+        const val WINDOW_SAMPLES = 16_000 * 29
     }
 }

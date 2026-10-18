@@ -1,7 +1,11 @@
 package org.deer.borrowai.data.service.recording
 
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class LinearResamplerTest {
     private fun resample(sourceRate: Int, targetRate: Int, input: List<Float>): List<Float> {
@@ -19,11 +23,28 @@ class LinearResamplerTest {
     }
 
     @Test
-    fun downsampleByTwoKeepsEverySecondSample() {
-        val input = listOf(0f, 1f, 2f, 3f, 4f, 5f)
+    fun downsampleKeepsDcLevel() {
+        val output = resample(32_000, 16_000, List(400) { 1f })
 
-        assertEquals(listOf(0f, 2f, 4f), resample(32_000, 16_000, input))
+        assertEquals(1f, output.last(), absoluteTolerance = 1e-3f)
     }
+
+    @Test
+    fun downsampleKeepsInBandTone() {
+        val output = resample(44_100, 16_000, tone(frequency = 1_000.0, sampleRate = 44_100, count = 44_100))
+
+        assertTrue(output.drop(1_000).maxOf { abs(it) } > 0.9f)
+    }
+
+    @Test
+    fun downsampleRejectsToneAboveOutputNyquist() {
+        val output = resample(44_100, 16_000, tone(frequency = 10_000.0, sampleRate = 44_100, count = 44_100))
+
+        assertTrue(output.drop(1_000).maxOf { abs(it) } < 0.1f)
+    }
+
+    private fun tone(frequency: Double, sampleRate: Int, count: Int): List<Float> =
+        List(count) { n -> sin(2.0 * PI * frequency * n / sampleRate).toFloat() }
 
     @Test
     fun upsampleByTwoInterpolatesMidpoints() {
