@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.18]
+
+- Added live transcription shown above the record button while recording on Android. It uses the Whisper tiny model, decodes a rolling window about once per second, and is cleared when recording stops.
+- Live transcription runs on a separate 16 kHz mono capture path. The saved recording format (M4A) is unchanged.
+- Live transcription is skipped when the Whisper tiny model is missing. Recording continues normally, and live transcription failures are logged and do not stop recording.
+- Updated Android and iOS versioning to 1.0.18 (build 19).
+
 ## [1.0.17]
 
 - The service layer now models failures and responses with Arrow `Either` (Left = failure, Right = success).
