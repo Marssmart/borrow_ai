@@ -80,27 +80,7 @@ internal class AndroidLiveTranscriber(
                 recognizer = createRecognizer()
                 record = createAudioRecord() ?: return
                 record.startRecording()
-                val window = LiveAudioWindow(WINDOW_SAMPLES)
-                val chunk = ShortArray(CHUNK_SAMPLES)
-                var samplesSinceDecode = 0
-                var lastText = ""
-                while (active) {
-                    val read = record.read(chunk, 0, chunk.size)
-                    if (read < 0) break
-                    if (read == 0) continue
-                    window.appendPcm16(chunk, read)
-                    samplesSinceDecode += read
-                    if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES || window.size < MIN_DECODE_SAMPLES) continue
-                    samplesSinceDecode = 0
-                    val text = decode(recognizer, window.snapshot())
-                    if (text.isNotBlank() && text != lastText) {
-                        lastText = text
-                        // Checked under the lock so stop() guarantees no callback after it returns.
-                        synchronized(lock) {
-                            if (active && session === this) onPartial(text)
-                        }
-                    }
-                }
+                captureAudio(record, recognizer, onPartial)
             } catch (t: Throwable) {
                 // Live text is best-effort; ending here leaves the recording running without a transcript.
                 Log.w(TAG, "Live transcription failed; recording continues without a live transcript", t)
@@ -108,6 +88,33 @@ internal class AndroidLiveTranscriber(
                 runCatching { record?.stop() }
                 runCatching { record?.release() }
                 runCatching { recognizer?.release() }
+            }
+        }
+
+        private fun captureAudio(record: AudioRecord, recognizer: OfflineRecognizer, onPartial: (String) -> Unit) {
+            val window = LiveAudioWindow(WINDOW_SAMPLES)
+            val chunk = ShortArray(CHUNK_SAMPLES)
+            var samplesSinceDecode = 0
+            var lastText = ""
+
+            while (active) {
+                val read = record.read(chunk, 0, chunk.size)
+                if (read < 0) break
+                if (read == 0) continue
+                window.appendPcm16(chunk, read)
+                samplesSinceDecode += read
+                if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES || window.size < MIN_DECODE_SAMPLES) continue
+
+                samplesSinceDecode = 0
+                decode(recognizer, window.snapshot())
+                    .takeIf { it.isNotBlank() && it != lastText }
+                    ?.let { text ->
+                        lastText = text
+                        // Checked under the lock so stop() guarantees no callback after it returns.
+                        synchronized(lock) {
+                            if (active && session === this) onPartial(text)
+                        }
+                    }
             }
         }
 
