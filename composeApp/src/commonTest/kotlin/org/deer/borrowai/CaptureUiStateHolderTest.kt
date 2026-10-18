@@ -80,7 +80,6 @@ class CaptureUiStateHolderTest {
     ) : MediaSessionService {
         private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
         override val state: StateFlow<MediaSessionState> = mutableState
-        override val idleTranscription = MutableStateFlow("")
         var startCount = 0
             private set
         var stopCount = 0
