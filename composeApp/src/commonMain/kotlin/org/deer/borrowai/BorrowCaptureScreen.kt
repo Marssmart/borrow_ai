@@ -25,16 +25,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +89,6 @@ import borrowai.composeapp.generated.resources.capture_tap_or_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_record_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_stop
 import org.jetbrains.compose.resources.stringResource
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun BorrowCaptureScreen(
@@ -98,76 +96,78 @@ internal fun BorrowCaptureScreen(
     modelSetupService: ModelSetupService,
     onDownloadOverMobileData: () -> Unit,
 ) {
-    val stateHolder = remember(mediaSessionService, modelSetupService) {
-        CaptureUiStateHolder(
-            mediaSessionService = mediaSessionService,
-        )
-    }
-    val uiState by stateHolder.uiState.state.collectAsState()
+    val mediaSessionState by mediaSessionService.state.collectAsState()
+    val captureState = mediaSessionState.toCaptureUiState()
+    val transcriptScrollState = rememberScrollState()
     val setupState by modelSetupService.state.collectAsState()
-    val canRecord = stateHolder.canRecord
+    val canRecord = mediaSessionService.recordingAvailable
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
-
-    LaunchedEffect(stateHolder) {
-        stateHolder.observeMediaSession()
-    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        val microphoneSize = maxWidth * CaptureUiStateHolder.MICROPHONE_WIDTH_FRACTION
+        val microphoneSize = maxWidth * CaptureScreenStyle.MICROPHONE_WIDTH_FRACTION
         Column(
             modifier = Modifier.fillMaxSize()
-                .padding(horizontal = CaptureUiStateHolder.CONTENT_HORIZONTAL_PADDING),
+                .padding(horizontal = CaptureScreenStyle.CONTENT_HORIZONTAL_PADDING),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth().weight(CaptureUiStateHolder.TRANSCRIPT_WEIGHT),
+                modifier = Modifier.fillMaxWidth().weight(CaptureScreenStyle.TRANSCRIPT_WEIGHT),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    uiState.transcript,
+                    captureState.transcript,
                     modifier = Modifier.fillMaxWidth()
                         .padding(
-                            horizontal = CaptureUiStateHolder.TRANSCRIPT_HORIZONTAL_PADDING,
-                            vertical = CaptureUiStateHolder.TRANSCRIPT_VERTICAL_PADDING,
+                            horizontal = CaptureScreenStyle.TRANSCRIPT_HORIZONTAL_PADDING,
+                            vertical = CaptureScreenStyle.TRANSCRIPT_VERTICAL_PADDING,
                         )
-                        .verticalScroll(stateHolder.transcriptScrollState),
+                        .verticalScroll(transcriptScrollState),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
-                    lineHeight = CaptureUiStateHolder.TRANSCRIPT_LINE_HEIGHT,
+                    lineHeight = CaptureScreenStyle.TRANSCRIPT_LINE_HEIGHT,
                 )
             }
 
             MicrophoneButton(
                 buttonSize = microphoneSize,
-                isRecording = uiState.isRecording,
-                isHoldRecording = uiState.isHoldRecording,
-                isEnabled = canRecord || uiState.isRecording,
-                elapsedSeconds = uiState.elapsedSeconds,
-                statusLabel = modelStatus.takeUnless { uiState.isRecording },
-                onToggleRecording = stateHolder::toggleRecording,
-                onStartHoldRecording = stateHolder::startHoldRecording,
-                onStopHoldRecording = stateHolder::stopHoldRecording,
+                isRecording = captureState.isRecording,
+                isHoldRecording = captureState.isHoldRecording,
+                isEnabled = canRecord || captureState.isRecording,
+                elapsedSeconds = captureState.elapsedSeconds,
+                statusLabel = modelStatus.takeUnless { captureState.isRecording },
+                onToggleRecording = {
+                    if (captureState.isRecording) {
+                        mediaSessionService.stopRecording()
+                    } else if (canRecord) {
+                        mediaSessionService.startRecording(holdToRecord = false)
+                    }
+                },
+                onStartHoldRecording = {
+                    if (canRecord) mediaSessionService.startRecording(holdToRecord = true)
+                },
+                // Also cancels a start that is still waiting on the microphone permission prompt.
+                onStopHoldRecording = { mediaSessionService.stopRecording() },
             )
 
             Column(
                 modifier = Modifier.fillMaxWidth()
-                    .weight(CaptureUiStateHolder.FOOTER_WEIGHT)
+                    .weight(CaptureScreenStyle.FOOTER_WEIGHT)
                     .padding(
-                        top = CaptureUiStateHolder.FOOTER_TOP_PADDING,
-                        bottom = CaptureUiStateHolder.FOOTER_BOTTOM_PADDING,
+                        top = CaptureScreenStyle.FOOTER_TOP_PADDING,
+                        bottom = CaptureScreenStyle.FOOTER_BOTTOM_PADDING,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
+                verticalArrangement = Arrangement.spacedBy(CaptureScreenStyle.FOOTER_ITEM_SPACING),
             ) {
-                if (canRecord || uiState.isRecording) {
+                if (canRecord || captureState.isRecording) {
                     Text(
-                        text = if (uiState.isRecording) {
-                            if (uiState.isHoldRecording) {
+                        text = if (captureState.isRecording) {
+                            if (captureState.isHoldRecording) {
                                 stringResource(Res.string.capture_release_to_stop)
                             } else {
                                 stringResource(Res.string.capture_tap_to_stop)
@@ -178,8 +178,8 @@ internal fun BorrowCaptureScreen(
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = CaptureUiStateHolder.STATUS_LETTER_SPACING,
-                        color = if (uiState.isRecording) MaterialTheme.colorScheme.error
+                        letterSpacing = CaptureScreenStyle.STATUS_LETTER_SPACING,
+                        color = if (captureState.isRecording) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -199,10 +199,10 @@ internal fun BorrowCaptureScreen(
                 Text(
                     stringResource(Res.string.capture_swipe_saved_memories),
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = CaptureUiStateHolder.MEMORY_HINT_FONT_SIZE,
-                    letterSpacing = CaptureUiStateHolder.MEMORY_HINT_LETTER_SPACING,
+                    fontSize = CaptureScreenStyle.MEMORY_HINT_FONT_SIZE,
+                    letterSpacing = CaptureScreenStyle.MEMORY_HINT_LETTER_SPACING,
                     color = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = CaptureUiStateHolder.MEMORY_HINT_ALPHA,
+                        alpha = CaptureScreenStyle.MEMORY_HINT_ALPHA,
                     ),
                 )
             }
@@ -237,14 +237,14 @@ private fun MicrophoneButton(
     val pulse by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = if (!isEnabled) 1f else if (isRecording) {
-            CaptureUiStateHolder.RECORDING_BUTTON_PULSE_SCALE
+            CaptureScreenStyle.RECORDING_BUTTON_PULSE_SCALE
         } else {
-            CaptureUiStateHolder.IDLE_BUTTON_PULSE_SCALE
+            CaptureScreenStyle.IDLE_BUTTON_PULSE_SCALE
         },
         animationSpec = infiniteRepeatable(
             animation = tween(
-                if (isRecording) CaptureUiStateHolder.RECORDING_BUTTON_PULSE_MILLIS
-                else CaptureUiStateHolder.IDLE_BUTTON_PULSE_MILLIS,
+                if (isRecording) CaptureScreenStyle.RECORDING_BUTTON_PULSE_MILLIS
+                else CaptureScreenStyle.IDLE_BUTTON_PULSE_MILLIS,
             ),
             repeatMode = RepeatMode.Reverse,
         ),
@@ -255,8 +255,8 @@ private fun MicrophoneButton(
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                if (isRecording) CaptureUiStateHolder.RECORDING_RING_PULSE_MILLIS
-                else CaptureUiStateHolder.IDLE_RING_PULSE_MILLIS,
+                if (isRecording) CaptureScreenStyle.RECORDING_RING_PULSE_MILLIS
+                else CaptureScreenStyle.IDLE_RING_PULSE_MILLIS,
             ),
             repeatMode = RepeatMode.Restart,
         ),
@@ -268,7 +268,7 @@ private fun MicrophoneButton(
             isRecording -> MaterialTheme.colorScheme.error
             else -> Color.White
         },
-        animationSpec = tween(CaptureUiStateHolder.COLOR_TRANSITION_MILLIS),
+        animationSpec = tween(CaptureScreenStyle.COLOR_TRANSITION_MILLIS),
         label = "mic-color",
     )
     val buttonContentColor = when {
@@ -278,7 +278,7 @@ private fun MicrophoneButton(
     }
     val pulseColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val buttonBorderColor = if (isRecording) {
-        MaterialTheme.colorScheme.error.copy(alpha = CaptureUiStateHolder.RECORDING_BORDER_ALPHA)
+        MaterialTheme.colorScheme.error.copy(alpha = CaptureScreenStyle.RECORDING_BORDER_ALPHA)
     } else if (!isEnabled) {
         MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
     } else {
@@ -287,36 +287,36 @@ private fun MicrophoneButton(
 
     Box(
         modifier = Modifier.size(
-            buttonSize * CaptureUiStateHolder.RECORDING_BUTTON_PULSE_SCALE +
-                CaptureUiStateHolder.BUTTON_EXTRA_SIZE,
+            buttonSize * CaptureScreenStyle.RECORDING_BUTTON_PULSE_SCALE +
+                CaptureScreenStyle.BUTTON_EXTRA_SIZE,
         ),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize().graphicsLayer { clip = false }) {
             val buttonRadius = buttonSize.toPx() * pulse / 2f -
-                CaptureUiStateHolder.BUTTON_RADIUS_INSET.toPx()
+                CaptureScreenStyle.BUTTON_RADIUS_INSET.toPx()
             drawCircle(
-                color = Color.White.copy(alpha = CaptureUiStateHolder.BUTTON_HALO_ALPHA),
-                radius = buttonRadius + CaptureUiStateHolder.BUTTON_HALO_EXTRA_RADIUS.toPx(),
-                style = Stroke(width = CaptureUiStateHolder.BUTTON_BORDER_WIDTH.toPx()),
+                color = Color.White.copy(alpha = CaptureScreenStyle.BUTTON_HALO_ALPHA),
+                radius = buttonRadius + CaptureScreenStyle.BUTTON_HALO_EXTRA_RADIUS.toPx(),
+                style = Stroke(width = CaptureScreenStyle.BUTTON_BORDER_WIDTH.toPx()),
             )
             if (isEnabled) {
                 drawCircle(
                     color = pulseColor.copy(
                         alpha = (
-                            if (isRecording) CaptureUiStateHolder.RECORDING_RING_ALPHA
-                            else CaptureUiStateHolder.IDLE_RING_ALPHA
+                            if (isRecording) CaptureScreenStyle.RECORDING_RING_ALPHA
+                            else CaptureScreenStyle.IDLE_RING_ALPHA
                         ) * (1f - pulseWave),
                     ),
-                    radius = buttonRadius + CaptureUiStateHolder.RING_INITIAL_RADIUS.toPx() +
-                        CaptureUiStateHolder.RING_WAVE_EXTENT.toPx() * pulseWave,
-                    style = Stroke(width = CaptureUiStateHolder.RING_STROKE_WIDTH.toPx()),
+                    radius = buttonRadius + CaptureScreenStyle.RING_INITIAL_RADIUS.toPx() +
+                        CaptureScreenStyle.RING_WAVE_EXTENT.toPx() * pulseWave,
+                    style = Stroke(width = CaptureScreenStyle.RING_STROKE_WIDTH.toPx()),
                 )
             }
         }
         Surface(
             modifier = Modifier.size(buttonSize * pulse)
-                .padding(CaptureUiStateHolder.BUTTON_CONTENT_INSET)
+                .padding(CaptureScreenStyle.BUTTON_CONTENT_INSET)
                 .semantics {
                     role = Role.Button
                     contentDescription = microphoneDescription
@@ -353,22 +353,22 @@ private fun MicrophoneButton(
                 shape = CircleShape,
                 color = buttonColor,
                 border = BorderStroke(
-                    width = CaptureUiStateHolder.BUTTON_BORDER_WIDTH,
+                    width = CaptureScreenStyle.BUTTON_BORDER_WIDTH,
                     color = buttonBorderColor,
                 ),
-                shadowElevation = CaptureUiStateHolder.BUTTON_SHADOW_ELEVATION,
+                shadowElevation = CaptureScreenStyle.BUTTON_SHADOW_ELEVATION,
         ) {
             Column(
                 modifier = Modifier.fillMaxSize()
-                    .padding(CaptureUiStateHolder.BUTTON_CONTENT_PADDING),
+                    .padding(CaptureScreenStyle.BUTTON_CONTENT_PADDING),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
                 MicrophoneGlyph(
-                    modifier = Modifier.size(CaptureUiStateHolder.BUTTON_GLYPH_SIZE),
+                    modifier = Modifier.size(CaptureScreenStyle.BUTTON_GLYPH_SIZE),
                     color = buttonContentColor,
                 )
-                Spacer(Modifier.height(CaptureUiStateHolder.BUTTON_GLYPH_SPACING))
+                Spacer(Modifier.height(CaptureScreenStyle.BUTTON_GLYPH_SPACING))
                 Text(
                     text = statusLabel ?: stringResource(
                         if (isRecording) Res.string.capture_recording_label else Res.string.capture_tap_or_hold,
@@ -377,12 +377,12 @@ private fun MicrophoneButton(
                     style = if (isEnabled) MaterialTheme.typography.labelLarge
                     else MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = CaptureUiStateHolder.BUTTON_CONTENT_FONT_SPACING,
+                    letterSpacing = CaptureScreenStyle.BUTTON_CONTENT_FONT_SPACING,
                     textAlign = TextAlign.Center,
                     maxLines = if (isEnabled) 1 else 3,
                 )
                 if (isRecording) {
-                    Spacer(Modifier.height(CaptureUiStateHolder.RECORDING_DURATION_SPACING))
+                    Spacer(Modifier.height(CaptureScreenStyle.RECORDING_DURATION_SPACING))
                     val durationParts = formatDurationParts(elapsedSeconds)
                     Text(
                         stringResource(
@@ -390,7 +390,7 @@ private fun MicrophoneButton(
                             durationParts.first,
                             durationParts.second,
                         ),
-                        color = buttonContentColor.copy(alpha = CaptureUiStateHolder.RECORDING_TEXT_ALPHA),
+                        color = buttonContentColor.copy(alpha = CaptureScreenStyle.RECORDING_TEXT_ALPHA),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
@@ -403,11 +403,11 @@ private fun MicrophoneButton(
 @Composable
 private fun MicrophoneGlyph(modifier: Modifier = Modifier, color: Color) {
     Canvas(modifier) {
-        val stroke = size.minDimension * CaptureUiStateHolder.GLYPH_STROKE_WIDTH_FRACTION
-        val micWidth = size.width * CaptureUiStateHolder.GLYPH_MIC_WIDTH_FRACTION
-        val micHeight = size.height * CaptureUiStateHolder.GLYPH_MIC_HEIGHT_FRACTION
+        val stroke = size.minDimension * CaptureScreenStyle.GLYPH_STROKE_WIDTH_FRACTION
+        val micWidth = size.width * CaptureScreenStyle.GLYPH_MIC_WIDTH_FRACTION
+        val micHeight = size.height * CaptureScreenStyle.GLYPH_MIC_HEIGHT_FRACTION
         val micLeft = (size.width - micWidth) / 2f
-        val micTop = size.height * CaptureUiStateHolder.GLYPH_MIC_TOP_FRACTION
+        val micTop = size.height * CaptureScreenStyle.GLYPH_MIC_TOP_FRACTION
 
         drawRoundRect(
             color = color,
@@ -417,16 +417,16 @@ private fun MicrophoneGlyph(modifier: Modifier = Modifier, color: Color) {
         )
         drawArc(
             color = color,
-            startAngle = CaptureUiStateHolder.GLYPH_ARCH_START_ANGLE,
-            sweepAngle = CaptureUiStateHolder.GLYPH_ARCH_SWEEP_ANGLE,
+            startAngle = CaptureScreenStyle.GLYPH_ARCH_START_ANGLE,
+            sweepAngle = CaptureScreenStyle.GLYPH_ARCH_SWEEP_ANGLE,
             useCenter = false,
             topLeft = Offset(
-                size.width * CaptureUiStateHolder.GLYPH_ARCH_LEFT_FRACTION,
-                size.height * CaptureUiStateHolder.GLYPH_ARCH_TOP_FRACTION,
+                size.width * CaptureScreenStyle.GLYPH_ARCH_LEFT_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_ARCH_TOP_FRACTION,
             ),
             size = Size(
-                size.width * CaptureUiStateHolder.GLYPH_ARCH_WIDTH_FRACTION,
-                size.height * CaptureUiStateHolder.GLYPH_ARCH_HEIGHT_FRACTION,
+                size.width * CaptureScreenStyle.GLYPH_ARCH_WIDTH_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_ARCH_HEIGHT_FRACTION,
             ),
             style = Stroke(width = stroke, cap = StrokeCap.Round),
         )
@@ -434,11 +434,11 @@ private fun MicrophoneGlyph(modifier: Modifier = Modifier, color: Color) {
             color = color,
             start = Offset(
                 size.width / 2f,
-                size.height * CaptureUiStateHolder.GLYPH_STEM_TOP_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_STEM_TOP_FRACTION,
             ),
             end = Offset(
                 size.width / 2f,
-                size.height * CaptureUiStateHolder.GLYPH_STEM_BOTTOM_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_STEM_BOTTOM_FRACTION,
             ),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
@@ -446,12 +446,12 @@ private fun MicrophoneGlyph(modifier: Modifier = Modifier, color: Color) {
         drawLine(
             color = color,
             start = Offset(
-                size.width * CaptureUiStateHolder.GLYPH_BASE_LEFT_FRACTION,
-                size.height * CaptureUiStateHolder.GLYPH_BASE_Y_FRACTION,
+                size.width * CaptureScreenStyle.GLYPH_BASE_LEFT_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_BASE_Y_FRACTION,
             ),
             end = Offset(
-                size.width * CaptureUiStateHolder.GLYPH_BASE_RIGHT_FRACTION,
-                size.height * CaptureUiStateHolder.GLYPH_BASE_Y_FRACTION,
+                size.width * CaptureScreenStyle.GLYPH_BASE_RIGHT_FRACTION,
+                size.height * CaptureScreenStyle.GLYPH_BASE_Y_FRACTION,
             ),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
