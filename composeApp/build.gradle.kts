@@ -6,6 +6,28 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+val sherpaOnnxVersion = "1.13.8"
+val sherpaOnnxAar = layout.projectDirectory.file("libs/sherpa-onnx-$sherpaOnnxVersion.aar")
+
+// The AAR is a 50 MB binary, so it is fetched from the pinned upstream release instead of committed.
+val downloadSherpaOnnxAar by tasks.registering {
+    outputs.file(sherpaOnnxAar)
+    doLast {
+        val target = sherpaOnnxAar.asFile
+        if (!target.exists()) {
+            target.parentFile.mkdirs()
+            val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/sherpa-onnx-$sherpaOnnxVersion.aar"
+            uri(url).toURL().openStream().use { input ->
+                target.outputStream().use { input.copyTo(it) }
+            }
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith("preBuild") }.configureEach {
+    dependsOn(downloadSherpaOnnxAar)
+}
+
 kotlin {
     androidTarget()
 
@@ -54,6 +76,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
+            implementation(files(sherpaOnnxAar))
         }
 
         // Kotbase needs the native Couchbase Lite library, so its CRUD tests run on a device.

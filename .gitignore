@@ -9,3 +9,5 @@ DerivedData/
 Pods/
 xcuserdata/
 *.xcuserstate
+# Downloaded by the downloadSherpaOnnxAar Gradle task
+composeApp/libs/
