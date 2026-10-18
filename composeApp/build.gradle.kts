@@ -107,4 +107,9 @@ android {
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    testOptions {
+        // Unit tests run on the JVM; android.util.Log is a no-op stub instead of throwing.
+        unitTests.isReturnDefaultValues = true
+    }
 }

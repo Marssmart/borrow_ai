@@ -10,6 +10,18 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - M4A recordings are decoded to 16 kHz mono before batch transcription. Long recordings are processed in 30 s windows.
 - Updated Android and iOS versioning to 1.0.20 (build 21).
 
+## [1.0.19]
+
+- Fixed model downloads failing on flaky mobile networks. Android model downloads now allow longer socket stalls (60 s) and connect timeouts (30 s) instead of OkHttp's short default read timeout.
+- Model download network failures now include the underlying exception type and message in the logged error, so future failures can be diagnosed.
+
+## [1.0.18]
+
+- Added live transcription shown above the record button while recording on Android. It uses the Whisper tiny model, decodes a rolling window about once per second, and is cleared when recording stops.
+- Live transcription runs on a separate 16 kHz mono capture path. The saved recording format (M4A) is unchanged.
+- Live transcription is skipped when the Whisper tiny model is missing. Recording continues normally, and live transcription failures are logged and do not stop recording.
+- Updated Android and iOS versioning to 1.0.18 (build 19).
+
 ## [1.0.17]
 
 - The service layer now models failures and responses with Arrow `Either` (Left = failure, Right = success).

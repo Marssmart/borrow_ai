@@ -146,9 +146,16 @@ class KtorModelDownloader(
         } catch (error: ModelStorageException) {
             throw error
         } catch (error: IOException) {
-            throw ModelDownloadException("Model download was interrupted by a network I/O error.", retryable = true, cause = error)
+            throw ModelDownloadException(
+                "Model download was interrupted by a network I/O error (${describeIoFailure(error)}).",
+                retryable = true,
+                cause = error,
+            )
         }
     }
+
+    private fun describeIoFailure(error: Throwable): String =
+        listOfNotNull(error::class.simpleName, error.message?.takeIf { it.isNotBlank() }).joinToString(": ")
 
     private suspend fun downloadFromStart(
         url: String,
@@ -216,7 +223,11 @@ class KtorModelDownloader(
                 val read = try {
                     channel.readAvailable(buffer)
                 } catch (error: IOException) {
-                    throw ModelDownloadException("Model download was interrupted while reading the network response.", retryable = true, cause = error)
+                    throw ModelDownloadException(
+                        "Model download was interrupted while reading the network response (${describeIoFailure(error)}).",
+                        retryable = true,
+                        cause = error,
+                    )
                 }
                 if (read < 0) break
                 if (read.toLong() > expectedSizeBytes - total) {

@@ -29,6 +29,8 @@ data class ModelSetupState(
     val bytesDownloaded: Long = 0L,
     val bytesTotal: Long = 0L,
     val failureReason: ModelSetupFailureReason? = null,
+    /** Developer-facing detail of the failure, for logs and diagnostics. Not shown to users. */
+    val failureDetail: String? = null,
 ) {
     val isReady: Boolean
         get() = phase == ModelSetupPhase.READY
