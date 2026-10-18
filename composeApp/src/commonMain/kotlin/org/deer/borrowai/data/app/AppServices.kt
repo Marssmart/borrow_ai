@@ -8,7 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotbase.Database
-import kotlinx.coroutines.flow.MutableStateFlow
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
@@ -38,14 +37,15 @@ class AppServices private constructor(
     private val backgroundJobs: List<Job> = emptyList(),
     private val onClose: () -> Unit = {},
 ) {
-    private val closed = MutableStateFlow(false)
+    // complete() returns true only for the first caller, so this latch makes close() run once.
+    private val closeRequested = Job()
 
     /**
      * Closes the media session, then cancels the graph and runs [onClose] once any memory save started
      * before close has finished. Saves are joined first so they are not cut off by the cancellation.
      */
     fun close() {
-        if (!closed.compareAndSet(expect = false, update = true)) return
+        if (!closeRequested.complete()) return
 
         try {
             mediaSession.close()

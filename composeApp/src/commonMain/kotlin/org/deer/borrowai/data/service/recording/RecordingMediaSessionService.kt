@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.recording
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import kotlin.concurrent.Volatile
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
@@ -60,7 +61,9 @@ class RecordingMediaSessionService(
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
-    private val closed = MutableStateFlow(false)
+    // Read from the playback and recording paths while close() runs on another thread, so it must be volatile.
+    @Volatile
+    private var closed = false
     private val pendingStartJob = MutableJob(scope)
     private val tickerJob = MutableJob(scope)
     private val pendingSaves = MutableStateFlow<List<Job>>(emptyList())
@@ -135,8 +138,8 @@ class RecordingMediaSessionService(
     }
 
     override fun close() {
-        if (closed.value) return
-        closed.value = true
+        if (closed) return
+        closed = true
         pendingStartJob.cancel()
         finishRecording()
         stopActivePlayback()
@@ -165,7 +168,7 @@ class RecordingMediaSessionService(
         mutableState.value = MediaSessionState.Playing(target = target, elapsedMillis = 0L, durationMillis = durationMillis)
         // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
         // after publishing either sees the close or lets close stop this playback.
-        if (closed.value) {
+        if (closed) {
             stopActivePlayback()
             return PlaybackError.RecordingUnavailable.left()
         }
@@ -207,7 +210,7 @@ class RecordingMediaSessionService(
         mutableState.value as? MediaSessionState.Recording
 
     private fun beginRecording(holdToRecord: Boolean, isStartStillWanted: () -> Boolean) {
-        if (closed.value || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
+        if (closed || mutableState.value !is MediaSessionState.Idle || activeRecording != null) return
         val recordingId = idGenerator()
         val relativePath = recordingRelativePath(recordingId)
         val absolutePath = recordingsRoot / relativePath
@@ -223,7 +226,7 @@ class RecordingMediaSessionService(
             return
         }
         // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
-        if (closed.value || !isStartStillWanted()) {
+        if (closed || !isStartStillWanted()) {
             runCatching { recorder.stop() }
             fileSystem.delete(temporaryPath, mustExist = false)
             return
@@ -316,7 +319,7 @@ class RecordingMediaSessionService(
     }
 
     private fun ensureOpen() {
-        check(!closed.value) { "Media session service has been closed." }
+        check(!closed) { "Media session service has been closed." }
     }
 
     private class ActiveRecording(
