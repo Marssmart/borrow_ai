@@ -3,12 +3,10 @@ package org.deer.borrowai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
@@ -27,13 +25,10 @@ internal class AppServicesViewModel(
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
     private val createServices: suspend () -> AppServices = {
-        // Model file checks can hash large files, so keep them off the main thread.
-        val liveTranscriber = withContext(Dispatchers.IO) {
-            createLiveTranscriberIfAvailable(
-                modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
-                totalRamBytes = modelDevice.totalRamBytes,
-            )
-        }
+        val liveTranscriber = createLiveTranscriberIfAvailable(
+            modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
+            totalRamBytes = modelDevice.totalRamBytes,
+        )
         AppServices.create(
             modelDevice = modelDevice,
             epochClock = epochClock,
