@@ -53,6 +53,22 @@ class ModelFileStore(
         fileSystem.createDirectories(modelDirectory, mustCreate = false)
     }
 
+    /** Removes files left behind by a previous catalog version, along with their partial and verification sidecars. */
+    fun removeObsoleteFiles(fileNames: List<String>) {
+        fileNames.forEach { name ->
+            listOf(
+                "",
+                PARTIAL_SUFFIX,
+                PARTIAL_IDENTITY_SUFFIX,
+                PARTIAL_IDENTITY_TEMP_SUFFIX,
+                VERIFIED_SUFFIX,
+                VERIFIED_TEMP_SUFFIX,
+            ).forEach { suffix ->
+                fileSystem.delete(modelDirectory / (name + suffix), mustExist = false)
+            }
+        }
+    }
+
     fun discardPartial(spec: ModelSpec) {
         fileSystem.delete(partialPath(spec), mustExist = false)
         fileSystem.delete(partialIdentityPath(spec), mustExist = false)
