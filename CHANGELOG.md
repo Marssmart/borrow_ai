@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.19]
+
+- Fixed model downloads failing on flaky mobile networks. Android model downloads now allow longer socket stalls (60 s) and connect timeouts (30 s) instead of OkHttp's short default read timeout.
+- Model download network failures now include the underlying exception type and message in the logged error, so future failures can be diagnosed.
+
 ## [1.0.18]
 
 - Added live transcription shown above the record button while recording on Android. It uses the Whisper tiny model, decodes a rolling window about once per second, and is cleared when recording stops.
