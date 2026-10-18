@@ -166,6 +166,20 @@ class KtorModelDownloaderTest {
     }
 
     @Test
+    fun transportFailureIsRetryableAndKeepsTheCauseInTheMessage() = runTest {
+        val fileSystem = FakeFileSystem()
+        fileSystem.createDirectories(destination.parent!!)
+        val client = HttpClient(MockEngine { throw kotlinx.io.IOException("connection reset by peer") })
+
+        val error = KtorModelDownloader(client, fileSystem).downloadError(url, destination, body.size.toLong())
+
+        assertIs<ModelDownloadError.Network>(error)
+        assertTrue(error.message.contains("IOException"), error.message)
+        assertTrue(error.message.contains("connection reset by peer"), error.message)
+        client.close()
+    }
+
+    @Test
     fun resumesFromTheExistingPrefixWithARangeRequestAndVerifiesTheWholeFile() = runTest {
         val fileSystem = FakeFileSystem()
         val prefixLength = 80_000

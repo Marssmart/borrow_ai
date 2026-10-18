@@ -132,6 +132,7 @@ class RecordingMediaSessionServiceTest {
         epochClock: EpochClock = EpochClock { 1_800_000_000_000L },
         monotonicMillis: () -> Long = { 0L },
         liveTranscriber: LiveTranscriber? = null,
+        batchTranscriber: BatchTranscriber? = null,
     ) = RecordingMediaSessionService(
         memoryService = memories,
         recorder = recorder,
@@ -144,7 +145,87 @@ class RecordingMediaSessionServiceTest {
         idGenerator = { "rec-1" },
         monotonicMillis = monotonicMillis,
         liveTranscriber = liveTranscriber,
+        batchTranscriber = batchTranscriber,
     )
+
+    private class FakeBatchTranscriber(
+        private val result: () -> String? = { "full transcript" },
+    ) : BatchTranscriber {
+        val transcribedPaths = mutableListOf<Path>()
+
+        override suspend fun transcribe(recordingPath: Path): String? {
+            transcribedPaths += recordingPath
+            return result()
+        }
+    }
+
+    @Test
+    fun finishedRecordingStoresBatchTranscriptOnMemory() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val batch = FakeBatchTranscriber()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            batchTranscriber = batch,
+        )
+
+        service.startRecording()
+        runCurrent()
+        assertNotNull(service.stopRecording())
+        service.awaitPendingWork()
+
+        assertEquals(listOf(recordingFile), batch.transcribedPaths)
+        assertEquals("full transcript", memories.getState().value.single().transcription)
+    }
+
+    @Test
+    fun batchTranscriptionFailureKeepsRecordingWithEmptyTranscript() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            batchTranscriber = FakeBatchTranscriber { throw IllegalStateException("decode failed") },
+        )
+
+        service.startRecording()
+        runCurrent()
+        assertNotNull(service.stopRecording())
+        service.awaitPendingWork()
+
+        val saved = memories.getState().value.single()
+        assertEquals("", saved.transcription)
+        assertEquals("recordings/rec-1.m4a", saved.recordingPath)
+        assertTrue(fs.exists(recordingFile))
+    }
+
+    @Test
+    fun blankBatchTranscriptIsNotStored() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            batchTranscriber = FakeBatchTranscriber { "   " },
+        )
+
+        service.startRecording()
+        runCurrent()
+        assertNotNull(service.stopRecording())
+        service.awaitPendingWork()
+
+        assertEquals("", memories.getState().value.single().transcription)
+    }
 
     private class FakeLiveTranscriber : LiveTranscriber {
         var starts = 0

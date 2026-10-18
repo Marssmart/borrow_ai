@@ -12,7 +12,8 @@ import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
-import org.deer.borrowai.data.service.speech.createLiveTranscriberIfAvailable
+import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
+import org.deer.borrowai.data.service.speech.createLiveTranscriber
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
@@ -25,7 +26,8 @@ internal class AppServicesViewModel(
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
     private val createServices: suspend () -> AppServices = {
-        val liveTranscriber = createLiveTranscriberIfAvailable(
+        // The transcriber resolves model files when recording starts, so creation stays free of file IO.
+        val liveTranscriber = createLiveTranscriber(
             modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
             totalRamBytes = modelDevice.totalRamBytes,
         )
@@ -37,6 +39,7 @@ internal class AppServicesViewModel(
             audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
             liveTranscriber = liveTranscriber,
+            batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
         )
     },
 ) : ViewModel() {

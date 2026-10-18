@@ -103,8 +103,13 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 19
+        versionCode = 22
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    testOptions {
+        // Unit tests run on the JVM; android.util.Log is a no-op stub instead of throwing.
+        unitTests.isReturnDefaultValues = true
     }
 }
