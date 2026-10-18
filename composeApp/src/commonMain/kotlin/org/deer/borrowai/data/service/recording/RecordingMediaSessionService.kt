@@ -58,6 +58,7 @@ class RecordingMediaSessionService(
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val idGenerator: () -> String = { Uuid.random().toString() },
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
+    private val liveTranscriber: LiveTranscriber? = null,
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
@@ -241,6 +242,16 @@ class RecordingMediaSessionService(
             holdToRecord = holdToRecord,
         )
         startTicker()
+        // Live transcription is best-effort. A failure here leaves the recording running without a transcript.
+        liveTranscriber?.let { transcriber ->
+            runCatching {
+                transcriber.start { text ->
+                    mutableState.update { current ->
+                        if (current is MediaSessionState.Recording) current.copy(transcription = text) else current
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -251,6 +262,7 @@ class RecordingMediaSessionService(
         val recording = activeRecording ?: return null
         activeRecording = null
         tickerJob.cancel()
+        liveTranscriber?.let { transcriber -> runCatching { transcriber.stop() } }
         mutableState.value = MediaSessionState.Idle
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
         // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a

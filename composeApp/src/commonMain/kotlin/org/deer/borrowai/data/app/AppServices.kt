@@ -25,6 +25,7 @@ import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.DeletedMemoryPurger
+import org.deer.borrowai.data.service.recording.LiveTranscriber
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
@@ -85,6 +86,7 @@ class AppServices private constructor(
             microphonePermission: MicrophonePermission,
             modelDevice: ModelDevice,
             databaseName: String = DATABASE_NAME,
+            liveTranscriber: LiveTranscriber? = null,
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -93,6 +95,7 @@ class AppServices private constructor(
             microphonePermission = microphonePermission,
             modelDevice = modelDevice,
             epochClock = epochClock,
+            liveTranscriber = liveTranscriber,
         )
 
         /**
@@ -109,6 +112,7 @@ class AppServices private constructor(
             epochClock: EpochClock,
             dispatcher: CoroutineDispatcher = Dispatchers.Default,
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+            liveTranscriber: LiveTranscriber? = null,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -136,6 +140,7 @@ class AppServices private constructor(
                     recordingsRoot = recordingsRoot,
                     scope = mediaScope,
                     epochClock = epochClock,
+                    liveTranscriber = liveTranscriber,
                 )
                 val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
