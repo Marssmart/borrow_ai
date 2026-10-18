@@ -104,7 +104,7 @@ internal fun BorrowCaptureScreen(
         )
     }
     val uiState by stateHolder.uiState.state.collectAsState()
-    val setupState by modelSetupService.state.state.collectAsState()
+    val setupState by modelSetupService.state.collectAsState()
     val canRecord = stateHolder.canRecord
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
