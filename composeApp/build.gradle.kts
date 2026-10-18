@@ -16,10 +16,13 @@ val downloadSherpaOnnxAar by tasks.registering {
         val target = sherpaOnnxAar.asFile
         if (!target.exists()) {
             target.parentFile.mkdirs()
+            val partial = target.resolveSibling("${target.name}.part")
             val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/sherpa-onnx-$sherpaOnnxVersion.aar"
+            partial.delete()
             uri(url).toURL().openStream().use { input ->
-                target.outputStream().use { input.copyTo(it) }
+                partial.outputStream().use { input.copyTo(it) }
             }
+            check(partial.renameTo(target)) { "Failed to move $partial to $target" }
         }
     }
 }
