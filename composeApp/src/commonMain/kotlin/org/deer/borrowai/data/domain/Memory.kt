@@ -11,8 +11,8 @@ package org.deer.borrowai.data.domain
  * A [deleted] memory is hidden from the UI. Its audio file and record are removed later by a purge
  * job, so the reconciler does not mistake the leftover recording for an unsaved one.
  *
- * [summarized] is true only when a non-blank summary is stored, and it always equals
- * `summaryStatus == SUMMARIZED`. [summaryAttempts] counts finished summarization attempts. Once it
+ * [summaryStatus] is the single source of truth for summary state. A non-blank summary is stored as
+ * [SummaryStatus.SUMMARIZED]. [summaryAttempts] counts finished summarization attempts. Once it
  * reaches [MAX_SUMMARY_ATTEMPTS] the memory is [SummaryStatus.GAVE_UP] and the recovery job stops.
  *
  * [transcriptionDone] is true once the transcriber has finished, even when the text is blank. It tells
@@ -27,7 +27,6 @@ data class Memory(
     val transcription: String,
     val recordingPath: String? = null,
     val deleted: Boolean = false,
-    val summarized: Boolean = false,
     val summaryStatus: SummaryStatus = SummaryStatus.PENDING,
     val summaryAttempts: Int = 0,
     val transcriptionDone: Boolean = false,
@@ -36,9 +35,6 @@ data class Memory(
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
-        require(summarized == (summaryStatus == SummaryStatus.SUMMARIZED)) {
-            "summarized must match summaryStatus SUMMARIZED."
-        }
     }
 
     /** True when the recovery job may still try to summarize this memory. */
@@ -78,7 +74,6 @@ fun Memory.withTranscriptionFailure(error: String): Memory = copy(lastTranscript
 
 fun Memory.withSummary(summary: String): Memory = copy(
     summary = summary,
-    summarized = true,
     summaryStatus = SummaryStatus.SUMMARIZED,
 )
 
@@ -107,7 +102,6 @@ fun Memory.afterFinishedAttempt(error: String?, empty: Boolean): Memory {
 
 /** Summary state derived for a memory saved before summary tracking existed. */
 data class SummaryState(
-    val summarized: Boolean,
     val summaryStatus: SummaryStatus,
     val summaryAttempts: Int,
     val transcriptionDone: Boolean,
@@ -125,17 +119,17 @@ fun migrateLegacySummaryState(
     hasRecording: Boolean,
     legacyAttempts: Int,
 ): SummaryState = when {
-    summary.isNotBlank() -> SummaryState(true, SummaryStatus.SUMMARIZED, legacyAttempts, true)
+    summary.isNotBlank() -> SummaryState(SummaryStatus.SUMMARIZED, legacyAttempts, true)
     transcription.isNotBlank() -> pending(legacyAttempts, transcriptionDone = true)
     hasRecording -> pending(legacyAttempts, transcriptionDone = false)
-    else -> SummaryState(false, SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, true)
+    else -> SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, true)
 }
 
 private fun pending(attempts: Int, transcriptionDone: Boolean): SummaryState =
     if (attempts >= MAX_SUMMARY_ATTEMPTS) {
-        SummaryState(false, SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, transcriptionDone)
+        SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, transcriptionDone)
     } else {
-        SummaryState(false, SummaryStatus.PENDING, attempts, transcriptionDone)
+        SummaryState(SummaryStatus.PENDING, attempts, transcriptionDone)
     }
 
 data class MemoryDraft(

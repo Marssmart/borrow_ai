@@ -29,7 +29,7 @@ class MemorySummaryRecoveryJobTest {
         transcription: String = "hello there",
         recordingPath: String? = "$id.m4a",
         summary: String = "",
-        summarized: Boolean = false,
+        summaryStatus: SummaryStatus = if (summary.isNotBlank()) SummaryStatus.SUMMARIZED else SummaryStatus.PENDING,
         summaryAttempts: Int = 0,
         deleted: Boolean = false,
     ) = Memory(
@@ -40,8 +40,7 @@ class MemorySummaryRecoveryJobTest {
         transcription = transcription,
         recordingPath = recordingPath,
         deleted = deleted,
-        summarized = summarized,
-        summaryStatus = if (summarized) SummaryStatus.SUMMARIZED else SummaryStatus.PENDING,
+        summaryStatus = summaryStatus,
         summaryAttempts = summaryAttempts,
     )
 
@@ -74,7 +73,7 @@ class MemorySummaryRecoveryJobTest {
         assertEquals(1, stored)
         val updated = service.get("a")
         assertEquals("A short summary", updated.summary)
-        assertTrue(updated.summarized)
+        assertEquals(SummaryStatus.SUMMARIZED, updated.summaryStatus)
         assertEquals(0, updated.summaryAttempts)
     }
 
@@ -87,7 +86,7 @@ class MemorySummaryRecoveryJobTest {
         assertEquals(0, recovery.recover())
         assertEquals(1, service.get("a").summaryAttempts)
         assertEquals(SummaryStatus.EMPTY, service.get("a").summaryStatus)
-        assertFalse(service.get("a").summarized)
+        assertEquals(false, service.get("a").summaryStatus == SummaryStatus.SUMMARIZED)
 
         repeat(MAX_SUMMARY_ATTEMPTS) { recovery.recover() }
         assertEquals(MAX_SUMMARY_ATTEMPTS, service.get("a").summaryAttempts)
@@ -103,7 +102,7 @@ class MemorySummaryRecoveryJobTest {
 
         assertEquals(1, service.get("a").summaryAttempts)
         assertEquals(SummaryStatus.EMPTY, service.get("a").summaryStatus)
-        assertFalse(service.get("a").summarized)
+        assertEquals(false, service.get("a").summaryStatus == SummaryStatus.SUMMARIZED)
     }
 
     @Test
@@ -114,7 +113,7 @@ class MemorySummaryRecoveryJobTest {
         job(service, summarizer).recover()
 
         assertEquals(1, service.get("a").summaryAttempts)
-        assertFalse(service.get("a").summarized)
+        assertEquals(SummaryStatus.PENDING, service.get("a").summaryStatus)
     }
 
     @Test
@@ -126,7 +125,7 @@ class MemorySummaryRecoveryJobTest {
 
         val unchanged = service.get("a")
         assertEquals(0, unchanged.summaryAttempts)
-        assertFalse(unchanged.summarized)
+        assertEquals(SummaryStatus.PENDING, unchanged.summaryStatus)
     }
 
     @Test
@@ -157,7 +156,7 @@ class MemorySummaryRecoveryJobTest {
     fun ineligibleMemoriesAreSkipped() = runTest {
         val service = service(
             memory("deleted", deleted = true),
-            memory("summarized", summary = "done", summarized = true),
+            memory("summarized", summary = "done", summaryStatus = SummaryStatus.SUMMARIZED),
             memory("exhausted", summaryAttempts = MAX_SUMMARY_ATTEMPTS),
         )
         val summarizer = ScriptedSummarizer { SummaryResult.Summary("new") }
@@ -200,7 +199,7 @@ class MemorySummaryRecoveryJobTest {
         job(service, summarizer, timeoutMillis = 1_000L).recover()
 
         assertEquals(1, service.get("a").summaryAttempts)
-        assertFalse(service.get("a").summarized)
+        assertEquals(SummaryStatus.PENDING, service.get("a").summaryStatus)
     }
 
     @Test

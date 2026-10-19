@@ -189,7 +189,6 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_TRANSCRIPTION),
             SelectResult.property(COLUMN_RECORDING_PATH),
             SelectResult.property(COLUMN_DELETED),
-            SelectResult.property(COLUMN_SUMMARIZED),
             SelectResult.property(COLUMN_SUMMARY_STATUS),
             SelectResult.property(COLUMN_SUMMARY_ATTEMPTS),
             SelectResult.property(COLUMN_TRANSCRIPTION_DONE),
@@ -226,7 +225,6 @@ class KotbaseMemoryService private constructor(
                 )
                 database.save(
                     document.toMutable()
-                        .setBoolean(COLUMN_SUMMARIZED, state.summarized)
                         .setString(COLUMN_SUMMARY_STATUS, state.summaryStatus.name)
                         .setInt(COLUMN_SUMMARY_ATTEMPTS, state.summaryAttempts)
                         .setBoolean(COLUMN_TRANSCRIPTION_DONE, state.transcriptionDone),
@@ -246,7 +244,6 @@ class KotbaseMemoryService private constructor(
                 transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
                 recordingPath = getString(COLUMN_RECORDING_PATH),
                 deleted = getBoolean(COLUMN_DELETED),
-                summarized = getBoolean(COLUMN_SUMMARIZED),
                 summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
                 summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
                 transcriptionDone = getBoolean(COLUMN_TRANSCRIPTION_DONE),
@@ -263,7 +260,6 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_TRANSCRIPTION, transcription)
         setString(COLUMN_RECORDING_PATH, recordingPath)
         setBoolean(COLUMN_DELETED, deleted)
-        setBoolean(COLUMN_SUMMARIZED, summarized)
         setString(COLUMN_SUMMARY_STATUS, summaryStatus.name)
         setInt(COLUMN_SUMMARY_ATTEMPTS, summaryAttempts)
         setBoolean(COLUMN_TRANSCRIPTION_DONE, transcriptionDone)
@@ -280,7 +276,6 @@ class KotbaseMemoryService private constructor(
             transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
             recordingPath = getString(COLUMN_RECORDING_PATH),
             deleted = getBoolean(COLUMN_DELETED),
-            summarized = getBoolean(COLUMN_SUMMARIZED),
             summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
             summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
             transcriptionDone = getBoolean(COLUMN_TRANSCRIPTION_DONE),
@@ -302,7 +297,6 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_TRANSCRIPTION = "transcription"
         private const val COLUMN_RECORDING_PATH = "recordingPath"
         private const val COLUMN_DELETED = "deleted"
-        private const val COLUMN_SUMMARIZED = "summarized"
         private const val COLUMN_SUMMARY_STATUS = "summaryStatus"
         private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
         private const val COLUMN_TRANSCRIPTION_DONE = "transcriptionDone"
