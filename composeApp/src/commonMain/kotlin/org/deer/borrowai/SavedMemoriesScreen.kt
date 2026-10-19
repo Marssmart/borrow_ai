@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,7 @@ import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_original
 import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_stop_summary
+import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_audio_playing
 import org.jetbrains.compose.resources.StringResource
@@ -288,8 +290,16 @@ private fun MemoryCard(
     onPlaySummary: () -> Unit,
     onPlayRecording: () -> Unit,
 ) {
+    val isPending = memory.transcription.isBlank()
     Card(
         modifier = Modifier.fillMaxWidth()
+            .then(
+                if (isPending) {
+                    Modifier.background(SavedMemoriesStateHolder.MEMORY_PENDING_CARD_BRUSH, SavedMemoriesStateHolder.MEMORY_CARD_SHAPE)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(
                 onClickLabel = stringResource(Res.string.memory_open_details),
                 onClick = onOpen,
@@ -297,13 +307,19 @@ private fun MemoryCard(
             .animateContentSize(tween(SavedMemoriesStateHolder.MEMORY_CONTENT_SIZE_ANIMATION_MILLIS)),
         shape = SavedMemoriesStateHolder.MEMORY_CARD_SHAPE,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(
-                alpha = SavedMemoriesStateHolder.MEMORY_CARD_SURFACE_ALPHA,
-            ),
+            containerColor = if (isPending) {
+                Color.Transparent
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = SavedMemoriesStateHolder.MEMORY_CARD_SURFACE_ALPHA)
+            },
         ),
         border = BorderStroke(
             SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_WIDTH,
-            Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_ALPHA),
+            if (isPending) {
+                SavedMemoriesStateHolder.MEMORY_PENDING_CARD_BORDER_COLOR
+            } else {
+                Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_PANEL_BORDER_ALPHA)
+            },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION),
     ) {
@@ -331,7 +347,17 @@ private fun MemoryCard(
                 }
             }
 
-            if (memory.summary.isNotBlank()) {
+            if (isPending) {
+                Text(
+                    stringResource(Res.string.memory_waiting_transcription),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = SavedMemoriesStateHolder.MEMORY_PENDING_TEXT_ALPHA,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+            if (memory.summary.isNotBlank() && !isPending) {
                 MemoryTextSection(
                     label = stringResource(Res.string.memory_summary),
                     text = memory.summary.preview(),
@@ -350,11 +376,16 @@ private fun MemoryCard(
             }
             AudioPlaybackButtons(
                 playingContent = playingContent,
-                hasTranscription = memory.transcription.isNotBlank(),
-                hasSummary = memory.summary.isNotBlank(),
+                hasTranscription = true,
+                hasSummary = !isPending && memory.summary.isNotBlank(),
                 onPlayRecording = onPlayRecording,
-                onPlayOriginal = onPlayOriginal,
+                onPlayOriginal = if (isPending) onPlayRecording else onPlayOriginal,
                 onPlaySummary = onPlaySummary,
+                originalPlaying = if (isPending) {
+                    playingContent == PlaybackContent.RECORDING
+                } else {
+                    playingContent == PlaybackContent.TRANSCRIPTION
+                },
             )
         }
     }
@@ -544,6 +575,7 @@ private fun AudioPlaybackButtons(
     onPlayRecording: () -> Unit,
     onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
+    originalPlaying: Boolean = playingContent == PlaybackContent.TRANSCRIPTION,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -557,7 +589,7 @@ private fun AudioPlaybackButtons(
         )
         if (hasTranscription) {
             PlaybackButton(
-                playing = playingContent == PlaybackContent.TRANSCRIPTION,
+                playing = originalPlaying,
                 playLabel = Res.string.memory_play_original,
                 stopLabel = Res.string.memory_stop_original,
                 onClick = onPlayOriginal,
