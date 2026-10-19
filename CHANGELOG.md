@@ -8,6 +8,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Added an on-device memory summarizer on Android, built on LiteRT-LM (Gemma model). Each memory gets one short summary, produced after transcription and retried by the recovery job.
 - Summaries are stored per memory. iOS keeps the no-op summarizer for now, so iOS memories get no summaries yet.
+- The download progress ring around the record button now also shows for the transcription and summary model downloads, not only the live voice download.
 - Updated Android and iOS versioning to 1.3.0 (build 27).
 
 ## [1.2.0]
