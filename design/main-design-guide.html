@@ -524,20 +524,70 @@
       letter-spacing: -.04em;
       line-height: 1.05;
     }
-    .mm-grid {
+    .mm-explorer { display: grid; gap: 16px; }
+    .mm-controls {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 22px;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid #d2d9d4;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 72%);
     }
-    .option-card {
+    .mm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mm-chip,
+    .mm-btn,
+    .mm-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid #d2d9d4;
+      border-radius: 999px;
+      background: #fff;
+      color: #17201d;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .mm-btn:disabled { opacity: .4; cursor: default; }
+    .mm-chip[aria-pressed="false"] { opacity: .45; }
+    .mm-count { color: #53605b; font-weight: 600; }
+    .mm-tab[aria-selected="true"] {
+      border-color: #14757b;
+      background: #e4f2f3;
+      color: #14757b;
+    }
+    .mm-chip:focus-visible,
+    .mm-btn:focus-visible,
+    .mm-tab:focus-visible,
+    .mm-time input:focus-visible { outline: 2px solid #14757b; outline-offset: 2px; }
+    .mm-time {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-time input { flex: 1 1 200px; accent-color: #14757b; }
+    .mm-time output { min-width: 84px; color: #17201d; font-weight: 700; }
+    .mm-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 16px;
+      align-items: start;
+    }
+    .mm-stage,
+    .mm-detail {
       min-width: 0;
-      margin: 0;
-      padding: 18px 18px 16px;
+      padding: 18px;
       border: 1px solid #d2d9d4;
       border-radius: 22px;
       background: rgb(255 255 255 / 72%);
       box-shadow: 0 10px 26px rgb(24 39 30 / 6%);
     }
+    .mm-detail { position: sticky; top: 16px; }
     .option-index {
       margin: 0 0 5px;
       color: #14757b;
@@ -558,40 +608,54 @@
       font-size: 13px;
       line-height: 1.45;
     }
-    .option-card svg {
+    .mm-canvas svg {
       display: block;
       width: 100%;
-      max-width: 480px;
+      max-width: 680px;
       height: auto;
       margin: 0 auto;
       border-radius: 14px;
       background: #f5fafa;
     }
-    .mm-legend {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px 14px;
+    .mm-canvas:has(.mm-mark:hover) .mm-mark:not(:hover) { opacity: .45; }
+    .mm-mark { cursor: pointer; transition: opacity .15s; }
+    .mm-mark.is-selected { stroke: #17201d; stroke-width: 2; }
+    .mm-empty { margin: 24px 0; color: #53605b; font-size: 13px; text-align: center; }
+    .mm-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
       margin: 14px 0 0;
       padding: 0;
       list-style: none;
       color: #53605b;
       font-size: 12px;
-      line-height: 1.4;
     }
-    .mm-legend li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-    .mm-legend strong { color: #17201d; white-space: nowrap; }
+    .mm-stats strong { display: block; color: #17201d; font-size: 18px; letter-spacing: -.02em; }
+    .mm-facts {
+      display: grid;
+      gap: 8px;
+      margin: 14px 0;
+      padding: 0;
+      list-style: none;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-facts strong { display: block; color: #17201d; font-size: 18px; letter-spacing: -.02em; }
+    .mm-note { margin: 0 0 12px; color: #53605b; font-size: 12px; line-height: 1.45; }
     .mm-dot {
+      display: inline-block;
       flex: none;
       width: 9px;
       height: 9px;
       border-radius: 50%;
-      transform: translateY(1px);
+      vertical-align: middle;
     }
 
     @media (max-width: 760px) {
       .workspace { width: min(100% - 24px, 540px); padding-top: 24px; }
-      .mm-grid { grid-template-columns: 1fr; }
-      .mm-legend { grid-template-columns: 1fr; }
+      .mm-body { grid-template-columns: 1fr; }
+      .mm-detail { position: static; }
       .workspace-head { align-items: flex-start; flex-direction: column; }
       .mock-grid { grid-template-columns: 1fr; gap: 24px; }
       .device { width: min(100%, 340px); }
@@ -700,12 +764,33 @@
       <header class="workspace-head mind-map-head">
         <div>
           <p class="eyebrow">Experiment · Mind map</p>
-          <h2 class="mind-map-title" id="mind-map-title">Memory exploration lenses</h2>
-          <p class="workspace-description">Eight lenses on the same memories. Colour shows category, and every chart reads its own axis: time, length, rhythm, or overlap.</p>
-          <ul class="mm-legend" id="mm-legend"></ul>
+          <h2 class="mind-map-title" id="mind-map-title">Memory explorer</h2>
+          <p class="workspace-description">One screen, eight lenses on the same memories. Filter categories, scrub or play through time, and click any memory to browse its neighbours.</p>
         </div>
       </header>
-      <div class="mm-grid" id="mm-grid"></div>
+      <div class="mm-explorer">
+        <div class="mm-controls">
+          <div class="mm-row" id="mm-chips" role="group" aria-label="Categories"></div>
+          <div class="mm-time">
+            <label for="mm-cutoff">Memories up to</label>
+            <input type="range" id="mm-cutoff" min="0" max="0" value="0">
+            <output id="mm-cutoff-label" for="mm-cutoff"></output>
+            <button type="button" class="mm-btn" id="mm-play" aria-pressed="false">Play</button>
+            <button type="button" class="mm-btn" id="mm-reset">Reset</button>
+          </div>
+          <div class="mm-row" id="mm-tabs" role="tablist" aria-label="Lenses"></div>
+        </div>
+        <div class="mm-body">
+          <article class="mm-stage">
+            <p class="option-index" id="mm-lens-index"></p>
+            <h3 class="option-title" id="mm-lens-title"></h3>
+            <p class="option-caption" id="mm-lens-caption"></p>
+            <div class="mm-canvas" id="mm-stage"></div>
+            <ul class="mm-stats" id="mm-stats"></ul>
+          </article>
+          <aside class="mm-detail" id="mm-detail" aria-live="polite"></aside>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -1048,17 +1133,17 @@
 
       const data = categories.map((c) => {
         const items = c.memories
-          .map(([date, sec]) => ({ t: Date.parse(`${date}T00:00:00Z`), sec }))
-          .sort((a, b) => a.t - b.t);
-        const total = items.reduce((sum, it) => sum + it.sec, 0);
-        return { ...c, items, total, count: items.length, first: items[0].t, last: items[items.length - 1].t };
+          .map(([date, sec]) => ({ t: Date.parse(`${date}T00:00:00Z`), sec, cat: c.name, color: c.color }))
+          .sort((a, b) => a.t - b.t)
+          .map((it, i, arr) => ({ ...it, id: `${c.name.toLowerCase()}-${i + 1}`, n: i + 1, of: arr.length }));
+        return { ...c, items };
       });
-      const allItems = data.flatMap((c) => c.items);
-      const tMin = Math.min(...allItems.map((it) => it.t));
-      const tMax = Math.max(...allItems.map((it) => it.t));
-      const secMax = Math.max(...allItems.map((it) => it.sec));
-      const totalMax = Math.max(...data.map((c) => c.total));
-      const grandTotal = data.reduce((sum, c) => sum + c.total, 0);
+      const everything = data.flatMap((c) => c.items).sort((a, b) => a.t - b.t);
+      const byId = Object.fromEntries(everything.map((it) => [it.id, it]));
+      const tMin = everything[0].t;
+      const tMax = everything[everything.length - 1].t;
+      const secMax = Math.max(...everything.map((it) => it.sec));
+      const dates = [...new Set(everything.map((it) => it.t))];
 
       const fmtDate = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
       const monthName = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
@@ -1068,20 +1153,12 @@
         if (m === 60) { h += 1; m = 0; }
         return h ? `${h}h ${m}m` : `${m}m`;
       };
-      const spanText = (c) => `${fmtDate(c.first)} – ${fmtDate(c.last)}`;
       const along = (t, a, b) => a + ((t - tMin) / (tMax - tMin)) * (b - a);
       const radius = (sec, rMin, rMax) => rMin + Math.sqrt(sec / secMax) * (rMax - rMin);
-      const tip = (it) => `<title>${fmtDate(it.t)} · ${fmtDur(it.sec)} audio</title>`;
+      const tip = (it) => `<title>${fmtDate(it.t)} · ${fmtDur(it.sec)} audio · ${it.cat} ${it.n} of ${it.of}</title>`;
+      const mark = (it) => `data-id="${it.id}" class="mm-mark"`;
       const svg = (h, label, body) =>
         `<svg viewBox="0 0 360 ${h}" role="img" aria-label="${label}" fill="#53605b" font-size="10">${body}</svg>`;
-      const arrow = (id) =>
-        `<defs><marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a9a93"/></marker></defs>`;
-      const seg = (ax, ay, bx, by, ra, rb, color, markerId) => {
-        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-        const x1 = ax + (dx / len) * ra, y1 = ay + (dy / len) * ra;
-        const x2 = bx - (dx / len) * (rb + 2), y2 = by - (dy / len) * (rb + 2);
-        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-opacity=".6" stroke-width="1.4" marker-end="url(#${markerId})"/>`;
-      };
       const monthTicks = (x0, x1, yTop, yLabel) => {
         let out = "";
         const start = new Date(tMin);
@@ -1102,10 +1179,28 @@
         }
         return out;
       };
-
-      const flat = data.flatMap((c) => c.items.map((it) => ({ ...it, color: c.color, cat: c.name })))
-        .sort((a, b) => a.t - b.t);
       const lenBands = [[0, 120, "under 2m"], [120, 300, "2–5m"], [300, 600, "5–10m"], [600, 1200, "10–20m"], [1200, Infinity, "20m+"]];
+
+      const state = {
+        enabled: new Set(data.map((c) => c.name)),
+        cutoff: dates.length - 1,
+        lens: 0,
+        selected: everything[0].id,
+        timer: null,
+      };
+
+      // Filtered view: the time axis stays fixed to the full range so marks never jump.
+      let cats = [];
+      let flat = [];
+      let totalMax = 1;
+      function refreshView() {
+        const cut = dates[state.cutoff];
+        cats = data
+          .filter((c) => state.enabled.has(c.name))
+          .map((c) => ({ ...c, items: c.items.filter((it) => it.t <= cut) }));
+        flat = cats.flatMap((c) => c.items).sort((a, b) => a.t - b.t);
+        totalMax = Math.max(1, ...cats.map((c) => c.items.reduce((s, it) => s + it.sec, 0)));
+      }
 
       const lenses = [
         {
@@ -1121,7 +1216,7 @@
               body += `<text x="2" y="${(yAt(sec) + 3).toFixed(1)}">${label}</text>`;
             });
             flat.forEach((it) => {
-              body += `<circle cx="${along(it.t, x0, x1).toFixed(1)}" cy="${yAt(it.sec).toFixed(1)}" r="${(2 + (it.sec / secMax) * 4).toFixed(1)}" fill="${it.color}" fill-opacity=".8">${tip(it)}</circle>`;
+              body += `<circle ${mark(it)} cx="${along(it.t, x0, x1).toFixed(1)}" cy="${yAt(it.sec).toFixed(1)}" r="${(2 + (it.sec / secMax) * 4).toFixed(1)}" fill="${it.color}" fill-opacity=".8">${tip(it)}</circle>`;
             });
             return svg(h, "Constellation of memories by date and length", body);
           },
@@ -1135,7 +1230,7 @@
             body += `<line x1="16" x2="344" y1="${mid}" y2="${mid}" stroke="#c9d6d0"/>`;
             flat.forEach((it) => {
               const x = along(it.t, 18, 342), half = 6 + (it.sec / secMax) * 62;
-              body += `<rect x="${(x - 1.5).toFixed(1)}" y="${(mid - half).toFixed(1)}" width="3" height="${(half * 2).toFixed(1)}" rx="1.5" fill="${it.color}" fill-opacity=".85">${tip(it)}</rect>`;
+              body += `<rect ${mark(it)} x="${(x - 1.5).toFixed(1)}" y="${(mid - half).toFixed(1)}" width="3" height="${(half * 2).toFixed(1)}" rx="1.5" fill="${it.color}" fill-opacity=".85">${tip(it)}</rect>`;
             });
             return svg(h, "Waveform of memories by date and length", body);
           },
@@ -1156,7 +1251,7 @@
             let body = `<path d="${path}" fill="none" stroke="#c9d6d0" stroke-width="1.5"/>`;
             flat.forEach((it) => {
               const [x, y] = pt(it.t);
-              body += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius(it.sec, 3, 9).toFixed(1)}" fill="${it.color}" fill-opacity=".85" stroke="#fff" stroke-width="1">${tip(it)}</circle>`;
+              body += `<circle ${mark(it)} cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius(it.sec, 3, 9).toFixed(1)}" fill="${it.color}" fill-opacity=".85" stroke="#fff" stroke-width="1">${tip(it)}</circle>`;
             });
             return svg(340, "Spiral of memories by date", body);
           },
@@ -1167,7 +1262,8 @@
           render() {
             const h = 200, x0 = 30, x1 = 336, top = 14, bottom = 170;
             let body = monthTicks(x0, x1, 4, h - 6);
-            data.forEach((c) => {
+            cats.forEach((c) => {
+              if (!c.items.length) return;
               let run = 0;
               let d = `M${along(tMin, x0, x1).toFixed(1)} ${bottom}`;
               c.items.forEach((it) => {
@@ -1200,7 +1296,7 @@
               }
             });
             flat.forEach((it) => {
-              body += `<circle cx="${xAt(it.t).toFixed(1)}" cy="${base}" r="3.5" fill="${it.color}" stroke="#fff" stroke-width="1">${tip(it)}</circle>`;
+              body += `<circle ${mark(it)} cx="${xAt(it.t).toFixed(1)}" cy="${base}" r="3.5" fill="${it.color}" stroke="#fff" stroke-width="1">${tip(it)}</circle>`;
             });
             body += `<text x="${x0}" y="${h - 8}">${echoes} echoes within 14 days</text>`;
             return svg(h, "Arcs connecting memories recorded within two weeks", body);
@@ -1216,7 +1312,7 @@
             lenBands.forEach(([lo, hi, label], bi) => {
               const x = x0 + bi * (bw + gap);
               let y = base;
-              data.forEach((c) => {
+              cats.forEach((c) => {
                 const n = c.items.filter((it) => it.sec >= lo && it.sec < hi).length;
                 if (!n) return;
                 y -= n * unit;
@@ -1231,16 +1327,19 @@
         },
         {
           title: "Silences",
-          caption: "Each bar is the gap before a memory, in days since the previous one. The tallest bar is your longest stretch without recording.",
+          caption: "Each bar is the gap before a memory, in days since the previous visible one. The tallest bar is your longest stretch without recording.",
           render() {
             const h = 190, base = 150, x0 = 18, x1 = 342;
             const gaps = flat.slice(1).map((it, i) => ({ it, days: (it.t - flat[i].t) / DAY }));
+            if (!gaps.length) {
+              return svg(h, "Not enough memories for gaps", `<text x="${x0}" y="${h / 2}">Show at least two memories to see gaps.</text>`);
+            }
             const longest = gaps.reduce((a, b) => (b.days > a.days ? b : a));
             let body = monthTicks(x0, x1, 8, h - 6);
             body += `<line x1="${x0}" x2="${x1}" y1="${base}" y2="${base}" stroke="#c9d6d0" stroke-width="2"/>`;
             gaps.forEach(({ it, days }) => {
               const x = along(it.t, x0, x1), hh = (days / longest.days) * (base - 28);
-              body += `<rect x="${(x - 1.5).toFixed(1)}" y="${(base - hh).toFixed(1)}" width="3" height="${hh.toFixed(1)}" rx="1.5" fill="${it.color}" fill-opacity=".85"><title>${Math.round(days)} days before ${fmtDate(it.t)}</title></rect>`;
+              body += `<rect ${mark(it)} x="${(x - 1.5).toFixed(1)}" y="${(base - hh).toFixed(1)}" width="3" height="${hh.toFixed(1)}" rx="1.5" fill="${it.color}" fill-opacity=".85"><title>${Math.round(days)} days before ${fmtDate(it.t)}</title></rect>`;
             });
             body += `<text x="${x0}" y="20" font-weight="700" fill="#17201d">Longest gap: ${Math.round(longest.days)} days, before ${fmtDate(longest.it.t)}</text>`;
             return svg(h, "Bars of days between consecutive memories", body);
@@ -1259,7 +1358,7 @@
               const cx = x0 + d * colW + colW / 2;
               body += `<text x="${cx}" y="${h - 6}" text-anchor="middle">${name}</text>`;
               stacks[d].forEach((it, k) => {
-                body += `<circle cx="${cx}" cy="${base - 8 - k * 15}" r="${radius(it.sec, 4, 7).toFixed(1)}" fill="${it.color}" fill-opacity=".85">${tip(it)}</circle>`;
+                body += `<circle ${mark(it)} cx="${cx}" cy="${base - 8 - k * 15}" r="${radius(it.sec, 4, 7).toFixed(1)}" fill="${it.color}" fill-opacity=".85">${tip(it)}</circle>`;
               });
             });
             return svg(h, "Stacked dots of memories by weekday", body);
@@ -1267,18 +1366,196 @@
         },
       ];
 
-      const legend = data.map((c) =>
-        `<li><i class="mm-dot" style="background:${c.color}"></i><strong>${c.name}</strong><span>${c.count} memories · ${spanText(c)} · ${fmtDur(c.total)} audio</span></li>`
-      ).join("");
-      document.getElementById("mm-legend").innerHTML = legend;
+      const $ = (id) => document.getElementById(id);
+      const chips = $("mm-chips");
+      const tabs = $("mm-tabs");
+      const stage = $("mm-stage");
+      const detail = $("mm-detail");
+      const stats = $("mm-stats");
+      const slider = $("mm-cutoff");
+      const play = $("mm-play");
 
-      document.getElementById("mm-grid").innerHTML = lenses.map((o, i) => `
-        <article class="option-card">
-          <p class="option-index">Lens ${String(i + 1).padStart(2, "0")}</p>
-          <h3 class="option-title">${o.title}</h3>
-          <p class="option-caption">${o.caption}</p>
-          ${o.render()}
-        </article>`).join("");
+      chips.innerHTML = data.map((c) =>
+        `<button type="button" class="mm-chip" data-cat="${c.name}" aria-pressed="true"><i class="mm-dot" style="background:${c.color}"></i>${c.name} <span class="mm-count"></span></button>`
+      ).join("");
+      tabs.innerHTML = lenses.map((l, i) =>
+        `<button type="button" role="tab" class="mm-tab" id="mm-tab-${i}" data-lens="${i}" aria-selected="false" tabindex="-1">${String(i + 1).padStart(2, "0")} ${l.title}</button>`
+      ).join("");
+      slider.max = dates.length - 1;
+
+      function updateChips() {
+        const cut = dates[state.cutoff];
+        chips.querySelectorAll(".mm-chip").forEach((b) => {
+          const c = data.find((x) => x.name === b.dataset.cat);
+          b.setAttribute("aria-pressed", String(state.enabled.has(c.name)));
+          b.querySelector(".mm-count").textContent = c.items.filter((it) => it.t <= cut).length;
+        });
+      }
+
+      function updateTabs() {
+        tabs.querySelectorAll('[role="tab"]').forEach((b, i) => {
+          const on = i === state.lens;
+          b.setAttribute("aria-selected", String(on));
+          b.tabIndex = on ? 0 : -1;
+        });
+      }
+
+      function highlight() {
+        stage.querySelectorAll(".is-selected").forEach((el) => el.classList.remove("is-selected"));
+        const el = state.selected && stage.querySelector(`[data-id="${state.selected}"]`);
+        if (el) el.classList.add("is-selected");
+      }
+
+      function renderStage() {
+        const lens = lenses[state.lens];
+        $("mm-lens-index").textContent = `Lens ${String(state.lens + 1).padStart(2, "0")}`;
+        $("mm-lens-title").textContent = lens.title;
+        $("mm-lens-caption").textContent = lens.caption;
+        stage.innerHTML = flat.length
+          ? lens.render()
+          : `<p class="mm-empty">No memories match these filters. Re-enable a category or move the timeline forward.</p>`;
+        highlight();
+      }
+
+      function renderStats() {
+        if (!flat.length) { stats.innerHTML = ""; return; }
+        const total = flat.reduce((s, it) => s + it.sec, 0);
+        stats.innerHTML = [
+          `<li><strong>${flat.length}</strong>memories</li>`,
+          `<li><strong>${fmtDate(flat[0].t)} – ${fmtDate(flat[flat.length - 1].t)}</strong>timeline span</li>`,
+          `<li><strong>${fmtDur(total)}</strong>audio</li>`,
+          `<li><strong>${cats.filter((c) => c.items.length).length}</strong>categories</li>`,
+        ].join("");
+      }
+
+      function renderDetail() {
+        const it = byId[state.selected];
+        if (!it) {
+          detail.innerHTML = `<p class="mm-note">Click any memory on the stage to inspect it.</p>
+            <button type="button" class="mm-btn" data-random>Pick a random memory</button>`;
+          return;
+        }
+        const cat = data.find((c) => c.name === it.cat);
+        const catTotal = cat.items.reduce((s, x) => s + x.sec, 0);
+        const prev = cat.items[it.n - 2];
+        const gap = prev
+          ? `${Math.round((it.t - prev.t) / DAY)} days after the previous ${cat.name} memory`
+          : `The oldest ${cat.name} memory`;
+        const pos = Math.round(((it.t - tMin) / (tMax - tMin)) * 100);
+        const visible = flat.includes(it);
+        detail.innerHTML = `
+          <p class="option-index"><i class="mm-dot" style="background:${it.color}"></i> ${it.cat} · ${it.n} of ${it.of}</p>
+          <h3 class="option-title">${fmtDate(it.t)}</h3>
+          <p class="option-caption">${gap}. Sits ${pos}% along the full timeline.</p>
+          <ul class="mm-facts">
+            <li><strong>${fmtDur(it.sec)}</strong>audio on this memory</li>
+            <li><strong>${fmtDur(catTotal)}</strong>${cat.name} total</li>
+          </ul>
+          ${visible ? "" : `<p class="mm-note">Hidden by the current filters. Move the timeline or re-enable the category to see it on the stage.</p>`}
+          <div class="mm-row">
+            <button type="button" class="mm-btn" data-nav="prev" ${it.n === 1 ? "disabled" : ""}>← Earlier</button>
+            <button type="button" class="mm-btn" data-nav="next" ${it.n === it.of ? "disabled" : ""}>Later →</button>
+            <button type="button" class="mm-btn" data-random>Random</button>
+          </div>`;
+      }
+
+      function renderAll() {
+        refreshView();
+        updateChips();
+        updateTabs();
+        slider.value = state.cutoff;
+        $("mm-cutoff-label").textContent = fmtDate(dates[state.cutoff]);
+        renderStage();
+        renderStats();
+        renderDetail();
+      }
+
+      function select(id) {
+        state.selected = id;
+        highlight();
+        renderDetail();
+      }
+
+      function stopPlay() {
+        clearInterval(state.timer);
+        state.timer = null;
+        play.textContent = "Play";
+        play.setAttribute("aria-pressed", "false");
+      }
+
+      chips.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-cat]");
+        if (!b) return;
+        const name = b.dataset.cat;
+        if (state.enabled.has(name)) state.enabled.delete(name);
+        else state.enabled.add(name);
+        renderAll();
+      });
+
+      tabs.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-lens]");
+        if (!b) return;
+        state.lens = +b.dataset.lens;
+        renderAll();
+      });
+
+      tabs.addEventListener("keydown", (e) => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+        if (!step) return;
+        e.preventDefault();
+        state.lens = (state.lens + step + lenses.length) % lenses.length;
+        renderAll();
+        $(`mm-tab-${state.lens}`).focus();
+      });
+
+      slider.addEventListener("input", () => {
+        stopPlay();
+        state.cutoff = +slider.value;
+        renderAll();
+      });
+
+      play.addEventListener("click", () => {
+        if (state.timer) { stopPlay(); return; }
+        if (state.cutoff >= dates.length - 1) state.cutoff = 0;
+        play.textContent = "Pause";
+        play.setAttribute("aria-pressed", "true");
+        state.timer = setInterval(() => {
+          if (state.cutoff >= dates.length - 1) { stopPlay(); return; }
+          state.cutoff += 1;
+          renderAll();
+        }, 700);
+        renderAll();
+      });
+
+      $("mm-reset").addEventListener("click", () => {
+        stopPlay();
+        state.enabled = new Set(data.map((c) => c.name));
+        state.cutoff = dates.length - 1;
+        renderAll();
+      });
+
+      stage.addEventListener("click", (e) => {
+        const el = e.target.closest("[data-id]");
+        if (el) select(el.dataset.id);
+      });
+
+      detail.addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (b.hasAttribute("data-random")) {
+          const pool = flat.length ? flat : everything;
+          select(pool[Math.floor(Math.random() * pool.length)].id);
+          return;
+        }
+        if (b.dataset.nav) {
+          const it = byId[state.selected];
+          const list = data.find((c) => c.name === it.cat).items;
+          const next = list[it.n - 1 + (b.dataset.nav === "next" ? 1 : -1)];
+          if (next) select(next.id);
+        }
+      });
+
+      renderAll();
     })();
   </script>
 </body>
