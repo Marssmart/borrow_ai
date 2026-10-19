@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.0.25]
 
-- The design guide has a new interactive "Memory exploration" screen. One explorer with 8 lenses (Constellation, Waveform, Spiral, Growth curves, Echoes, Length spread, Silences, Weekday rhythm) over the same memories. Filter by category, scrub a timeline cutoff, play it back, click any memory to inspect it, and step through Earlier, Later, or Random. Each category shows its count, timeline span, and audio time. Visual guide only; the app is unchanged.
+- The design guide has a new interactive "Memory explorer" screen. Memories are nodes and categories are the links between them, drawn as arrows from each category's oldest memory forward in time. Zooming out merges nearby memories into bigger groups that show how many they contain; zooming in reveals each one. Pan, zoom, click-to-inspect, filter by category, scrub a timeline cutoff, play it back, and step through Earlier, Later, or Random. Visual guide only; the app is unchanged.
 - Updated Android and iOS versioning to 1.0.25 (build 26).
 
 ## [1.0.24]
