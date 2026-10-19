@@ -31,6 +31,7 @@ import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
 import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
+import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
 
 class AppServices private constructor(
@@ -40,6 +41,7 @@ class AppServices private constructor(
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
+    private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -63,6 +65,7 @@ class AppServices private constructor(
                 // Periodic sweeps must finish before the database closes under them.
                 backgroundJobs.forEach { it.cancel() }
                 backgroundJobs.forEach { it.join() }
+                summarizer.close()
             } finally {
                 finishClose()
             }
@@ -91,6 +94,7 @@ class AppServices private constructor(
             databaseName: String = DATABASE_NAME,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -101,6 +105,7 @@ class AppServices private constructor(
             epochClock = epochClock,
             liveTranscriber = liveTranscriber,
             batchTranscriber = batchTranscriber,
+            summarizer = summarizer,
         )
 
         /**
@@ -119,6 +124,7 @@ class AppServices private constructor(
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -165,7 +171,7 @@ class AppServices private constructor(
                 ).start(scope = graphScope)
                 val summaryRecovery = MemorySummaryRecoveryJob(
                     memoryService = memories,
-                    summarizer = UnavailableMemorySummarizer,
+                    summarizer = summarizer,
                     isRecording = { mediaSession.isBusy },
                 )
                 val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
@@ -177,6 +183,7 @@ class AppServices private constructor(
                     graphJob = graphJob,
                     closeScope = graphScope,
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
+                    summarizer = summarizer,
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

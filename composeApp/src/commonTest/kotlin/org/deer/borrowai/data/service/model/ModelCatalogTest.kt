@@ -28,15 +28,15 @@ class ModelCatalogTest {
     fun eachTierPicksItsVoiceAndLlmModels() {
         val legacy = ModelCatalog.modelsFor(ModelTier.LEGACY)
         assertEquals("Whisper Tiny", legacy.voice.first().displayName)
-        assertEquals("Gemma 2B", legacy.llm.displayName)
+        assertEquals("Qwen3 0.6B", legacy.llm.displayName)
 
         val mid = ModelCatalog.modelsFor(ModelTier.MID)
         assertEquals("Whisper Base", mid.voice.first().displayName)
-        assertEquals("Gemma 7B", mid.llm.displayName)
+        assertEquals("Gemma 4 E2B", mid.llm.displayName)
 
         val latest = ModelCatalog.modelsFor(ModelTier.LATEST)
         assertEquals("Whisper Large v3", latest.voice.first().displayName)
-        assertEquals("Gemma 9B", latest.llm.displayName)
+        assertEquals("Gemma 4 E4B", latest.llm.displayName)
     }
 
     @Test

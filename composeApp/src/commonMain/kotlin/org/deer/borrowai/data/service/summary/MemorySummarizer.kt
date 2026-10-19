@@ -3,6 +3,9 @@ package org.deer.borrowai.data.service.summary
 /** Produces a summary from a memory's transcription. */
 interface MemorySummarizer {
     suspend fun summarize(transcription: String): SummaryResult
+
+    /** Releases any native resources. Called once, after background summary work has stopped. */
+    suspend fun close() {}
 }
 
 sealed interface SummaryResult {
