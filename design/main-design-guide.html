@@ -515,8 +515,83 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.12); }
     }
+    .mind-map-section { margin-top: 56px; }
+    .mind-map-head { margin-bottom: 22px; }
+    .mind-map-title {
+      margin: 0;
+      color: #17201d;
+      font-size: clamp(24px, 3.4vw, 34px);
+      letter-spacing: -.04em;
+      line-height: 1.05;
+    }
+    .mm-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+    .option-card {
+      min-width: 0;
+      margin: 0;
+      padding: 18px 18px 16px;
+      border: 1px solid #d2d9d4;
+      border-radius: 22px;
+      background: rgb(255 255 255 / 72%);
+      box-shadow: 0 10px 26px rgb(24 39 30 / 6%);
+    }
+    .option-index {
+      margin: 0 0 5px;
+      color: #14757b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .option-title {
+      margin: 0;
+      color: #17201d;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+    .option-caption {
+      margin: 5px 0 14px;
+      color: #53605b;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .option-card svg {
+      display: block;
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      margin: 0 auto;
+      border-radius: 14px;
+      background: #f5fafa;
+    }
+    .mm-legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 14px;
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+      color: #53605b;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .mm-legend li { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .mm-legend strong { color: #17201d; white-space: nowrap; }
+    .mm-dot {
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      transform: translateY(1px);
+    }
+
     @media (max-width: 760px) {
       .workspace { width: min(100% - 24px, 540px); padding-top: 24px; }
+      .mm-grid { grid-template-columns: 1fr; }
+      .mm-legend { grid-template-columns: 1fr; }
       .workspace-head { align-items: flex-start; flex-direction: column; }
       .mock-grid { grid-template-columns: 1fr; gap: 24px; }
       .device { width: min(100%, 340px); }
@@ -620,6 +695,17 @@
         <figcaption class="screen-caption">Detail</figcaption>
       </figure>
     </div>
+
+    <section class="mind-map-section" aria-labelledby="mind-map-title">
+      <header class="workspace-head mind-map-head">
+        <div>
+          <p class="eyebrow">Experiment · Mind map</p>
+          <h2 class="mind-map-title" id="mind-map-title">Memory mind map options</h2>
+          <p class="workspace-description">Ten ways to show each category from its oldest memory to its newest, with memory count, timeline span, and audio amount.</p>
+        </div>
+      </header>
+      <div class="mm-grid" id="mm-grid"></div>
+    </section>
   </main>
 
   <script>
@@ -935,5 +1021,336 @@
       if (timer !== null) clearInterval(timer);
     });
   </script>
+  <script>
+    (function () {
+      const DAY = 864e5;
+      const WEEK = 7 * DAY;
+      const categories = [
+        { name: "Work", color: "#14757b", memories: [
+          ["2025-03-03", 412], ["2025-03-19", 265], ["2025-04-08", 980], ["2025-05-14", 540],
+          ["2025-06-02", 1210], ["2025-07-21", 330], ["2025-08-11", 720], ["2025-09-02", 150],
+          ["2025-09-18", 605],
+        ] },
+        { name: "Personal", color: "#7d80cf", memories: [
+          ["2025-01-12", 96], ["2025-02-02", 318], ["2025-02-27", 150], ["2025-03-15", 442],
+          ["2025-04-03", 75], ["2025-04-29", 260], ["2025-05-20", 610], ["2025-06-11", 128],
+          ["2025-07-01", 880], ["2025-07-24", 205], ["2025-08-09", 147], ["2025-08-30", 490],
+          ["2025-09-14", 66], ["2025-10-02", 333],
+        ] },
+        { name: "Ideas", color: "#4f86c0", memories: [
+          ["2025-04-20", 240], ["2025-05-07", 1500], ["2025-06-25", 620], ["2025-07-08", 390],
+          ["2025-08-02", 905], ["2025-08-30", 180],
+        ] },
+        { name: "Health", color: "#4f9a7a", memories: [
+          ["2025-06-01", 720], ["2025-07-15", 185], ["2025-09-09", 450],
+        ] },
+      ];
+
+      const data = categories.map((c) => {
+        const items = c.memories
+          .map(([date, sec]) => ({ t: Date.parse(`${date}T00:00:00Z`), sec }))
+          .sort((a, b) => a.t - b.t);
+        const total = items.reduce((sum, it) => sum + it.sec, 0);
+        return { ...c, items, total, count: items.length, first: items[0].t, last: items[items.length - 1].t };
+      });
+      const allItems = data.flatMap((c) => c.items);
+      const tMin = Math.min(...allItems.map((it) => it.t));
+      const tMax = Math.max(...allItems.map((it) => it.t));
+      const secMax = Math.max(...allItems.map((it) => it.sec));
+      const totalMax = Math.max(...data.map((c) => c.total));
+      const grandTotal = data.reduce((sum, c) => sum + c.total, 0);
+
+      const fmtDate = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      const monthName = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+      const fmtDur = (sec) => {
+        let h = Math.floor(sec / 3600);
+        let m = Math.round((sec % 3600) / 60);
+        if (m === 60) { h += 1; m = 0; }
+        return h ? `${h}h ${m}m` : `${m}m`;
+      };
+      const spanText = (c) => `${fmtDate(c.first)} – ${fmtDate(c.last)}`;
+      const along = (t, a, b) => a + ((t - tMin) / (tMax - tMin)) * (b - a);
+      const radius = (sec, rMin, rMax) => rMin + Math.sqrt(sec / secMax) * (rMax - rMin);
+      const tip = (it) => `<title>${fmtDate(it.t)} · ${fmtDur(it.sec)} audio</title>`;
+      const svg = (h, label, body) =>
+        `<svg viewBox="0 0 360 ${h}" role="img" aria-label="${label}" fill="#53605b" font-size="10">${body}</svg>`;
+      const arrow = (id) =>
+        `<defs><marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a9a93"/></marker></defs>`;
+      const seg = (ax, ay, bx, by, ra, rb, color, markerId) => {
+        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+        const x1 = ax + (dx / len) * ra, y1 = ay + (dy / len) * ra;
+        const x2 = bx - (dx / len) * (rb + 2), y2 = by - (dy / len) * (rb + 2);
+        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-opacity=".6" stroke-width="1.4" marker-end="url(#${markerId})"/>`;
+      };
+      const monthTicks = (x0, x1, yTop, yLabel) => {
+        let out = "";
+        const start = new Date(tMin);
+        let t = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1);
+        while (t <= tMax) {
+          if (t >= tMin) {
+            const x = along(t, x0, x1).toFixed(1);
+            const atEdge = +x > 330;
+            const lx = (atEdge ? +x - 2 : +x + 2).toFixed(1);
+            out += `<line x1="${x}" x2="${x}" y1="${yTop}" y2="${yLabel - 10}" stroke="#dfe7e3"/><text x="${lx}" y="${yLabel}"${atEdge ? ' text-anchor="end"' : ""}>${monthName(t)}</text>`;
+          }
+          const d = new Date(t);
+          t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+        }
+        return out;
+      };
+
+      const options = [
+        {
+          title: "Oriented graph",
+          caption: "Each category starts at its hub, runs to the oldest memory, then chains forward to newer ones. Node size shows audio length.",
+          render() {
+            const rowH = 56, top = 30, h = top + (data.length - 1) * rowH + 34;
+            let body = arrow("mm-a1");
+            data.forEach((c, i) => {
+              const cy = top + i * rowH;
+              const step = Math.min(34, 254 / Math.max(1, c.count - 1));
+              body += `<rect x="6" y="${cy - 12}" width="62" height="24" rx="12" fill="${c.color}"/>`;
+              body += `<text x="37" y="${cy + 4}" text-anchor="middle" fill="#fff" font-weight="700">${c.name}</text>`;
+              let from = { x: 68, r: 0 };
+              c.items.forEach((it, k) => {
+                const node = { x: 96 + k * step, r: radius(it.sec, 3, 9) };
+                body += seg(from.x, cy, node.x, cy, from.r, node.r, "#8a9a93", "mm-a1");
+                body += `<circle cx="${node.x}" cy="${cy}" r="${node.r}" fill="${c.color}" fill-opacity=".85">${tip(it)}</circle>`;
+                from = node;
+              });
+              body += `<text x="96" y="${cy + 21}" text-anchor="middle">oldest</text>`;
+              body += `<text x="${Math.min(from.x, 336)}" y="${cy + 21}" text-anchor="middle">newest</text>`;
+            });
+            return svg(h, "Oriented graph of memories by category", body);
+          },
+        },
+        {
+          title: "Horizontal rails",
+          caption: "One rail per category on a shared date axis. Position is the memory date, dot size is audio length.",
+          render() {
+            const rowH = 52, top = 34, x0 = 30, x1 = 330, h = top + (data.length - 1) * rowH + 40;
+            let body = monthTicks(x0, x1, 14, h - 6);
+            data.forEach((c, i) => {
+              const cy = top + i * rowH;
+              body += `<line x1="${x0}" y1="${cy}" x2="${x1}" y2="${cy}" stroke="#c9d6d0" stroke-width="2"/>`;
+              body += `<text x="6" y="${cy - 9}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              c.items.forEach((it) => {
+                body += `<circle cx="${along(it.t, x0, x1).toFixed(1)}" cy="${cy}" r="${radius(it.sec, 3, 11).toFixed(1)}" fill="${c.color}" fill-opacity=".85">${tip(it)}</circle>`;
+              });
+            });
+            return svg(h, "Horizontal rails of memories by category", body);
+          },
+        },
+        {
+          title: "Radial mind map",
+          caption: "Each hub sits at the centre with memories on a ring in date order, clockwise from the top. Node size shows audio length.",
+          render() {
+            const centers = [[90, 92], [270, 92], [90, 272], [270, 272]];
+            const R = 62, hub = 26;
+            let body = arrow("mm-a3");
+            data.forEach((c, i) => {
+              const [cx, cy] = centers[i];
+              let prev = { x: cx, y: cy, r: hub };
+              c.items.forEach((it, k) => {
+                const a = -Math.PI / 2 + (k * 2 * Math.PI) / c.count;
+                const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a), r = radius(it.sec, 3, 9);
+                body += seg(prev.x, prev.y, x, y, prev.r, r, c.color, "mm-a3");
+                body += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${c.color}" fill-opacity=".85">${tip(it)}</circle>`;
+                prev = { x, y, r };
+              });
+              body += `<circle cx="${cx}" cy="${cy}" r="${hub}" fill="${c.color}"/>`;
+              body += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" fill="#fff" font-weight="700" font-size="9">${c.name}</text>`;
+              body += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" fill="#fff" font-size="8">${c.count}</text>`;
+            });
+            return svg(360, "Radial mind map of memories by category", body);
+          },
+        },
+        {
+          title: "Stacked bars",
+          caption: "Bar length is total audio relative to the largest category. Segments are memories in date order, lighter when older.",
+          render() {
+            const rowH = 54, barX = 86, maxW = 226, h = data.length * rowH + 8;
+            let body = "";
+            data.forEach((c, i) => {
+              const top = 8 + i * rowH;
+              const barW = (c.total / totalMax) * maxW;
+              let x = barX;
+              c.items.forEach((it, k) => {
+                const w = (it.sec / c.total) * barW;
+                const op = (0.35 + 0.65 * (k / Math.max(1, c.count - 1))).toFixed(2);
+                body += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="22" fill="${c.color}" fill-opacity="${op}" stroke="#f5fafa" stroke-width=".8">${tip(it)}</rect>`;
+                x += w;
+              });
+              body += `<text x="6" y="${top + 15}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              body += `<text x="${(x + 6).toFixed(1)}" y="${top + 15}">${fmtDur(c.total)}</text>`;
+              body += `<text x="${barX}" y="${top + 38}">${c.count} memories · ${spanText(c)}</text>`;
+            });
+            return svg(h, "Stacked bars of audio by category", body);
+          },
+        },
+        {
+          title: "Bubble cluster",
+          caption: "Bubbles are placed by memory date. Bubble area shows audio length, so denser and larger groups read as more audio.",
+          render() {
+            const h = 270;
+            let body = monthTicks(84, 340, 12, h - 8);
+            data.forEach((c, i) => {
+              const cy = 40 + i * 60;
+              body += `<text x="6" y="${cy + 4}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              c.items.forEach((it) => {
+                body += `<circle cx="${along(it.t, 84, 340).toFixed(1)}" cy="${cy}" r="${radius(it.sec, 3, 15).toFixed(1)}" fill="${c.color}" fill-opacity=".3" stroke="${c.color}" stroke-width="1.2">${tip(it)}</circle>`;
+              });
+            });
+            return svg(h, "Bubble cluster of memories by category", body);
+          },
+        },
+        {
+          title: "Calendar heat grid",
+          caption: "Each cell is one week from the first memory onward. Darker cells hold more audio that week.",
+          render() {
+            const nW = Math.floor((tMax - tMin) / WEEK) + 1;
+            const x0 = 84, x1 = 350, cw = (x1 - x0) / nW;
+            const weeks = data.map((c) => {
+              const wk = new Array(nW).fill(0);
+              c.items.forEach((it) => { wk[Math.floor((it.t - tMin) / WEEK)] += it.sec; });
+              return wk;
+            });
+            const vmax = Math.max(...weeks.flat());
+            const top = 20, rowH = 40, h = top + data.length * rowH + 18;
+            let body = monthTicks(x0, x1, 8, h - 6);
+            data.forEach((c, i) => {
+              const y = top + i * rowH;
+              body += `<text x="6" y="${y + 18}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              weeks[i].forEach((v, w) => {
+                const fill = v > 0
+                  ? `fill="${c.color}" fill-opacity="${(0.15 + 0.85 * (v / vmax)).toFixed(2)}"`
+                  : `fill="#e9efec"`;
+                body += `<rect x="${(x0 + w * cw).toFixed(1)}" y="${y}" width="${(cw - 1.5).toFixed(1)}" height="28" rx="3" ${fill}/>`;
+              });
+            });
+            return svg(h, "Calendar heat grid of audio by week", body);
+          },
+        },
+        {
+          title: "Swimlanes",
+          caption: "One lane per category on a shared date axis. Each card is a memory, and its height shows audio length.",
+          render() {
+            const top = 24, rowH = 46, h = top + (data.length - 1) * rowH + 44;
+            let body = monthTicks(84, 340, 8, h - 6);
+            data.forEach((c, i) => {
+              const cy = top + i * rowH;
+              body += `<rect x="0" y="${cy - 20}" width="360" height="40" rx="10" fill="#e4f2f3" fill-opacity=".6"/>`;
+              body += `<text x="10" y="${cy + 4}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              c.items.forEach((it) => {
+                const x = along(it.t, 84, 340) - 4;
+                const ch = 6 + (it.sec / secMax) * 30;
+                body += `<rect x="${x.toFixed(1)}" y="${(cy - ch / 2).toFixed(1)}" width="8" height="${ch.toFixed(1)}" rx="3" fill="${c.color}" fill-opacity=".85">${tip(it)}</rect>`;
+              });
+            });
+            return svg(h, "Swimlanes of memories by category", body);
+          },
+        },
+        {
+          title: "Donut and span",
+          caption: "Ring fill compares each category's audio to the largest category. The bar underneath shows its timeline span within the full range.",
+          render() {
+            const h = 136, C = 2 * Math.PI * 26;
+            let body = "";
+            data.forEach((c, i) => {
+              const cx = 45 + i * 90, cy = 44;
+              const frac = c.total / totalMax;
+              body += `<circle cx="${cx}" cy="${cy}" r="26" fill="none" stroke="#e4ebe8" stroke-width="8"/>`;
+              body += `<circle cx="${cx}" cy="${cy}" r="26" fill="none" stroke="${c.color}" stroke-width="8" stroke-dasharray="${(frac * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"><title>${fmtDur(c.total)} audio</title></circle>`;
+              body += `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#17201d">${c.count}</text>`;
+              body += `<text x="${cx}" y="${cy + 46}" text-anchor="middle" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              const x1 = along(c.first, cx - 40, cx + 40), x2 = along(c.last, cx - 40, cx + 40);
+              body += `<rect x="${cx - 40}" y="110" width="80" height="3" rx="1.5" fill="#e4ebe8"/>`;
+              body += `<rect x="${x1.toFixed(1)}" y="109" width="${(x2 - x1).toFixed(1)}" height="5" rx="2.5" fill="${c.color}"/>`;
+            });
+            return svg(h, "Donut rings and timeline spans by category", body);
+          },
+        },
+        {
+          title: "Vertical timeline",
+          caption: "Each category is a vertical spine from oldest at the top to newest at the bottom. Node size shows audio length.",
+          render() {
+            const h = 280, y0 = 34, y1 = h - 22;
+            const yAt = (t) => y0 + ((t - tMin) / (tMax - tMin)) * (y1 - y0);
+            let body = arrow("mm-a9");
+            data.forEach((c, i) => {
+              const cx = 45 + i * 90;
+              body += `<text x="${cx}" y="18" text-anchor="middle" font-weight="700" fill="${c.color}">${c.name}</text>`;
+              body += `<line x1="${cx}" y1="${y0}" x2="${cx}" y2="${y1}" stroke="#c9d6d0" stroke-width="2" marker-end="url(#mm-a9)"/>`;
+              c.items.forEach((it) => {
+                body += `<circle cx="${cx}" cy="${yAt(it.t).toFixed(1)}" r="${radius(it.sec, 3, 10).toFixed(1)}" fill="${c.color}" fill-opacity=".85" stroke="#fff" stroke-width="1">${tip(it)}</circle>`;
+              });
+              body += `<text x="${cx + 14}" y="${(yAt(c.first) + 3).toFixed(1)}">${fmtDate(c.first)}</text>`;
+              body += `<text x="${cx + 14}" y="${(yAt(c.last) + 3).toFixed(1)}">${fmtDate(c.last)}</text>`;
+            });
+            return svg(h, "Vertical timelines of memories by category", body);
+          },
+        },
+        {
+          title: "Audio flow",
+          caption: "Ribbons flow from each category into each month. Ribbon width is the audio recorded in that category during that month.",
+          render() {
+            const h = 262, top = 24, k = (h - 48) / grandTotal;
+            const monthKey = (t) => new Date(t).getUTCFullYear() * 12 + new Date(t).getUTCMonth();
+            const kMin = monthKey(tMin), kMax = monthKey(tMax);
+            const months = [];
+            for (let key = kMin; key <= kMax; key++) months.push(key);
+            const monthSec = (c, key) => c.items.filter((it) => monthKey(it.t) === key).reduce((s, it) => s + it.sec, 0);
+            const monthTot = months.map((key) => data.reduce((s, c) => s + monthSec(c, key), 0));
+            const leftY = [];
+            let yy = top;
+            data.forEach((c) => { leftY.push(yy); yy += c.total * k; });
+            const rightY = [];
+            yy = top;
+            months.forEach((_, j) => { rightY.push(yy); yy += monthTot[j] * k; });
+            const rightCur = rightY.slice();
+            let body = "";
+            data.forEach((c, ci) => {
+              let lc = leftY[ci];
+              months.forEach((key, j) => {
+                const a = monthSec(c, key);
+                if (!a) return;
+                const hgt = a * k;
+                const y0 = lc, y1 = lc + hgt, r0 = rightCur[j], r1 = r0 + hgt;
+                body += `<path d="M80 ${y0.toFixed(1)} C180 ${y0.toFixed(1)} 180 ${r0.toFixed(1)} 280 ${r0.toFixed(1)} L280 ${r1.toFixed(1)} C180 ${r1.toFixed(1)} 180 ${y1.toFixed(1)} 80 ${y1.toFixed(1)} Z" fill="${c.color}" fill-opacity=".38"/>`;
+                lc += hgt;
+                rightCur[j] = r1;
+              });
+            });
+            data.forEach((c, ci) => {
+              const y = leftY[ci], hh = c.total * k;
+              body += `<rect x="70" y="${y.toFixed(1)}" width="10" height="${hh.toFixed(1)}" fill="${c.color}"/>`;
+              body += `<text x="6" y="${(y + hh / 2 + 4).toFixed(1)}" font-weight="700" fill="${c.color}">${c.name}</text>`;
+            });
+            months.forEach((key, j) => {
+              if (!monthTot[j]) return;
+              const y = rightY[j], hh = monthTot[j] * k;
+              body += `<rect x="280" y="${y.toFixed(1)}" width="10" height="${hh.toFixed(1)}" fill="#8a9a93"/>`;
+              body += `<text x="296" y="${(y + hh / 2 + 4).toFixed(1)}">${monthName(Date.UTC(Math.floor(key / 12), key % 12, 1))}</text>`;
+            });
+            return svg(h, "Flow of audio from categories into months", body);
+          },
+        },
+      ];
+
+      const legend = data.map((c) =>
+        `<li><i class="mm-dot" style="background:${c.color}"></i><strong>${c.name}</strong><span>${c.count} memories · ${spanText(c)} · ${fmtDur(c.total)} audio</span></li>`
+      ).join("");
+
+      document.getElementById("mm-grid").innerHTML = options.map((o, i) => `
+        <article class="option-card">
+          <p class="option-index">Option ${String(i + 1).padStart(2, "0")}</p>
+          <h3 class="option-title">${o.title}</h3>
+          <p class="option-caption">${o.caption}</p>
+          ${o.render()}
+          <ul class="mm-legend">${legend}</ul>
+        </article>`).join("");
+    })();
+  </script>
 </body>
+
 </html>

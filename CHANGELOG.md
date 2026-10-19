@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.25]
+
+- The design guide has a new "Memory mind map options" section with 10 experimental layouts. Each one shows memory count, timeline span, and audio time per category (Work, Personal, Ideas, Health). Visual guide only; the app is unchanged.
+- Updated Android and iOS versioning to 1.0.25 (build 26).
+
 ## [1.0.24]
 
 - Live and batch transcription on Android are fixed to English (Whisper `language = "en"`, `task = "transcribe"`) instead of auto-detecting the spoken language. The pinned multilingual models are unchanged, so no model download is needed.
