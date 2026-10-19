@@ -623,6 +623,20 @@
       stroke-width: 4px;
       stroke-linejoin: round;
     }
+    .mm-graph .mm-hub-name {
+      font-size: 14px;
+      font-weight: 800;
+      fill: #fff;
+    }
+    .mm-graph .mm-hub-count {
+      font-size: 13px;
+      font-weight: 700;
+      fill: #17201d;
+      paint-order: stroke;
+      stroke: #f5fafa;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
     .mm-node.is-selected > circle,
     .mm-node.is-selected > path { stroke: #17201d; stroke-width: 2.5; }
     .mm-graph .mm-edge-label {
@@ -808,7 +822,7 @@
         <div>
           <p class="eyebrow">Experiment · Mind map</p>
           <h2 class="mind-map-title" id="mind-map-title">Memory explorer</h2>
-          <p class="workspace-description">Memories are nodes and categories are the links between them. Each category runs from its oldest memory forward in time. Zoom out and nearby memories merge into bigger groups; zoom in to reveal every one.</p>
+          <p class="workspace-description">Each category is a hub, and its memories connect to it. Memories spiral outward from the hub in time order, so the oldest sits nearest. Zoom out and nearby memories merge into bigger groups; zoom in to reveal every one.</p>
         </div>
       </header>
       <div class="mm-explorer">
@@ -1200,7 +1214,7 @@
       };
 
       const $ = (id) => document.getElementById(id);
-      const W = 1000, H = 680, PAD = 80;
+      const W = 1000, H = 680, PAD = 80, HUB_R = 34;
       const chips = $("mm-chips");
       const canvas = $("mm-canvas");
       const graph = $("mm-graph");
@@ -1209,45 +1223,21 @@
       const slider = $("mm-cutoff");
       const play = $("mm-play");
 
-      // Deterministic layout, computed once so filters never move nodes. Each category pulls its memories toward its own anchor, links keep each thread in order, and memories repel each other.
-      let seed = 11;
-      const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-      const anchor = Object.fromEntries(data.map((c, i) => {
-        const a = ((-90 + (i * 360) / data.length) * Math.PI) / 180;
-        return [c.name, { x: W / 2 + 260 * Math.cos(a), y: H / 2 + 220 * Math.sin(a) }];
-      }));
-      const nodes = everything.map((it) => {
-        const a = anchor[it.cat];
-        return { id: it.id, cat: it.cat, x: a.x + (rand() - 0.5) * 200, y: a.y + (rand() - 0.5) * 200, vx: 0, vy: 0 };
+      // Hub layout, computed once so filters never move anything. Each category is a hub on a ring, and its memories spiral outward in time order, so the oldest sits nearest the hub.
+      const hubs = data.map((c, ci) => {
+        const a = ((-90 + (ci * 360) / data.length) * Math.PI) / 180;
+        return { ci, cat: c.name, color: c.color, x: W / 2 + 280 * Math.cos(a), y: H / 2 + 230 * Math.sin(a) };
+      });
+      const hubOf = Object.fromEntries(hubs.map((h) => [h.cat, h]));
+      const nodes = data.flatMap((c) => {
+        const h = hubOf[c.name];
+        return c.items.map((it, i) => {
+          const theta = i * 2.4, r = 90 + 26 * Math.sqrt(i);
+          return { id: it.id, cat: it.cat, x: h.x + r * Math.cos(theta), y: h.y + r * Math.sin(theta) };
+        });
       });
       const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
-      // Oriented: a is the older memory, b the newer one in the same category.
-      const links = data.flatMap((c, ci) => c.items.slice(1).map((it, i) => ({
-        a: nodeById[c.items[i].id], b: nodeById[it.id], cat: c.name, color: c.color, ci,
-      })));
-      for (let step = 0; step < 600; step++) {
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const p = nodes[i], q = nodes[j];
-            const dx = p.x - q.x, dy = p.y - q.y;
-            const d2 = Math.max(dx * dx + dy * dy, 64), d = Math.sqrt(d2), f = 2600 / d2;
-            p.vx += (dx / d) * f; p.vy += (dy / d) * f;
-            q.vx -= (dx / d) * f; q.vy -= (dy / d) * f;
-          }
-        }
-        links.forEach(({ a, b }) => {
-          const dx = b.x - a.x, dy = b.y - a.y, d = Math.max(Math.hypot(dx, dy), 1), f = (d - 80) * 0.03;
-          a.vx += (dx / d) * f; a.vy += (dy / d) * f;
-          b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
-        });
-        nodes.forEach((n) => {
-          const a = anchor[n.cat];
-          n.vx = Math.max(-30, Math.min(30, (n.vx + (a.x - n.x) * 0.008) * 0.8));
-          n.vy = Math.max(-30, Math.min(30, (n.vy + (a.y - n.y) * 0.008) * 0.8));
-          n.x += n.vx; n.y += n.vy;
-        });
-      }
-      const xs = nodes.map((n) => n.x), ys = nodes.map((n) => n.y);
+      const xs = [...nodes.map((n) => n.x), ...hubs.map((h) => h.x)], ys = [...nodes.map((n) => n.y), ...hubs.map((h) => h.y)];
       const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
       const fitK = Math.min((W - 2 * PAD) / (bx1 - bx0), (H - 2 * PAD) / (by1 - by0));
       const fit = { k: fitK, tx: W / 2 - ((bx0 + bx1) / 2) * fitK, ty: H / 2 - ((by0 + by1) / 2) * fitK };
@@ -1320,27 +1310,34 @@
         const focusCat = state.sel && state.sel.focus ? byId[state.sel.focus].cat : null;
         const selIds = new Set(state.sel ? state.sel.ids : []);
 
-        const agg = new Map();
-        links.forEach((l) => {
-          const ca = clusterOf[l.a.id], cb = clusterOf[l.b.id];
-          if (!ca || !cb || ca === cb) return;
-          const key = `${ca.i}>${cb.i}|${l.cat}`;
-          const e = agg.get(key) || { from: ca, to: cb, cat: l.cat, color: l.color, ci: l.ci, n: 0 };
-          e.n += 1;
-          agg.set(key, e);
+        // Each hub connects to every cluster holding its memories; arrows point outward, from oldest (nearest the hub) to newest.
+        const hubPx = (h) => ({ x: view.tx + h.x * view.k, y: view.ty + h.y * view.k });
+        const edgeList = [];
+        clusters.forEach((c) => {
+          data.forEach((d, ci) => {
+            const n = c.items.filter((it) => it.cat === d.name).length;
+            if (n) edgeList.push({ h: hubOf[d.name], c, n, ci, cat: d.name, color: d.color });
+          });
         });
-        const edges = [...agg.values()].map((e) => {
-          const ax = e.from.px, ay = e.from.py, bx = e.to.px, by = e.to.py;
+        const edges = edgeList.map((e) => {
+          const hp = hubPx(e.h), cp = { x: e.c.px, y: e.c.py };
+          const ax = hp.x, ay = hp.y, bx = cp.x, by = cp.y;
           const d = Math.max(Math.hypot(bx - ax, by - ay), 1), ux = (bx - ax) / d, uy = (by - ay) / d;
-          const ra = radiusOf(e.from.n), rb = radiusOf(e.to.n) + 3;
+          const ra = HUB_R + 2, rb = radiusOf(e.c.n) + 3;
           const sx = ax + ux * ra, sy = ay + uy * ra, ex = bx - ux * rb, ey = by - uy * rb;
-          const bend = (e.ci - (data.length - 1) / 2) * 18;
+          const bend = (e.ci - (data.length - 1) / 2) * 10;
           const cx = (sx + ex) / 2 - uy * bend, cy = (sy + ey) / 2 + ux * bend;
           const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex, ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
           const dim = focusCat && e.cat !== focusCat;
-          const width = (1.4 + Math.sqrt(e.n) * 1.2).toFixed(1);
+          const width = (1.2 + Math.sqrt(e.n) * 1.1).toFixed(1);
           const label = e.n > 1 ? `<text class="mm-edge-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle">${e.n}</text>` : "";
-          return `<path d="M${sx.toFixed(1)} ${sy.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${e.color}" stroke-width="${width}" stroke-opacity="${dim ? 0.15 : 0.7}" marker-end="url(#mm-arrow-${e.ci})"><title>${e.n} ${e.cat} link${e.n > 1 ? "s" : ""}, oldest to newest</title></path>${label}`;
+          return `<path d="M${sx.toFixed(1)} ${sy.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${e.color}" stroke-width="${width}" stroke-opacity="${dim ? 0.15 : 0.7}" marker-end="url(#mm-arrow-${e.ci})"><title>${e.n} ${e.cat} ${e.n === 1 ? "memory" : "memories"}, oldest to newest</title></path>${label}`;
+        }).join("");
+        const hubsSvg = hubs.map((h) => {
+          const n = visible.filter((it) => it.cat === h.cat).length;
+          const dim = focusCat && focusCat !== h.cat;
+          const hp = hubPx(h);
+          return `<g class="mm-hub" opacity="${dim ? 0.3 : 1}"><title>${h.cat}: ${n} ${n === 1 ? "memory" : "memories"}</title><circle cx="${hp.x.toFixed(1)}" cy="${hp.y.toFixed(1)}" r="${HUB_R}" fill="${h.color}" stroke="#fff" stroke-width="3"/><text class="mm-hub-name" x="${hp.x.toFixed(1)}" y="${(hp.y + 5).toFixed(1)}" text-anchor="middle">${h.cat}</text><text class="mm-hub-count" x="${hp.x.toFixed(1)}" y="${(hp.y + HUB_R + 16).toFixed(1)}" text-anchor="middle">${n}</text></g>`;
         }).join("");
 
         const nodesSvg = clusters.map((c) => {
@@ -1359,7 +1356,7 @@
           `<marker id="mm-arrow-${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${c.color}"/></marker>`
         ).join("");
         const body = visible.length
-          ? edges + nodesSvg
+          ? edges + hubsSvg + nodesSvg
           : `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">No memories match these filters.</text>`;
         canvas.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Memory graph of ${visible.length} memories in ${clusters.length} groups"><defs>${defs}</defs>${body}</svg>`;
         $("mm-zoom-label").textContent = `Zoom ${(view.k / fit.k).toFixed(1)}×`;
