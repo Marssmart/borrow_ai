@@ -9,13 +9,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Memory
-import org.deer.borrowai.data.domain.TRANSCRIPTION_PENDING_ERROR
 import org.deer.borrowai.data.service.MemoryService
 
 /**
  * Summarizes memories that were saved without a summary. Each memory is tried at most
  * [MAX_SUMMARY_ATTEMPTS] times. An attempt counts only after summarization has finished with a
- * failure. An empty result or a memory with nothing to summarize from gives up at once.
+ * failure. A memory with no transcript is skipped, not attempted or counted. An empty result gives up at once.
  * Runs at launch and then periodically.
  */
 class MemorySummaryRecoveryJob(
@@ -49,20 +48,8 @@ class MemorySummaryRecoveryJob(
 
     /** Returns true only when a summary was stored. */
     private suspend fun process(memory: Memory): Boolean {
-        if (memory.transcription.isBlank()) {
-            return when {
-                // Not transcribed yet: a retry, counted, until the transcriber finishes or the limit is reached.
-                !memory.transcriptionDone && memory.recordingPath != null -> {
-                    memoryService.recordFinishedAttempt(memory.id, TRANSCRIPTION_PENDING_ERROR)
-                    false
-                }
-                // Transcribed and blank, or no recording to transcribe: nothing will change, so give up now.
-                else -> {
-                    memoryService.giveUpSummary(memory.id)
-                    false
-                }
-            }
-        }
+        // No transcript means nothing to summarize: skip without calling the summarizer or counting an attempt.
+        if (memory.transcription.isBlank()) return false
         return when (val result = summarize(memory.transcription)) {
             is SummaryResult.Summary -> if (result.text.isBlank()) {
                 memoryService.recordEmpty(memory.id)

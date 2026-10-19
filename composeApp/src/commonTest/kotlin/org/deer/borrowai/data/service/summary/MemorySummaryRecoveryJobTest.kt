@@ -10,7 +10,6 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SummaryStatus
-import org.deer.borrowai.data.domain.TRANSCRIPTION_PENDING_ERROR
 import org.deer.borrowai.data.service.FakeMemoryService
 
 class MemorySummaryRecoveryJobTest {
@@ -131,25 +130,27 @@ class MemorySummaryRecoveryJobTest {
     }
 
     @Test
-    fun blankTranscriptWithoutRecordingGivesUpWithoutCallingSummarizer() = runTest {
+    fun blankTranscriptIsSkippedWithoutCallingSummarizerOrCounting() = runTest {
+        val service = service(memory("a", transcription = "", recordingPath = "a.m4a"))
+        val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
+
+        val stored = job(service, summarizer).recover()
+
+        assertEquals(0, stored)
+        assertEquals(0, summarizer.calls)
+        assertEquals(0, service.get("a").summaryAttempts)
+        assertEquals(null, service.get("a").lastTranscriptionError)
+    }
+
+    @Test
+    fun blankTranscriptWithoutRecordingIsSkippedWithoutCounting() = runTest {
         val service = service(memory("a", transcription = "", recordingPath = null))
         val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
 
         job(service, summarizer).recover()
 
         assertEquals(0, summarizer.calls)
-        assertEquals(MAX_SUMMARY_ATTEMPTS, service.get("a").summaryAttempts)
-    }
-
-    @Test
-    fun blankTranscriptWithRecordingCountsAsAttemptWithoutCallingSummarizer() = runTest {
-        val service = service(memory("a", transcription = "", recordingPath = "a.m4a"))
-        val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
-
-        job(service, summarizer).recover()
-
-        assertEquals(0, summarizer.calls)
-        assertEquals(1, service.get("a").summaryAttempts)
+        assertEquals(0, service.get("a").summaryAttempts)
     }
 
     @Test
@@ -203,26 +204,15 @@ class MemorySummaryRecoveryJobTest {
     }
 
     @Test
-    fun blankTranscriptNotDoneIsCountedWithPendingError() = runTest {
-        val service = service(memory("a", transcription = "", recordingPath = "a.m4a"))
-        val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
-
-        job(service, summarizer).recover()
-
-        assertEquals(TRANSCRIPTION_PENDING_ERROR, service.get("a").lastTranscriptionError)
-        assertEquals(1, service.get("a").summaryAttempts)
-    }
-
-    @Test
-    fun blankTranscriptAlreadyDoneGivesUpAtOnce() = runTest {
+    fun blankTranscriptAlreadyDoneIsSkippedWithoutGivingUp() = runTest {
         val service = service(memory("a", transcription = "", recordingPath = "a.m4a").copy(transcriptionDone = true))
         val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
 
         job(service, summarizer).recover()
 
         assertEquals(0, summarizer.calls)
-        assertEquals(SummaryStatus.GAVE_UP, service.get("a").summaryStatus)
-        assertEquals(MAX_SUMMARY_ATTEMPTS, service.get("a").summaryAttempts)
+        assertEquals(SummaryStatus.PENDING, service.get("a").summaryStatus)
+        assertEquals(0, service.get("a").summaryAttempts)
     }
 
     @Test
