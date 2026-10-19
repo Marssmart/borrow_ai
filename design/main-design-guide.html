@@ -364,6 +364,15 @@
       font-weight: 700;
       white-space: nowrap;
     }
+    .memory-card.is-untranscribed {
+      background: linear-gradient(160deg, #fffaf1 0%, #fdf3e2 100%);
+      border-color: rgb(214 170 110 / 45%);
+    }
+    .memory-section.pending p {
+      color: #47636a;
+      font-style: italic;
+      opacity: .8;
+    }
     .memory-card.is-playing {
       outline: 2px solid rgb(20 117 123 / 76%);
       outline-offset: -2px;
@@ -629,6 +638,7 @@
       },
       {
         title: "Reading notes: small habits",
+        untranscribed: true,
         date: "Yesterday · 6:25 PM",
         summary: "Small routines are easier to maintain when they are attached to an existing daily habit.",
         original: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. A useful routine should be small enough to repeat on a busy day. Attach a new action to something that already happens, then review it after a week instead of trying to change everything at once.",
@@ -677,9 +687,9 @@
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     })[character]);
     const preview = (value) => value.length > 240 ? `${value.slice(0, 240).trimEnd()}...` : value;
-    const audioButtons = () => `<div class="audio-actions">
+    const audioButtons = (untranscribed = false) => `<div class="audio-actions">
       <span class="audio-action" data-play-track="original"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play original</span></span>
-      <span class="audio-action" data-play-track="summary"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play summary</span></span>
+      ${untranscribed ? "" : `<span class="audio-action" data-play-track="summary"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play summary</span></span>`}
     </div>`;
     const summaryIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h8l4 4V20H6z"/><path d="M14 4.5v4h4M9 12h6M9 15.5h6"/></svg>`;
     const transcriptIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3.5 9v6M7 5.5v13M10.5 8v8M14 3.5v17M17.5 7v10M21 9.5v5"/></svg>`;
@@ -720,7 +730,17 @@
       </section>`;
     }
 
+    function renderPendingMemoryCard(memory, index, design) {
+      const titleDateFirst = design.key === "aurora-cards" || design.key === "journal-rows";
+      const header = renderMemoryHeader(memory, { dateFirst: titleDateFirst });
+      const pending = `<section class="memory-section pending" aria-label="Waiting for transcription">
+        <p>Waiting for transcription…</p>
+      </section>`;
+      return `<article class="memory-card card--${design.key} is-untranscribed" data-memory-index="${index}">${header}${pending}${audioButtons(true)}</article>`;
+    }
+
     function renderMemoryCard(memory, index, design) {
+      if (memory.untranscribed) return renderPendingMemoryCard(memory, index, design);
       const titleDateFirst = design.key === "aurora-cards" || design.key === "journal-rows";
       const header = renderMemoryHeader(memory, { dateFirst: titleDateFirst });
       const summary = renderMemorySection(memory, "summary", design);
