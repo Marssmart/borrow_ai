@@ -373,6 +373,21 @@
       font-style: italic;
       opacity: .8;
     }
+    .memory-card.is-summary-unavailable {
+      background: linear-gradient(160deg, #f4f7f8 0%, #e8eef0 100%);
+      border-color: rgb(96 118 128 / 38%);
+    }
+    .memory-section.unavailable { display: flex; gap: 6px; align-items: flex-start; }
+    .memory-section.unavailable .section-icon { flex: 0 0 13px; width: 13px; height: 13px; color: #5b7682; margin-top: 1px; }
+    .memory-section.unavailable h4 { color: #5b7682; }
+    .memory-section.unavailable p { color: #4f6670; }
+    .audio-action.is-disabled {
+      border-color: rgb(91 118 130 / 22%);
+      background: #eef2f4;
+      color: #7d909a;
+      opacity: .7;
+      cursor: not-allowed;
+    }
     .memory-card.is-playing {
       outline: 2px solid rgb(20 117 123 / 76%);
       outline-offset: -2px;
@@ -644,6 +659,13 @@
         original: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. A useful routine should be small enough to repeat on a busy day. Attach a new action to something that already happens, then review it after a week instead of trying to change everything at once.",
       },
       {
+        title: "Voice note from the car",
+        summaryUnavailable: true,
+        date: "October 8 · 7:30 AM",
+        summary: "",
+        original: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Remember to call the garage about the tire rotation before Friday and confirm the appointment time by text.",
+      },
+      {
         title: "Questions for the team review",
         date: "October 9 · 2:10 PM",
         summary: "Ask which part of the prototype needs clarification and what should be tested next.",
@@ -687,10 +709,11 @@
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     })[character]);
     const preview = (value) => value.length > 240 ? `${value.slice(0, 240).trimEnd()}...` : value;
-    const audioButtons = (untranscribed = false) => `<div class="audio-actions">
+    const audioButtons = (untranscribed = false, summaryUnavailable = false) => `<div class="audio-actions">
       <span class="audio-action" data-play-track="original"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play original</span></span>
-      ${untranscribed ? "" : `<span class="audio-action" data-play-track="summary"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play summary</span></span>`}
+      ${untranscribed ? "" : `<span class="audio-action${summaryUnavailable ? " is-disabled" : ""}" data-play-track="summary"${summaryUnavailable ? ` aria-disabled="true"` : ""}><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play summary</span></span>`}
     </div>`;
+    const infoIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>`;
     const summaryIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h8l4 4V20H6z"/><path d="M14 4.5v4h4M9 12h6M9 15.5h6"/></svg>`;
     const transcriptIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3.5 9v6M7 5.5v13M10.5 8v8M14 3.5v17M17.5 7v10M21 9.5v5"/></svg>`;
 
@@ -739,13 +762,25 @@
       return `<article class="memory-card card--${design.key} is-untranscribed" data-memory-index="${index}">${header}${pending}${audioButtons(true)}</article>`;
     }
 
+    function renderUnavailableSummarySection() {
+      return `<section class="memory-section unavailable" aria-label="Summary unavailable">
+        <span class="section-icon" aria-hidden="true">${infoIcon}</span>
+        <div>
+          <h4>Summary unavailable</h4>
+          <p>A summary could not be created. The original recording is still available.</p>
+        </div>
+      </section>`;
+    }
+
     function renderMemoryCard(memory, index, design) {
       if (memory.untranscribed) return renderPendingMemoryCard(memory, index, design);
       const titleDateFirst = design.key === "aurora-cards" || design.key === "journal-rows";
       const header = renderMemoryHeader(memory, { dateFirst: titleDateFirst });
-      const summary = renderMemorySection(memory, "summary", design);
+      const summary = memory.summaryUnavailable
+        ? renderUnavailableSummarySection()
+        : renderMemorySection(memory, "summary", design);
       const original = renderMemorySection(memory, "original", design);
-      const controls = audioButtons();
+      const controls = audioButtons(false, Boolean(memory.summaryUnavailable));
       let content;
 
       switch (design.key) {
@@ -787,7 +822,8 @@
           content = `${header}${summary}${original}${controls}`;
       }
 
-      return `<article class="memory-card card--${design.key}" data-memory-index="${index}">${content}</article>`;
+      const unavailableClass = memory.summaryUnavailable ? " is-summary-unavailable" : "";
+      return `<article class="memory-card card--${design.key}${unavailableClass}" data-memory-index="${index}">${content}</article>`;
     }
 
     document.querySelector("[data-memory-list]").innerHTML = memories.map((memory, index) =>
@@ -851,6 +887,7 @@
         card.classList.toggle("is-playing", activeTrack !== null);
         card.querySelector("[data-audio-glyph]").textContent = activeTrack === "original" ? "Ⅱ" : "▶";
         card.querySelectorAll("[data-play-track]").forEach((button) => {
+          if (button.getAttribute("aria-disabled") === "true") return;
           const selected = activeTrack === button.dataset.playTrack;
           button.querySelector(".audio-action-icon").textContent = selected ? "Ⅱ" : "▶";
           button.querySelector(".audio-action-label").textContent =
