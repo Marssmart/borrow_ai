@@ -7,7 +7,6 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
-import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import java.nio.ByteOrder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -186,12 +185,7 @@ internal class AndroidBatchTranscriber(
         val config = OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
             modelConfig = OfflineModelConfig(
-                whisper = OfflineWhisperModelConfig(
-                    encoder = encoderPath,
-                    decoder = decoderPath,
-                    language = "",
-                    task = "transcribe",
-                ),
+                whisper = whisperModelConfig(encoder = encoderPath, decoder = decoderPath),
                 tokens = tokensPath,
                 numThreads = THREADS,
                 debug = false,

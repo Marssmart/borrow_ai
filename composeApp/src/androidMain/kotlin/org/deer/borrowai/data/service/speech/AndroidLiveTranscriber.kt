@@ -8,7 +8,6 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
-import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import okio.IOException
 import okio.Path
 import org.deer.borrowai.data.service.model.ModelCatalog
@@ -207,12 +206,7 @@ internal class AndroidLiveTranscriber(
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
                 modelConfig = OfflineModelConfig(
-                    whisper = OfflineWhisperModelConfig(
-                        encoder = paths.encoder,
-                        decoder = paths.decoder,
-                        language = "",
-                        task = "transcribe",
-                    ),
+                    whisper = whisperModelConfig(encoder = paths.encoder, decoder = paths.decoder),
                     tokens = paths.tokens,
                     numThreads = THREADS,
                     debug = false,
