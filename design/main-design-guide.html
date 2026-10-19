@@ -515,8 +515,205 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.12); }
     }
+    .mind-map-section { margin-top: 56px; }
+    .mind-map-head { margin-bottom: 22px; }
+    .mind-map-title {
+      margin: 0;
+      color: #17201d;
+      font-size: clamp(24px, 3.4vw, 34px);
+      letter-spacing: -.04em;
+      line-height: 1.05;
+    }
+    .mm-explorer { display: grid; gap: 16px; }
+    .mm-controls {
+      display: grid;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid #d2d9d4;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 72%);
+    }
+    .mm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mm-chip,
+    .mm-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid #d2d9d4;
+      border-radius: 999px;
+      background: #fff;
+      color: #17201d;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .mm-btn:disabled { opacity: .4; cursor: default; }
+    .mm-chip[aria-pressed="false"] { opacity: .45; }
+    .mm-count { color: #53605b; font-weight: 600; }
+    .mm-chip:focus-visible,
+    .mm-btn:focus-visible,
+    .mm-time input:focus-visible { outline: 2px solid #14757b; outline-offset: 2px; }
+    .mm-time {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-time input { flex: 1 1 200px; accent-color: #14757b; }
+    .mm-time output { min-width: 84px; color: #17201d; font-weight: 700; }
+    .mm-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 16px;
+      align-items: start;
+    }
+    .mm-stage,
+    .mm-detail {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid #d2d9d4;
+      border-radius: 22px;
+      background: rgb(255 255 255 / 72%);
+      box-shadow: 0 10px 26px rgb(24 39 30 / 6%);
+    }
+    .mm-detail { position: sticky; top: 16px; }
+    .option-index {
+      margin: 0 0 5px;
+      color: #14757b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .option-title {
+      margin: 0;
+      color: #17201d;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+    .option-caption {
+      margin: 5px 0 14px;
+      color: #53605b;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .mm-graph {
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      background-color: #f5fafa;
+      background-image: radial-gradient(#dfe7e3 1px, transparent 1px);
+      background-size: 24px 24px;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+    }
+    .mm-graph svg { display: block; width: 100%; height: auto; }
+    .mm-graph text { font-size: 14px; fill: #53605b; }
+    .mm-graph .mm-count-label {
+      font-size: 17px;
+      font-weight: 800;
+      fill: #17201d;
+      paint-order: stroke;
+      stroke: #fff;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .mm-graph .mm-hub-name {
+      font-size: 14px;
+      font-weight: 800;
+      fill: #fff;
+    }
+    .mm-graph .mm-hub-count {
+      font-size: 13px;
+      font-weight: 700;
+      fill: #17201d;
+      paint-order: stroke;
+      stroke: #f5fafa;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .mm-node.is-selected > circle,
+    .mm-node.is-selected > path { stroke: #17201d; stroke-width: 2.5; }
+    .mm-graph .mm-edge-label {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #17201d;
+      paint-order: stroke;
+      stroke: #f5fafa;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .mm-node { cursor: pointer; transition: opacity .2s; }
+    .mm-hub { cursor: pointer; }
+    .mm-zoom {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mm-zoom .mm-btn { min-width: 42px; justify-content: center; padding: 6px 0; }
+    .mm-hint { margin: 10px 0 0; color: #53605b; font-size: 11px; }
+    .mm-mix {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin: 0 0 12px;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-list {
+      display: grid;
+      gap: 6px;
+      max-height: 240px;
+      margin: 0 0 12px;
+      padding: 0;
+      overflow: auto;
+      list-style: none;
+    }
+    .mm-list .mm-btn { width: 100%; justify-content: flex-start; border-radius: 12px; }
+    .mm-empty { margin: 24px 0; color: #53605b; font-size: 13px; text-align: center; }
+    .mm-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-stats strong { display: block; color: #17201d; font-size: 18px; letter-spacing: -.02em; }
+    .mm-facts {
+      display: grid;
+      gap: 8px;
+      margin: 14px 0;
+      padding: 0;
+      list-style: none;
+      color: #53605b;
+      font-size: 12px;
+    }
+    .mm-facts strong { display: block; color: #17201d; font-size: 18px; letter-spacing: -.02em; }
+    .mm-note { margin: 0 0 12px; color: #53605b; font-size: 12px; line-height: 1.45; }
+    .mm-dot {
+      display: inline-block;
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+
     @media (max-width: 760px) {
       .workspace { width: min(100% - 24px, 540px); padding-top: 24px; }
+      .mm-body { grid-template-columns: 1fr; }
+      .mm-detail { position: static; }
       .workspace-head { align-items: flex-start; flex-direction: column; }
       .mock-grid { grid-template-columns: 1fr; gap: 24px; }
       .device { width: min(100%, 340px); }
@@ -620,6 +817,43 @@
         <figcaption class="screen-caption">Detail</figcaption>
       </figure>
     </div>
+
+    <section class="mind-map-section" aria-labelledby="mind-map-title">
+      <header class="workspace-head mind-map-head">
+        <div>
+          <p class="eyebrow">Experiment · Mind map</p>
+          <h2 class="mind-map-title" id="mind-map-title">Memory explorer</h2>
+          <p class="workspace-description">Each category is a hub. Every memory is a single node, linked to each category it belongs to, and filled with a blend of those category colours. Memories spiral outward from their hubs in time order, so the oldest sits nearest. Click a hub to show only its category; use Reset to show all. Zoom out and nearby memories merge into bigger groups; zoom in to reveal every one.</p>
+        </div>
+      </header>
+      <div class="mm-explorer">
+        <div class="mm-controls">
+          <div class="mm-row" id="mm-chips" role="group" aria-label="Categories"></div>
+          <div class="mm-time">
+            <label for="mm-cutoff">Memories up to</label>
+            <input type="range" id="mm-cutoff" min="0" max="0" value="0">
+            <output id="mm-cutoff-label" for="mm-cutoff"></output>
+            <button type="button" class="mm-btn" id="mm-play" aria-pressed="false">Play</button>
+            <button type="button" class="mm-btn" id="mm-reset">Reset</button>
+          </div>
+        </div>
+        <div class="mm-body">
+          <article class="mm-stage">
+            <div class="mm-graph" id="mm-graph" aria-label="Memory graph">
+              <div id="mm-canvas"></div>
+              <div class="mm-zoom">
+                <button type="button" class="mm-btn" id="mm-zoom-in" aria-label="Zoom in">+</button>
+                <button type="button" class="mm-btn" id="mm-zoom-out" aria-label="Zoom out">−</button>
+                <button type="button" class="mm-btn" id="mm-fit">Fit</button>
+              </div>
+            </div>
+            <p class="mm-hint">Scroll or pinch to zoom · drag to pan · click to inspect · double-click to zoom in · <span id="mm-zoom-label"></span></p>
+            <ul class="mm-stats" id="mm-stats"></ul>
+          </article>
+          <aside class="mm-detail" id="mm-detail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -935,5 +1169,539 @@
       if (timer !== null) clearInterval(timer);
     });
   </script>
+  <script>
+    (function () {
+      const DAY = 864e5;
+      const categories = [
+        { name: "Work", color: "#14757b" },
+        { name: "Personal", color: "#7d80cf" },
+        { name: "Ideas", color: "#4f86c0" },
+        { name: "Health", color: "#4f9a7a" },
+      ];
+      const colorOf = Object.fromEntries(categories.map((c) => [c.name, c.color]));
+
+      // One row per memory. Memories filed under several categories appear once and list each category.
+      const memoryRows = [
+        ["2025-01-12", 96, ["Personal"]], ["2025-02-02", 318, ["Personal"]],
+        ["2025-02-27", 150, ["Personal"]], ["2025-03-03", 412, ["Work"]],
+        ["2025-03-15", 442, ["Personal"]], ["2025-03-19", 265, ["Work"]],
+        ["2025-04-03", 75, ["Personal"]], ["2025-04-08", 980, ["Work", "Ideas"]],
+        ["2025-04-20", 240, ["Ideas"]], ["2025-04-29", 260, ["Personal"]],
+        ["2025-05-07", 1500, ["Ideas"]], ["2025-05-14", 540, ["Work"]],
+        ["2025-05-20", 610, ["Personal"]], ["2025-06-01", 720, ["Health"]],
+        ["2025-06-02", 1210, ["Work", "Health"]], ["2025-06-11", 128, ["Personal"]],
+        ["2025-06-25", 620, ["Ideas"]], ["2025-07-01", 880, ["Personal", "Ideas"]],
+        ["2025-07-08", 390, ["Ideas"]], ["2025-07-15", 185, ["Health"]],
+        ["2025-07-21", 330, ["Work"]], ["2025-07-24", 205, ["Personal"]],
+        ["2025-08-02", 905, ["Ideas"]], ["2025-08-09", 147, ["Personal"]],
+        ["2025-08-11", 720, ["Work"]], ["2025-08-30", 490, ["Personal"]],
+        ["2025-08-30", 180, ["Ideas"]], ["2025-09-02", 150, ["Work"]],
+        ["2025-09-09", 450, ["Health"]], ["2025-09-14", 66, ["Personal"]],
+        ["2025-09-18", 605, ["Work"]], ["2025-10-02", 333, ["Personal"]],
+      ];
+
+      // Blend category colours by averaging their RGB channels.
+      const mixHex = (hexes) => {
+        const rgb = hexes.map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+        return "#" + [0, 1, 2].map((j) => {
+          const v = Math.round(rgb.reduce((s, c) => s + c[j], 0) / rgb.length);
+          return v.toString(16).padStart(2, "0");
+        }).join("");
+      };
+
+      const everything = memoryRows
+        .map(([date, sec, cats]) => ({
+          t: Date.parse(`${date}T00:00:00Z`), sec, cats, rank: {},
+          color: mixHex(cats.map((c) => colorOf[c])),
+        }))
+        .sort((a, b) => a.t - b.t)
+        .map((it, i) => ({ ...it, id: `m-${i + 1}` }));
+      const data = categories.map((c) => {
+        const items = everything.filter((it) => it.cats.includes(c.name));
+        items.forEach((it, i) => { it.rank[c.name] = { n: i + 1, of: items.length }; });
+        return { ...c, items };
+      });
+      const byId = Object.fromEntries(everything.map((it) => [it.id, it]));
+      const tMin = everything[0].t;
+      const tMax = everything[everything.length - 1].t;
+      const dates = [...new Set(everything.map((it) => it.t))];
+
+      const fmtDate = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      const fmtDur = (sec) => {
+        let h = Math.floor(sec / 3600);
+        let m = Math.round((sec % 3600) / 60);
+        if (m === 60) { h += 1; m = 0; }
+        return h ? `${h}h ${m}m` : `${m}m`;
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const W = 1000, H = 680, PAD = 80, HUB_R = 34;
+      const chips = $("mm-chips");
+      const canvas = $("mm-canvas");
+      const graph = $("mm-graph");
+      const stats = $("mm-stats");
+      const detail = $("mm-detail");
+      const slider = $("mm-cutoff");
+      const play = $("mm-play");
+
+      // Hub layout, computed once so filters never move anything. Each category is a hub on a ring, and its memories spiral outward in time order, so the oldest sits nearest the hub.
+      const hubs = data.map((c, ci) => {
+        const a = ((-90 + (ci * 360) / data.length) * Math.PI) / 180;
+        return { ci, cat: c.name, color: c.color, x: W / 2 + 280 * Math.cos(a), y: H / 2 + 230 * Math.sin(a) };
+      });
+      const hubOf = Object.fromEntries(hubs.map((h) => [h.cat, h]));
+      // Each memory gets one position: the average of its spiral slot in each of its categories, so shared memories land between their hubs.
+      const spiral = (h, i) => {
+        const theta = i * 2.4, r = 90 + 26 * Math.sqrt(i);
+        return { x: h.x + r * Math.cos(theta), y: h.y + r * Math.sin(theta) };
+      };
+      const nodes = everything.map((it) => {
+        const ps = it.cats.map((cat) => spiral(hubOf[cat], it.rank[cat].n - 1));
+        return {
+          id: it.id,
+          x: ps.reduce((s, p) => s + p.x, 0) / ps.length,
+          y: ps.reduce((s, p) => s + p.y, 0) / ps.length,
+        };
+      });
+      const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
+      const xs = [...nodes.map((n) => n.x), ...hubs.map((h) => h.x)], ys = [...nodes.map((n) => n.y), ...hubs.map((h) => h.y)];
+      const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+      const fitK = Math.min((W - 2 * PAD) / (bx1 - bx0), (H - 2 * PAD) / (by1 - by0));
+      const fit = { k: fitK, tx: W / 2 - ((bx0 + bx1) / 2) * fitK, ty: H / 2 - ((by0 + by1) / 2) * fitK };
+      const view = { ...fit };
+      const clampK = (k) => Math.min(fit.k * 12, Math.max(fit.k * 0.5, k));
+      const centerOn = (x, y, k) => {
+        const kk = clampK(k);
+        return { k: kk, tx: W / 2 - x * kk, ty: H / 2 - y * kk };
+      };
+      const zoomTo = (x, y, f, base = view) => {
+        const k = clampK(base.k * f), r = k / base.k;
+        return { k, tx: x - (x - base.tx) * r, ty: y - (y - base.ty) * r };
+      };
+      const radiusOf = (n) => 10 + 6 * Math.sqrt(n);
+
+      const state = { enabled: new Set(data.map((c) => c.name)), cutoff: dates.length - 1, sel: null, timer: null };
+      const isVisible = (it) => it.cats.some((c) => state.enabled.has(c)) && it.t <= dates[state.cutoff];
+      let clusters = [];
+      let clusterOf = {};
+
+      // Leader clustering: memories within ~70px on screen merge, so zooming out grows the groups.
+      function buildClusters(items) {
+        const R = 70 / view.k;
+        const out = [];
+        items.forEach((it) => {
+          const p = nodeById[it.id];
+          let best = null, bestD = R * R;
+          out.forEach((c) => {
+            const d2 = (c.x - p.x) ** 2 + (c.y - p.y) ** 2;
+            if (d2 <= bestD) { bestD = d2; best = c; }
+          });
+          if (!best) { best = { items: [], sx: 0, sy: 0, x: 0, y: 0 }; out.push(best); }
+          best.items.push(it);
+          best.sx += p.x; best.sy += p.y;
+          best.x = best.sx / best.items.length; best.y = best.sy / best.items.length;
+        });
+        return out.map((c, i) => ({
+          i,
+          n: c.items.length,
+          x: c.x,
+          y: c.y,
+          items: c.items,
+          ids: c.items.map((it) => it.id),
+          px: view.tx + c.x * view.k,
+          py: view.ty + c.y * view.k,
+          // A single memory is filled with its blended colour; a group shows its category mix as a pie.
+          mix: c.items.length === 1
+            ? [{ color: c.items[0].color, n: 1 }]
+            : data.map((d) => ({ color: d.color, n: c.items.filter((it) => it.cats.includes(d.name)).length })).filter((m) => m.n),
+        }));
+      }
+
+      function pie(x, y, r, mix) {
+        if (mix.length === 1) {
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${mix[0].color}" stroke="#fff" stroke-width="2"/>`;
+        }
+        const total = mix.reduce((s, p) => s + p.n, 0);
+        let a = -Math.PI / 2, out = "";
+        mix.forEach((p) => {
+          const b = a + (p.n / total) * 2 * Math.PI;
+          const large = b - a > Math.PI ? 1 : 0;
+          out += `<path d="M${x.toFixed(1)} ${y.toFixed(1)} L${(x + r * Math.cos(a)).toFixed(1)} ${(y + r * Math.sin(a)).toFixed(1)} A${r.toFixed(1)} ${r.toFixed(1)} 0 ${large} 1 ${(x + r * Math.cos(b)).toFixed(1)} ${(y + r * Math.sin(b)).toFixed(1)} Z" fill="${p.color}" stroke="#fff" stroke-width="1.5"/>`;
+          a = b;
+        });
+        return out;
+      }
+
+      function drawGraph() {
+        const visible = everything.filter(isVisible);
+        clusters = buildClusters(visible);
+        clusterOf = {};
+        clusters.forEach((c) => c.ids.forEach((id) => { clusterOf[id] = c; }));
+        const focusCats = state.sel && state.sel.focus ? byId[state.sel.focus].cats : [];
+        const selIds = new Set(state.sel ? state.sel.ids : []);
+
+        // Each hub connects to every cluster holding its memories; arrows point outward, from oldest (nearest the hub) to newest.
+        const hubPx = (h) => ({ x: view.tx + h.x * view.k, y: view.ty + h.y * view.k });
+        const edgeList = [];
+        clusters.forEach((c) => {
+          data.forEach((d, ci) => {
+            const n = c.items.filter((it) => it.cats.includes(d.name)).length;
+            if (n) edgeList.push({ h: hubOf[d.name], c, n, ci, cat: d.name, color: d.color });
+          });
+        });
+        const edges = edgeList.map((e) => {
+          const hp = hubPx(e.h), cp = { x: e.c.px, y: e.c.py };
+          const ax = hp.x, ay = hp.y, bx = cp.x, by = cp.y;
+          const d = Math.max(Math.hypot(bx - ax, by - ay), 1), ux = (bx - ax) / d, uy = (by - ay) / d;
+          const ra = HUB_R + 2, rb = radiusOf(e.c.n) + 3;
+          const sx = ax + ux * ra, sy = ay + uy * ra, ex = bx - ux * rb, ey = by - uy * rb;
+          const bend = (e.ci - (data.length - 1) / 2) * 10;
+          const cx = (sx + ex) / 2 - uy * bend, cy = (sy + ey) / 2 + ux * bend;
+          const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex, ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+          const dim = focusCats.length && !focusCats.includes(e.cat);
+          const width = (1.2 + Math.sqrt(e.n) * 1.1).toFixed(1);
+          const label = e.n > 1 ? `<text class="mm-edge-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle">${e.n}</text>` : "";
+          return `<path d="M${sx.toFixed(1)} ${sy.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${e.color}" stroke-width="${width}" stroke-opacity="${dim ? 0.15 : 0.7}" marker-end="url(#mm-arrow-${e.ci})"><title>${e.n} ${e.cat} ${e.n === 1 ? "memory" : "memories"}, oldest to newest</title></path>${label}`;
+        }).join("");
+        const hubsSvg = hubs.map((h) => {
+          const n = visible.filter((it) => it.cats.includes(h.cat)).length;
+          const dim = focusCats.length && !focusCats.includes(h.cat);
+          const hp = hubPx(h);
+          return `<g class="mm-hub" data-cat="${h.cat}" opacity="${dim ? 0.3 : 1}"><title>${h.cat}: ${n} ${n === 1 ? "memory" : "memories"}</title><circle cx="${hp.x.toFixed(1)}" cy="${hp.y.toFixed(1)}" r="${HUB_R}" fill="${h.color}" stroke="#fff" stroke-width="3"/><text class="mm-hub-name" x="${hp.x.toFixed(1)}" y="${(hp.y + 5).toFixed(1)}" text-anchor="middle">${h.cat}</text><text class="mm-hub-count" x="${hp.x.toFixed(1)}" y="${(hp.y + HUB_R + 16).toFixed(1)}" text-anchor="middle">${n}</text></g>`;
+        }).join("");
+
+        const nodesSvg = clusters.map((c) => {
+          const r = radiusOf(c.n);
+          const selected = c.ids.some((id) => selIds.has(id));
+          const dim = focusCats.length && !c.items.some((it) => it.cats.some((x) => focusCats.includes(x)));
+          const first = c.items[0], last = c.items[c.n - 1];
+          const span = c.n > 1 ? `${fmtDate(first.t)} – ${fmtDate(last.t)}` : fmtDate(first.t);
+          const audio = fmtDur(c.items.reduce((s, it) => s + it.sec, 0));
+          const label = c.n > 1 ? `<text class="mm-count-label" x="${c.px.toFixed(1)}" y="${(c.py + 6).toFixed(1)}" text-anchor="middle">${c.n}</text>` : "";
+          const caption = view.k >= fit.k * 1.4 ? `<text x="${c.px.toFixed(1)}" y="${(c.py + r + 14).toFixed(1)}" text-anchor="middle">${span}</text>` : "";
+          return `<g class="mm-node${selected ? " is-selected" : ""}" data-i="${c.i}" opacity="${dim ? 0.3 : 1}"><title>${c.n} ${c.n === 1 ? "memory" : "memories"} · ${span} · ${audio} audio</title>${pie(c.px, c.py, r, c.mix)}${label}${caption}</g>`;
+        }).join("");
+
+        const defs = data.map((c, i) =>
+          `<marker id="mm-arrow-${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${c.color}"/></marker>`
+        ).join("");
+        const body = visible.length
+          ? edges + hubsSvg + nodesSvg
+          : `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">No memories match these filters.</text>`;
+        canvas.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Memory graph of ${visible.length} memories in ${clusters.length} groups"><defs>${defs}</defs>${body}</svg>`;
+        $("mm-zoom-label").textContent = `Zoom ${(view.k / fit.k).toFixed(1)}×`;
+        renderStats();
+      }
+
+      function updateChips() {
+        const cut = dates[state.cutoff];
+        chips.querySelectorAll(".mm-chip").forEach((b) => {
+          const c = data.find((x) => x.name === b.dataset.cat);
+          b.setAttribute("aria-pressed", String(state.enabled.has(c.name)));
+          b.querySelector(".mm-count").textContent = c.items.filter((it) => it.t <= cut).length;
+        });
+      }
+
+      function renderStats() {
+        const vis = everything.filter(isVisible);
+        if (!vis.length) { stats.innerHTML = ""; return; }
+        const total = vis.reduce((s, it) => s + it.sec, 0);
+        stats.innerHTML = [
+          `<li><strong>${vis.length}</strong>memories</li>`,
+          `<li><strong>${clusters.length}</strong>groups on screen</li>`,
+          `<li><strong>${fmtDate(vis[0].t)} – ${fmtDate(vis[vis.length - 1].t)}</strong>timeline span</li>`,
+          `<li><strong>${fmtDur(total)}</strong>audio</li>`,
+          `<li><strong>${new Set(vis.flatMap((it) => it.cats)).size}</strong>categories</li>`,
+        ].join("");
+      }
+
+      function renderMemory(it) {
+        const primary = it.cats[0];
+        const cat = data.find((c) => c.name === primary);
+        const prev = cat.items[it.rank[primary].n - 2];
+        const gap = prev
+          ? `${Math.round((it.t - prev.t) / DAY)} days after the previous ${primary} memory`
+          : `The oldest ${primary} memory, where this thread starts`;
+        const pos = Math.round(((it.t - tMin) / (tMax - tMin)) * 100);
+        const sec = it.sec;
+        const memTotal = it.cats.map((c) => data.find((d) => d.name === c).items.reduce((s, x) => s + x.sec, 0));
+        const ranks = it.cats.map((c) => `${c} ${it.rank[c].n} of ${it.rank[c].of}`).join(" · ");
+        const dots = it.cats.map((c) => `<i class="mm-dot" style="background:${colorOf[c]}"></i>`).join("");
+        detail.innerHTML = `
+          <p class="option-index">${dots} ${it.cats.join(" + ")}</p>
+          <h3 class="option-title">${fmtDate(it.t)}</h3>
+          <p class="option-caption">${gap}. Sits ${pos}% along the full timeline.</p>
+          <ul class="mm-facts">
+            <li><strong>${fmtDur(sec)}</strong>audio on this memory</li>
+            <li><strong>${ranks}</strong>position in its categories</li>
+            <li><strong>${fmtDur(Math.max(...memTotal))}</strong>${primary} total</li>
+          </ul>
+          ${isVisible(it) ? "" : `<p class="mm-note">Hidden by the current filters. Move the timeline or re-enable a category to see it on the graph.</p>`}
+          <div class="mm-row">
+            <button type="button" class="mm-btn" data-nav="-1" ${it.rank[primary].n === 1 ? "disabled" : ""}>← Earlier in ${primary}</button>
+            <button type="button" class="mm-btn" data-nav="1" ${it.rank[primary].n === it.rank[primary].of ? "disabled" : ""}>Later in ${primary} →</button>
+            <button type="button" class="mm-btn" data-random>Random</button>
+            <button type="button" class="mm-btn" data-clear>Clear</button>
+          </div>`;
+      }
+
+      function renderGroup(members) {
+        const first = members[0], last = members[members.length - 1];
+        const total = members.reduce((s, it) => s + it.sec, 0);
+        const mix = data.map((c) => ({ c, n: members.filter((it) => it.cats.includes(c.name)).length })).filter((m) => m.n);
+        const days = Math.round((last.t - first.t) / DAY);
+        const caption = members.length > 1 ? `Spans ${days} days. Zoom in to split it apart.` : "A single memory at this zoom level.";
+        detail.innerHTML = `
+          <p class="option-index">Group · ${members.length} ${members.length === 1 ? "memory" : "memories"}</p>
+          <h3 class="option-title">${first.t === last.t ? fmtDate(first.t) : `${fmtDate(first.t)} – ${fmtDate(last.t)}`}</h3>
+          <p class="option-caption">${caption}</p>
+          <ul class="mm-facts">
+            <li><strong>${fmtDur(total)}</strong>audio in this group</li>
+            <li><strong>${mix.length}</strong>${mix.length === 1 ? "category" : "categories"}</li>
+          </ul>
+          <p class="mm-mix">${mix.map(({ c, n }) => `<span><i class="mm-dot" style="background:${c.color}"></i> ${c.name} ${n}</span>`).join("")}</p>
+          <ul class="mm-list">${members.map((it) =>
+            `<li><button type="button" class="mm-btn" data-pick="${it.id}"><i class="mm-dot" style="background:${it.color}"></i>${fmtDate(it.t)} · ${it.cats.join(" + ")} · ${fmtDur(it.sec)}</button></li>`
+          ).join("")}</ul>
+          <div class="mm-row"><button type="button" class="mm-btn" data-clear>Clear selection</button></div>`;
+      }
+
+      function renderDetail() {
+        const sel = state.sel;
+        if (!sel) {
+          detail.innerHTML = `
+            <p class="option-index">Nothing selected</p>
+            <p class="mm-note">Click a node or a group to inspect it. Zoom out to merge memories into bigger groups, or zoom in to reveal each one.</p>
+            <button type="button" class="mm-btn" data-random>Pick a random memory</button>`;
+          return;
+        }
+        if (sel.focus) renderMemory(byId[sel.focus]);
+        else renderGroup(sel.ids.map((id) => byId[id]).sort((a, b) => a.t - b.t));
+      }
+
+      function renderPanels() {
+        updateChips();
+        slider.value = state.cutoff;
+        $("mm-cutoff-label").textContent = fmtDate(dates[state.cutoff]);
+        renderStats();
+        renderDetail();
+      }
+
+      function renderAll() {
+        drawGraph();
+        renderPanels();
+      }
+
+      chips.innerHTML = data.map((c) =>
+        `<button type="button" class="mm-chip" data-cat="${c.name}" aria-pressed="true"><i class="mm-dot" style="background:${c.color}"></i>${c.name} <span class="mm-count"></span></button>`
+      ).join("");
+      slider.max = dates.length - 1;
+
+      const pointers = new Map();
+      let anim = 0, frame = 0, drag = null, pinchD = 0, suppressClick = false;
+
+      const toSvg = (cx, cy) => {
+        const r = graph.getBoundingClientRect();
+        return { x: ((cx - r.left) * W) / r.width, y: ((cy - r.top) * H) / r.height };
+      };
+
+      const schedule = () => {
+        if (!frame) frame = requestAnimationFrame(() => { frame = 0; drawGraph(); });
+      };
+
+      let target = null;
+      function animateTo(to, ms = 320) {
+        cancelAnimationFrame(anim);
+        target = to;
+        const from = { ...view }, t0 = performance.now();
+        const step = (now) => {
+          const p = Math.min(1, (now - t0) / ms), e = 1 - (1 - p) ** 3;
+          view.k = from.k + (to.k - from.k) * e;
+          view.tx = from.tx + (to.tx - from.tx) * e;
+          view.ty = from.ty + (to.ty - from.ty) * e;
+          drawGraph();
+          if (p < 1) anim = requestAnimationFrame(step); else target = null;
+        };
+        anim = requestAnimationFrame(step);
+      }
+
+      function focusMemory(id) {
+        const n = nodeById[id];
+        state.sel = { ids: [id], focus: id };
+        animateTo(centerOn(n.x, n.y, Math.max(view.k, fit.k * 3)));
+        renderPanels();
+      }
+
+      function stopPlay() {
+        clearInterval(state.timer);
+        state.timer = null;
+        play.textContent = "Play";
+        play.setAttribute("aria-pressed", "false");
+      }
+
+      function onPointerMove(e) {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size >= 2) {
+          const [p, q] = [...pointers.values()];
+          const d = Math.hypot(p.x - q.x, p.y - q.y);
+          const mid = toSvg((p.x + q.x) / 2, (p.y + q.y) / 2);
+          if (pinchD) Object.assign(view, zoomTo(mid.x, mid.y, d / pinchD));
+          pinchD = d;
+          drag.moved = true;
+          schedule();
+          return;
+        }
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.hypot(dx, dy) > 4) drag.moved = true;
+        const r = graph.getBoundingClientRect();
+        view.tx = drag.tx + (dx * W) / r.width;
+        view.ty = drag.ty + (dy * H) / r.height;
+        schedule();
+      }
+
+      function onPointerUp(e) {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.delete(e.pointerId);
+        if (drag && drag.moved) suppressClick = true;
+        if (pointers.size === 1) {
+          const p = [...pointers.values()][0];
+          drag = { x: p.x, y: p.y, tx: view.tx, ty: view.ty, moved: true };
+          pinchD = 0;
+        }
+        if (!pointers.size) {
+          drag = null;
+          pinchD = 0;
+          window.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerUp);
+        }
+      }
+
+      graph.addEventListener("pointerdown", (e) => {
+        if (e.target.closest(".mm-zoom")) return;
+        cancelAnimationFrame(anim);
+        suppressClick = false;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        drag = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, moved: false };
+        pinchD = 0;
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerUp);
+      });
+
+      graph.addEventListener("wheel", (e) => {
+        if (e.target.closest(".mm-zoom")) return;
+        e.preventDefault();
+        cancelAnimationFrame(anim);
+        const p = toSvg(e.clientX, e.clientY);
+        Object.assign(view, zoomTo(p.x, p.y, Math.exp(-e.deltaY * 0.0015)));
+        schedule();
+      }, { passive: false });
+
+      graph.addEventListener("click", (e) => {
+        if (suppressClick || e.target.closest(".mm-zoom")) return;
+        const hub = e.target.closest("[data-cat]");
+        if (hub) {
+          // Hub click isolates its category. Idempotent, so a double-click doesn't toggle twice.
+          state.enabled = new Set([hub.dataset.cat]);
+          state.sel = null;
+          renderAll();
+          return;
+        }
+        const g = e.target.closest("[data-i]");
+        if (!g) {
+          if (state.sel) { state.sel = null; renderAll(); }
+          return;
+        }
+        const c = clusters[Number(g.dataset.i)];
+        state.sel = { ids: c.ids, focus: c.n === 1 ? c.ids[0] : null };
+        renderAll();
+      });
+
+      graph.addEventListener("dblclick", (e) => {
+        if (e.target.closest(".mm-zoom")) return;
+        const g = e.target.closest("[data-i]");
+        if (g) {
+          const c = clusters[Number(g.dataset.i)];
+          animateTo(centerOn(c.x, c.y, view.k * 2));
+          return;
+        }
+        const p = toSvg(e.clientX, e.clientY);
+        animateTo(zoomTo(p.x, p.y, 1.8));
+      });
+
+      detail.addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (b.hasAttribute("data-clear")) {
+          state.sel = null;
+          renderAll();
+          return;
+        }
+        if (b.hasAttribute("data-random")) {
+          const pool = everything.filter(isVisible);
+          const pick = pool.length ? pool : everything;
+          focusMemory(pick[Math.floor(Math.random() * pick.length)].id);
+          return;
+        }
+        if (b.dataset.pick) {
+          focusMemory(b.dataset.pick);
+          return;
+        }
+        if (b.dataset.nav && state.sel && state.sel.focus) {
+          const it = byId[state.sel.focus];
+          const primary = it.cats[0];
+          const next = data.find((c) => c.name === primary).items[it.rank[primary].n - 1 + Number(b.dataset.nav)];
+          if (next) focusMemory(next.id);
+        }
+      });
+
+      chips.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-cat]");
+        if (!b) return;
+        const name = b.dataset.cat;
+        if (state.enabled.has(name)) state.enabled.delete(name);
+        else state.enabled.add(name);
+        renderAll();
+      });
+
+      slider.addEventListener("input", () => {
+        stopPlay();
+        state.cutoff = +slider.value;
+        renderAll();
+      });
+
+      play.addEventListener("click", () => {
+        if (state.timer) { stopPlay(); return; }
+        if (state.cutoff >= dates.length - 1) state.cutoff = 0;
+        play.textContent = "Pause";
+        play.setAttribute("aria-pressed", "true");
+        state.timer = setInterval(() => {
+          if (state.cutoff >= dates.length - 1) { stopPlay(); return; }
+          state.cutoff += 1;
+          renderAll();
+        }, 700);
+        renderAll();
+      });
+
+      $("mm-reset").addEventListener("click", () => {
+        stopPlay();
+        state.enabled = new Set(data.map((c) => c.name));
+        state.cutoff = dates.length - 1;
+        state.sel = null;
+        animateTo(fit);
+        renderAll();
+      });
+
+      const zoomStep = (f) => animateTo(zoomTo(W / 2, H / 2, f, target || view));
+      $("mm-zoom-in").addEventListener("click", () => zoomStep(1.6));
+      $("mm-zoom-out").addEventListener("click", () => zoomStep(1 / 1.6));
+      $("mm-fit").addEventListener("click", () => animateTo(fit));
+
+      renderAll();
+    })();
+  </script>
 </body>
+
 </html>
