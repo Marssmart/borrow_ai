@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.0.24]
+
+- Live and batch transcription on Android are fixed to English (Whisper `language = "en"`, `task = "transcribe"`) instead of auto-detecting the spoken language. The pinned multilingual models are unchanged, so no model download is needed.
+- Non-English speech will transcribe poorly until language selection is added back.
+- Updated Android and iOS versioning to 1.0.24 (build 25).
+
 ## [1.0.23]
 
 - Untranscribed memories now look distinct in the saved list: a cream card with a tan border and a muted "Waiting for transcription…" placeholder. They show "Play original" (plays the recording) and no "Play summary".
