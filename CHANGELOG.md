@@ -4,11 +4,19 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.0.24]
+## [1.2.0]
 
-- Live and batch transcription on Android are fixed to English (Whisper `language = "en"`, `task = "transcribe"`) instead of auto-detecting the spoken language. The pinned multilingual models are unchanged, so no model download is needed.
-- Non-English speech will transcribe poorly until language selection is added back.
-- Updated Android and iOS versioning to 1.0.24 (build 25).
+- The memory summary recovery job also runs right after a recording's transcription finishes, not only at app start and every 15 minutes.
+- Memories whose transcript is still pending are retried. Blank transcripts from a finished transcription give up at once, which also applies on iOS.
+- Each memory now has a summary status (pending, summarized, empty, or gave up) and stores the last transcription error.
+- The summarizer engine is not wired yet, so the job currently stores no summaries. No UI changes.
+- Updated Android and iOS versioning to 1.2.0 (build 26).
+
+## [1.1.0]
+
+- Added a memory summary recovery job. It runs at app start and every 15 minutes, and retries memories that were saved without a summary. Each memory gets up to 10 attempts. Empty or untranscribable results give up immediately, so they are not retried forever. Existing memories are migrated to the new summary state on first launch.
+- The summarizer engine is not wired yet, so the job currently stores no summaries. No UI changes.
+- Updated Android and iOS versioning to 1.1.0 (build 25).
 
 ## [1.0.23]
 

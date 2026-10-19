@@ -26,4 +26,25 @@ interface MemoryService {
 
     /** Permanently removes a memory that was already marked deleted. Returns true if it was removed. */
     suspend fun purge(id: String): Boolean
+
+    /** Stores the finished transcript of an active memory, even when [text] is blank. Clears the last transcription error. */
+    suspend fun recordTranscription(id: String, text: String): Either<MemoryError, Unit>
+
+    /** Stores [error] as the last transcription error of an active memory. Not an attempt on its own. */
+    suspend fun recordTranscriptionFailure(id: String, error: String): Either<MemoryError, Unit>
+
+    /**
+     * Counts one finished summarization attempt that did not produce a summary. [error] is stored as the
+     * last error when it is not null. The memory gives up once the limit is reached.
+     */
+    suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit>
+
+    /** Counts one finished attempt that produced a blank summary. Retried until the limit is reached. */
+    suspend fun recordEmpty(id: String): Either<MemoryError, Unit>
+
+    /** Stores [summary] on an active memory and marks it as summarized. */
+    suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit>
+
+    /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
+    suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
 }
