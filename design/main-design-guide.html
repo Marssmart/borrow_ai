@@ -822,7 +822,7 @@
         <div>
           <p class="eyebrow">Experiment · Mind map</p>
           <h2 class="mind-map-title" id="mind-map-title">Memory explorer</h2>
-          <p class="workspace-description">Each category is a hub, and its memories connect to it. Memories spiral outward from the hub in time order, so the oldest sits nearest. Zoom out and nearby memories merge into bigger groups; zoom in to reveal every one.</p>
+          <p class="workspace-description">Each category is a hub. Every memory is a single node, linked to each category it belongs to, and filled with a blend of those category colours. Memories spiral outward from their hubs in time order, so the oldest sits nearest. Zoom out and nearby memories merge into bigger groups; zoom in to reveal every one.</p>
         </div>
       </header>
       <div class="mm-explorer">
@@ -1172,34 +1172,54 @@
     (function () {
       const DAY = 864e5;
       const categories = [
-        { name: "Work", color: "#14757b", memories: [
-          ["2025-03-03", 412], ["2025-03-19", 265], ["2025-04-08", 980], ["2025-05-14", 540],
-          ["2025-06-02", 1210], ["2025-07-21", 330], ["2025-08-11", 720], ["2025-09-02", 150],
-          ["2025-09-18", 605],
-        ] },
-        { name: "Personal", color: "#7d80cf", memories: [
-          ["2025-01-12", 96], ["2025-02-02", 318], ["2025-02-27", 150], ["2025-03-15", 442],
-          ["2025-04-03", 75], ["2025-04-29", 260], ["2025-05-20", 610], ["2025-06-11", 128],
-          ["2025-07-01", 880], ["2025-07-24", 205], ["2025-08-09", 147], ["2025-08-30", 490],
-          ["2025-09-14", 66], ["2025-10-02", 333],
-        ] },
-        { name: "Ideas", color: "#4f86c0", memories: [
-          ["2025-04-20", 240], ["2025-05-07", 1500], ["2025-06-25", 620], ["2025-07-08", 390],
-          ["2025-08-02", 905], ["2025-08-30", 180],
-        ] },
-        { name: "Health", color: "#4f9a7a", memories: [
-          ["2025-06-01", 720], ["2025-07-15", 185], ["2025-09-09", 450],
-        ] },
+        { name: "Work", color: "#14757b" },
+        { name: "Personal", color: "#7d80cf" },
+        { name: "Ideas", color: "#4f86c0" },
+        { name: "Health", color: "#4f9a7a" },
+      ];
+      const colorOf = Object.fromEntries(categories.map((c) => [c.name, c.color]));
+
+      // One row per memory. Memories filed under several categories appear once and list each category.
+      const memoryRows = [
+        ["2025-01-12", 96, ["Personal"]], ["2025-02-02", 318, ["Personal"]],
+        ["2025-02-27", 150, ["Personal"]], ["2025-03-03", 412, ["Work"]],
+        ["2025-03-15", 442, ["Personal"]], ["2025-03-19", 265, ["Work"]],
+        ["2025-04-03", 75, ["Personal"]], ["2025-04-08", 980, ["Work", "Ideas"]],
+        ["2025-04-20", 240, ["Ideas"]], ["2025-04-29", 260, ["Personal"]],
+        ["2025-05-07", 1500, ["Ideas"]], ["2025-05-14", 540, ["Work"]],
+        ["2025-05-20", 610, ["Personal"]], ["2025-06-01", 720, ["Health"]],
+        ["2025-06-02", 1210, ["Work", "Health"]], ["2025-06-11", 128, ["Personal"]],
+        ["2025-06-25", 620, ["Ideas"]], ["2025-07-01", 880, ["Personal", "Ideas"]],
+        ["2025-07-08", 390, ["Ideas"]], ["2025-07-15", 185, ["Health"]],
+        ["2025-07-21", 330, ["Work"]], ["2025-07-24", 205, ["Personal"]],
+        ["2025-08-02", 905, ["Ideas"]], ["2025-08-09", 147, ["Personal"]],
+        ["2025-08-11", 720, ["Work"]], ["2025-08-30", 490, ["Personal"]],
+        ["2025-08-30", 180, ["Ideas"]], ["2025-09-02", 150, ["Work"]],
+        ["2025-09-09", 450, ["Health"]], ["2025-09-14", 66, ["Personal"]],
+        ["2025-09-18", 605, ["Work"]], ["2025-10-02", 333, ["Personal"]],
       ];
 
+      // Blend category colours by averaging their RGB channels.
+      const mixHex = (hexes) => {
+        const rgb = hexes.map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+        return "#" + [0, 1, 2].map((j) => {
+          const v = Math.round(rgb.reduce((s, c) => s + c[j], 0) / rgb.length);
+          return v.toString(16).padStart(2, "0");
+        }).join("");
+      };
+
+      const everything = memoryRows
+        .map(([date, sec, cats]) => ({
+          t: Date.parse(`${date}T00:00:00Z`), sec, cats, rank: {},
+          color: mixHex(cats.map((c) => colorOf[c])),
+        }))
+        .sort((a, b) => a.t - b.t)
+        .map((it, i) => ({ ...it, id: `m-${i + 1}` }));
       const data = categories.map((c) => {
-        const items = c.memories
-          .map(([date, sec]) => ({ t: Date.parse(`${date}T00:00:00Z`), sec, cat: c.name, color: c.color }))
-          .sort((a, b) => a.t - b.t)
-          .map((it, i, arr) => ({ ...it, id: `${c.name.toLowerCase()}-${i + 1}`, n: i + 1, of: arr.length }));
+        const items = everything.filter((it) => it.cats.includes(c.name));
+        items.forEach((it, i) => { it.rank[c.name] = { n: i + 1, of: items.length }; });
         return { ...c, items };
       });
-      const everything = data.flatMap((c) => c.items).sort((a, b) => a.t - b.t);
       const byId = Object.fromEntries(everything.map((it) => [it.id, it]));
       const tMin = everything[0].t;
       const tMax = everything[everything.length - 1].t;
@@ -1229,12 +1249,18 @@
         return { ci, cat: c.name, color: c.color, x: W / 2 + 280 * Math.cos(a), y: H / 2 + 230 * Math.sin(a) };
       });
       const hubOf = Object.fromEntries(hubs.map((h) => [h.cat, h]));
-      const nodes = data.flatMap((c) => {
-        const h = hubOf[c.name];
-        return c.items.map((it, i) => {
-          const theta = i * 2.4, r = 90 + 26 * Math.sqrt(i);
-          return { id: it.id, cat: it.cat, x: h.x + r * Math.cos(theta), y: h.y + r * Math.sin(theta) };
-        });
+      // Each memory gets one position: the average of its spiral slot in each of its categories, so shared memories land between their hubs.
+      const spiral = (h, i) => {
+        const theta = i * 2.4, r = 90 + 26 * Math.sqrt(i);
+        return { x: h.x + r * Math.cos(theta), y: h.y + r * Math.sin(theta) };
+      };
+      const nodes = everything.map((it) => {
+        const ps = it.cats.map((cat) => spiral(hubOf[cat], it.rank[cat].n - 1));
+        return {
+          id: it.id,
+          x: ps.reduce((s, p) => s + p.x, 0) / ps.length,
+          y: ps.reduce((s, p) => s + p.y, 0) / ps.length,
+        };
       });
       const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
       const xs = [...nodes.map((n) => n.x), ...hubs.map((h) => h.x)], ys = [...nodes.map((n) => n.y), ...hubs.map((h) => h.y)];
@@ -1254,7 +1280,7 @@
       const radiusOf = (n) => 10 + 6 * Math.sqrt(n);
 
       const state = { enabled: new Set(data.map((c) => c.name)), cutoff: dates.length - 1, sel: null, timer: null };
-      const isVisible = (it) => state.enabled.has(it.cat) && it.t <= dates[state.cutoff];
+      const isVisible = (it) => it.cats.some((c) => state.enabled.has(c)) && it.t <= dates[state.cutoff];
       let clusters = [];
       let clusterOf = {};
 
@@ -1283,7 +1309,10 @@
           ids: c.items.map((it) => it.id),
           px: view.tx + c.x * view.k,
           py: view.ty + c.y * view.k,
-          mix: data.map((d) => ({ color: d.color, n: c.items.filter((it) => it.cat === d.name).length })).filter((m) => m.n),
+          // A single memory is filled with its blended colour; a group shows its category mix as a pie.
+          mix: c.items.length === 1
+            ? [{ color: c.items[0].color, n: 1 }]
+            : data.map((d) => ({ color: d.color, n: c.items.filter((it) => it.cats.includes(d.name)).length })).filter((m) => m.n),
         }));
       }
 
@@ -1307,7 +1336,7 @@
         clusters = buildClusters(visible);
         clusterOf = {};
         clusters.forEach((c) => c.ids.forEach((id) => { clusterOf[id] = c; }));
-        const focusCat = state.sel && state.sel.focus ? byId[state.sel.focus].cat : null;
+        const focusCats = state.sel && state.sel.focus ? byId[state.sel.focus].cats : [];
         const selIds = new Set(state.sel ? state.sel.ids : []);
 
         // Each hub connects to every cluster holding its memories; arrows point outward, from oldest (nearest the hub) to newest.
@@ -1315,7 +1344,7 @@
         const edgeList = [];
         clusters.forEach((c) => {
           data.forEach((d, ci) => {
-            const n = c.items.filter((it) => it.cat === d.name).length;
+            const n = c.items.filter((it) => it.cats.includes(d.name)).length;
             if (n) edgeList.push({ h: hubOf[d.name], c, n, ci, cat: d.name, color: d.color });
           });
         });
@@ -1328,14 +1357,14 @@
           const bend = (e.ci - (data.length - 1) / 2) * 10;
           const cx = (sx + ex) / 2 - uy * bend, cy = (sy + ey) / 2 + ux * bend;
           const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex, ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
-          const dim = focusCat && e.cat !== focusCat;
+          const dim = focusCats.length && !focusCats.includes(e.cat);
           const width = (1.2 + Math.sqrt(e.n) * 1.1).toFixed(1);
           const label = e.n > 1 ? `<text class="mm-edge-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle">${e.n}</text>` : "";
           return `<path d="M${sx.toFixed(1)} ${sy.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${e.color}" stroke-width="${width}" stroke-opacity="${dim ? 0.15 : 0.7}" marker-end="url(#mm-arrow-${e.ci})"><title>${e.n} ${e.cat} ${e.n === 1 ? "memory" : "memories"}, oldest to newest</title></path>${label}`;
         }).join("");
         const hubsSvg = hubs.map((h) => {
-          const n = visible.filter((it) => it.cat === h.cat).length;
-          const dim = focusCat && focusCat !== h.cat;
+          const n = visible.filter((it) => it.cats.includes(h.cat)).length;
+          const dim = focusCats.length && !focusCats.includes(h.cat);
           const hp = hubPx(h);
           return `<g class="mm-hub" opacity="${dim ? 0.3 : 1}"><title>${h.cat}: ${n} ${n === 1 ? "memory" : "memories"}</title><circle cx="${hp.x.toFixed(1)}" cy="${hp.y.toFixed(1)}" r="${HUB_R}" fill="${h.color}" stroke="#fff" stroke-width="3"/><text class="mm-hub-name" x="${hp.x.toFixed(1)}" y="${(hp.y + 5).toFixed(1)}" text-anchor="middle">${h.cat}</text><text class="mm-hub-count" x="${hp.x.toFixed(1)}" y="${(hp.y + HUB_R + 16).toFixed(1)}" text-anchor="middle">${n}</text></g>`;
         }).join("");
@@ -1343,7 +1372,7 @@
         const nodesSvg = clusters.map((c) => {
           const r = radiusOf(c.n);
           const selected = c.ids.some((id) => selIds.has(id));
-          const dim = focusCat && !c.items.some((it) => it.cat === focusCat);
+          const dim = focusCats.length && !c.items.some((it) => it.cats.some((x) => focusCats.includes(x)));
           const first = c.items[0], last = c.items[c.n - 1];
           const span = c.n > 1 ? `${fmtDate(first.t)} – ${fmtDate(last.t)}` : fmtDate(first.t);
           const audio = fmtDur(c.items.reduce((s, it) => s + it.sec, 0));
@@ -1381,30 +1410,35 @@
           `<li><strong>${clusters.length}</strong>groups on screen</li>`,
           `<li><strong>${fmtDate(vis[0].t)} – ${fmtDate(vis[vis.length - 1].t)}</strong>timeline span</li>`,
           `<li><strong>${fmtDur(total)}</strong>audio</li>`,
-          `<li><strong>${new Set(vis.map((it) => it.cat)).size}</strong>categories</li>`,
+          `<li><strong>${new Set(vis.flatMap((it) => it.cats)).size}</strong>categories</li>`,
         ].join("");
       }
 
       function renderMemory(it) {
-        const cat = data.find((c) => c.name === it.cat);
-        const catTotal = cat.items.reduce((s, x) => s + x.sec, 0);
-        const prev = cat.items[it.n - 2];
+        const primary = it.cats[0];
+        const cat = data.find((c) => c.name === primary);
+        const prev = cat.items[it.rank[primary].n - 2];
         const gap = prev
-          ? `${Math.round((it.t - prev.t) / DAY)} days after the previous ${cat.name} memory`
-          : `The oldest ${cat.name} memory, where this thread starts`;
+          ? `${Math.round((it.t - prev.t) / DAY)} days after the previous ${primary} memory`
+          : `The oldest ${primary} memory, where this thread starts`;
         const pos = Math.round(((it.t - tMin) / (tMax - tMin)) * 100);
+        const sec = it.sec;
+        const memTotal = it.cats.map((c) => data.find((d) => d.name === c).items.reduce((s, x) => s + x.sec, 0));
+        const ranks = it.cats.map((c) => `${c} ${it.rank[c].n} of ${it.rank[c].of}`).join(" · ");
+        const dots = it.cats.map((c) => `<i class="mm-dot" style="background:${colorOf[c]}"></i>`).join("");
         detail.innerHTML = `
-          <p class="option-index"><i class="mm-dot" style="background:${it.color}"></i> ${it.cat} · ${it.n} of ${it.of}</p>
+          <p class="option-index">${dots} ${it.cats.join(" + ")}</p>
           <h3 class="option-title">${fmtDate(it.t)}</h3>
           <p class="option-caption">${gap}. Sits ${pos}% along the full timeline.</p>
           <ul class="mm-facts">
-            <li><strong>${fmtDur(it.sec)}</strong>audio on this memory</li>
-            <li><strong>${fmtDur(catTotal)}</strong>${cat.name} total</li>
+            <li><strong>${fmtDur(sec)}</strong>audio on this memory</li>
+            <li><strong>${ranks}</strong>position in its categories</li>
+            <li><strong>${fmtDur(Math.max(...memTotal))}</strong>${primary} total</li>
           </ul>
-          ${isVisible(it) ? "" : `<p class="mm-note">Hidden by the current filters. Move the timeline or re-enable the category to see it on the graph.</p>`}
+          ${isVisible(it) ? "" : `<p class="mm-note">Hidden by the current filters. Move the timeline or re-enable a category to see it on the graph.</p>`}
           <div class="mm-row">
-            <button type="button" class="mm-btn" data-nav="-1" ${it.n === 1 ? "disabled" : ""}>← Earlier</button>
-            <button type="button" class="mm-btn" data-nav="1" ${it.n === it.of ? "disabled" : ""}>Later →</button>
+            <button type="button" class="mm-btn" data-nav="-1" ${it.rank[primary].n === 1 ? "disabled" : ""}>← Earlier in ${primary}</button>
+            <button type="button" class="mm-btn" data-nav="1" ${it.rank[primary].n === it.rank[primary].of ? "disabled" : ""}>Later in ${primary} →</button>
             <button type="button" class="mm-btn" data-random>Random</button>
             <button type="button" class="mm-btn" data-clear>Clear</button>
           </div>`;
@@ -1413,7 +1447,7 @@
       function renderGroup(members) {
         const first = members[0], last = members[members.length - 1];
         const total = members.reduce((s, it) => s + it.sec, 0);
-        const mix = data.map((c) => ({ c, n: members.filter((it) => it.cat === c.name).length })).filter((m) => m.n);
+        const mix = data.map((c) => ({ c, n: members.filter((it) => it.cats.includes(c.name)).length })).filter((m) => m.n);
         const days = Math.round((last.t - first.t) / DAY);
         const caption = members.length > 1 ? `Spans ${days} days. Zoom in to split it apart.` : "A single memory at this zoom level.";
         detail.innerHTML = `
@@ -1426,7 +1460,7 @@
           </ul>
           <p class="mm-mix">${mix.map(({ c, n }) => `<span><i class="mm-dot" style="background:${c.color}"></i> ${c.name} ${n}</span>`).join("")}</p>
           <ul class="mm-list">${members.map((it) =>
-            `<li><button type="button" class="mm-btn" data-pick="${it.id}"><i class="mm-dot" style="background:${it.color}"></i>${fmtDate(it.t)} · ${it.cat} ${it.n}/${it.of} · ${fmtDur(it.sec)}</button></li>`
+            `<li><button type="button" class="mm-btn" data-pick="${it.id}"><i class="mm-dot" style="background:${it.color}"></i>${fmtDate(it.t)} · ${it.cats.join(" + ")} · ${fmtDur(it.sec)}</button></li>`
           ).join("")}</ul>
           <div class="mm-row"><button type="button" class="mm-btn" data-clear>Clear selection</button></div>`;
       }
@@ -1608,7 +1642,8 @@
         }
         if (b.dataset.nav && state.sel && state.sel.focus) {
           const it = byId[state.sel.focus];
-          const next = data.find((c) => c.name === it.cat).items[it.n - 1 + Number(b.dataset.nav)];
+          const primary = it.cats[0];
+          const next = data.find((c) => c.name === primary).items[it.rank[primary].n - 1 + Number(b.dataset.nav)];
           if (next) focusMemory(next.id);
         }
       });
