@@ -10,6 +10,7 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SummaryStatus
+import org.deer.borrowai.data.domain.TRANSCRIPTION_PENDING_ERROR
 import org.deer.borrowai.data.service.FakeMemoryService
 
 class MemorySummaryRecoveryJobTest {
@@ -199,6 +200,50 @@ class MemorySummaryRecoveryJobTest {
 
         assertEquals(1, service.get("a").summaryAttempts)
         assertFalse(service.get("a").summarized)
+    }
+
+    @Test
+    fun blankTranscriptNotDoneIsCountedWithPendingError() = runTest {
+        val service = service(memory("a", transcription = "", recordingPath = "a.m4a"))
+        val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
+
+        job(service, summarizer).recover()
+
+        assertEquals(TRANSCRIPTION_PENDING_ERROR, service.get("a").lastTranscriptionError)
+        assertEquals(1, service.get("a").summaryAttempts)
+    }
+
+    @Test
+    fun blankTranscriptAlreadyDoneGivesUpAtOnce() = runTest {
+        val service = service(memory("a", transcription = "", recordingPath = "a.m4a").copy(transcriptionDone = true))
+        val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
+
+        job(service, summarizer).recover()
+
+        assertEquals(0, summarizer.calls)
+        assertEquals(SummaryStatus.GAVE_UP, service.get("a").summaryStatus)
+        assertEquals(MAX_SUMMARY_ATTEMPTS, service.get("a").summaryAttempts)
+    }
+
+    @Test
+    fun failureStoresExceptionClassAndMessage() = runTest {
+        val service = service(memory("a"))
+        val summarizer = ScriptedSummarizer { SummaryResult.Failed(IllegalStateException("model missing")) }
+
+        job(service, summarizer).recover()
+
+        assertEquals("IllegalStateException: model missing", service.get("a").lastTranscriptionError)
+    }
+
+    @Test
+    fun cancellationWritesNothingAndIsNotCounted() = runTest {
+        val service = service(memory("a"))
+        val summarizer = ScriptedSummarizer { throw kotlinx.coroutines.CancellationException("stop") }
+
+        val thrown = runCatching { job(service, summarizer).recover() }.exceptionOrNull()
+
+        assertTrue(thrown is kotlinx.coroutines.CancellationException)
+        assertEquals(0, service.get("a").summaryAttempts)
     }
 
     @Test
