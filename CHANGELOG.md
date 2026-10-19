@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.0.25]
 
-- The design guide has a new interactive "Memory explorer" screen. Each category is a central hub, and each memory is a single node connected to every category it belongs to, spiralling outward in time order with the oldest nearest its hub. A memory filed under several categories is filled with a blend of their colours. Zooming out merges nearby memories into bigger groups that show how many they contain; zooming in reveals each one. Pan, zoom, click-to-inspect, filter by category, scrub a timeline cutoff, play it back, and step through Earlier, Later, or Random. Visual guide only; the app is unchanged.
+- The design guide has a new interactive "Memory explorer" screen. Each category is a central hub, and each memory is a single node connected to every category it belongs to, spiralling outward in time order with the oldest nearest its hub. A memory filed under several categories is filled with a blend of their colours. Zooming out merges nearby memories into bigger groups that show how many they contain; zooming in reveals each one. Pan, zoom, click-to-inspect, filter by category (chips or clicking a category hub), scrub a timeline cutoff, play it back, and step through Earlier, Later, or Random. Visual guide only; the app is unchanged.
 - Updated Android and iOS versioning to 1.0.25 (build 26).
 
 ## [1.0.24]
