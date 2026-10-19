@@ -1,5 +1,6 @@
 package org.deer.borrowai
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -17,8 +18,11 @@ import org.deer.borrowai.data.service.speech.createLiveTranscriber
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
+import org.deer.borrowai.data.service.recording.TranscriptionRunnerHolder
+import org.deer.borrowai.data.service.recording.WorkManagerTranscriptionScheduler
 
 internal class AppServicesViewModel(
+    private val appContext: Context,
     private val modelDevice: ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
@@ -40,6 +44,7 @@ internal class AppServicesViewModel(
             microphonePermission = microphonePermission,
             liveTranscriber = liveTranscriber,
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
+            transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
         )
     },
 ) : ViewModel() {
@@ -56,6 +61,7 @@ internal class AppServicesViewModel(
             if (cleared) {
                 created.close()
             } else {
+                TranscriptionRunnerHolder.runner = created.transcriptionRunner
                 servicesState.value = created
             }
         }
@@ -63,6 +69,8 @@ internal class AppServicesViewModel(
 
     override fun onCleared() {
         cleared = true
+        // Workers must stop using the runner before the database closes under it.
+        TranscriptionRunnerHolder.runner = null
         servicesState.value?.close()
         modelDevice.close()
         super.onCleared()
@@ -70,6 +78,7 @@ internal class AppServicesViewModel(
 }
 
 internal class AppServicesViewModelFactory(
+    private val appContext: Context,
     private val createModelDevice: () -> ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
@@ -83,6 +92,7 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
+                appContext = appContext,
                 modelDevice = createModelDevice(),
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,

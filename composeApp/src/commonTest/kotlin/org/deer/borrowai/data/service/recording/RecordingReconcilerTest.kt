@@ -13,6 +13,7 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
@@ -126,7 +127,11 @@ class RecordingReconcilerTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc")
         val failing = object : MemoryService by memories() {
-            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> =
+            override suspend fun create(
+                draft: MemoryDraft,
+                id: String?,
+                transcriptionStatus: TranscriptionStatus,
+            ): Either<MemoryError, Memory> =
                 MemoryError.Persistence(IOException("disk full")).left()
         }
         val reconciler = RecordingReconciler(
@@ -151,9 +156,13 @@ class RecordingReconcilerTest {
             override suspend fun findById(id: String): Either<MemoryError, Memory> =
                 MemoryError.Persistence(IOException("read failed")).left()
 
-            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> {
+            override suspend fun create(
+                draft: MemoryDraft,
+                id: String?,
+                transcriptionStatus: TranscriptionStatus,
+            ): Either<MemoryError, Memory> {
                 creates++
-                return base.create(draft, id)
+                return base.create(draft, id, transcriptionStatus)
             }
         }
         val reconciler = RecordingReconciler(

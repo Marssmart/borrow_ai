@@ -78,6 +78,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.ktor.client.okhttp)
             implementation(files(sherpaOnnxAar).builtBy(downloadSherpaOnnxAar))
         }
@@ -103,7 +104,7 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 23
+        versionCode = 24
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

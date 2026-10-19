@@ -30,11 +30,15 @@ import org.deer.borrowai.data.service.recording.LiveTranscriber
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
+import org.deer.borrowai.data.service.recording.TranscriptionScheduler
+import org.deer.borrowai.data.service.recording.TranscriptionWorkRunner
 
 class AppServices private constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
+    /** Runs the transcription jobs. Android's WorkManager workers reach it through a holder. */
+    val transcriptionRunner: TranscriptionWorkRunner,
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
@@ -89,6 +93,7 @@ class AppServices private constructor(
             databaseName: String = DATABASE_NAME,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -99,6 +104,7 @@ class AppServices private constructor(
             epochClock = epochClock,
             liveTranscriber = liveTranscriber,
             batchTranscriber = batchTranscriber,
+            transcriptionScheduler = transcriptionScheduler,
         )
 
         /**
@@ -117,6 +123,7 @@ class AppServices private constructor(
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -136,6 +143,12 @@ class AppServices private constructor(
                     network = modelDevice.network,
                     scope = graphScope,
                 )
+                val transcriptionRunner = TranscriptionWorkRunner(
+                    memoryService = memories,
+                    recordingsRoot = recordingsRoot,
+                    batchTranscriber = batchTranscriber,
+                    scheduler = transcriptionScheduler,
+                )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
                     recorder = recorder,
@@ -145,23 +158,27 @@ class AppServices private constructor(
                     scope = mediaScope,
                     epochClock = epochClock,
                     liveTranscriber = liveTranscriber,
-                    batchTranscriber = batchTranscriber,
+                    transcriptionScheduler = transcriptionScheduler,
                 )
                 val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     epochClock = epochClock,
+                    transcriptionScheduler = transcriptionScheduler,
                 ).start(scope = graphScope)
                 val purgerJob = DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                 ).start(scope = graphScope)
+                // Recovers transcriptions left unfinished by an earlier run, such as a crash or a failed attempt.
+                transcriptionScheduler.enqueueSweep()
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
                     mediaSession = mediaSession,
+                    transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
                     closeScope = graphScope,
                     backgroundJobs = listOf(reconcilerJob, purgerJob),

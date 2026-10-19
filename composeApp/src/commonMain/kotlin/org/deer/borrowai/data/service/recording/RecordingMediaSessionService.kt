@@ -25,6 +25,7 @@ import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
@@ -59,7 +60,7 @@ class RecordingMediaSessionService(
     private val idGenerator: () -> String = { Uuid.random().toString() },
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
     private val liveTranscriber: LiveTranscriber? = null,
-    private val batchTranscriber: BatchTranscriber? = null,
+    private val transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
@@ -278,9 +279,10 @@ class RecordingMediaSessionService(
                         recordingPath = recording.relativePath,
                     ),
                     id = recording.recordingId,
+                    transcriptionStatus = TranscriptionStatus.PENDING,
                 )
                 // The audio stays on disk when the memory could not be created. RecordingReconciler pairs it on its next sweep.
-                if (created.isRight()) transcribeIntoMemory(recording)
+                if (created.isRight()) transcriptionScheduler.enqueueTranscription()
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -301,31 +303,6 @@ class RecordingMediaSessionService(
         }
         save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
-    }
-
-    /**
-     * Transcribes the finished recording and stores the transcript on its memory. Best-effort: a missing transcriber,
-     * a failed transcription, or a blank result leaves the memory as it was saved.
-     */
-    private suspend fun transcribeIntoMemory(recording: ActiveRecording) {
-        val transcriber = batchTranscriber ?: return
-        val transcript = try {
-            transcriber.transcribe(recording.absolutePath)
-        } catch (exception: CancellationException) {
-            throw exception
-        } catch (exception: Exception) {
-            null
-        }?.takeIf { it.isNotBlank() } ?: return
-        val memory = memoryService.findById(recording.recordingId).fold({ null }, { it }) ?: return
-        memoryService.update(
-            id = recording.recordingId,
-            draft = MemoryDraft(
-                title = memory.title,
-                summary = memory.summary,
-                transcription = transcript,
-                recordingPath = memory.recordingPath,
-            ),
-        )
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {

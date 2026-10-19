@@ -26,6 +26,12 @@ import kotlin.uuid.Uuid
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
+import org.deer.borrowai.data.domain.claimedForTranscription
+import org.deer.borrowai.data.domain.isMissingTranscription
+import org.deer.borrowai.data.domain.requeuedForTranscription
+import org.deer.borrowai.data.domain.withFailedTranscription
+import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.StatefulMemoryService
 
@@ -46,7 +52,11 @@ class KotbaseMemoryService private constructor(
         readMemory(id)
     }
 
-    override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> = mutex.withLock {
+    override suspend fun create(
+        draft: MemoryDraft,
+        id: String?,
+        transcriptionStatus: TranscriptionStatus,
+    ): Either<MemoryError, Memory> = mutex.withLock {
         val memory = Memory(
             id = id ?: idGenerator(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
@@ -54,8 +64,50 @@ class KotbaseMemoryService private constructor(
             summary = draft.summary,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
+            transcriptionStatus = transcriptionStatus,
         )
         writeAndPublish { database.save(memory.toDocument()) }.map { memory }
+    }
+
+    override suspend fun claimNextPendingTranscription(): Either<MemoryError, Memory?> = mutex.withLock {
+        either {
+            val candidate = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && it.transcriptionStatus == TranscriptionStatus.PENDING }
+                .minByOrNull(Memory::createdAtEpochMillis)
+            if (candidate == null) {
+                null
+            } else {
+                val claimed = candidate.claimedForTranscription()
+                writeAndPublish { database.save(claimed.toDocument()) }.bind()
+                claimed
+            }
+        }
+    }
+
+    override suspend fun completeTranscription(id: String, transcription: String): Either<MemoryError, Unit> =
+        mutex.withLock {
+            either {
+                val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
+                writeAndPublish { database.save(existing.withFinishedTranscription(transcription).toDocument()) }.bind()
+            }
+        }
+
+    override suspend fun failTranscription(id: String): Either<MemoryError, Unit> = mutex.withLock {
+        either {
+            val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
+            writeAndPublish { database.save(existing.withFailedTranscription().toDocument()) }.bind()
+        }
+    }
+
+    override suspend fun requeueUnfinishedTranscriptions(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val unfinished = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && (it.transcriptionStatus == TranscriptionStatus.IN_PROGRESS || it.isMissingTranscription()) }
+            unfinished.forEach { memory ->
+                writeAndPublish { database.save(memory.requeuedForTranscription().toDocument()) }.bind()
+            }
+            unfinished.size
+        }
     }
 
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
@@ -156,6 +208,8 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_TRANSCRIPTION),
             SelectResult.property(COLUMN_RECORDING_PATH),
             SelectResult.property(COLUMN_DELETED),
+            SelectResult.property(COLUMN_TRANSCRIPTION_STATUS),
+            SelectResult.property(COLUMN_TRANSCRIPTION_ATTEMPTS),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
@@ -174,6 +228,12 @@ class KotbaseMemoryService private constructor(
                 transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
                 recordingPath = getString(COLUMN_RECORDING_PATH),
                 deleted = getBoolean(COLUMN_DELETED),
+                transcriptionStatus = transcriptionStatusOf(
+                    getString(COLUMN_TRANSCRIPTION_STATUS),
+                    getString(COLUMN_TRANSCRIPTION),
+                    getString(COLUMN_RECORDING_PATH),
+                ),
+                transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
             )
         }
     }
@@ -186,6 +246,8 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_TRANSCRIPTION, transcription)
         setString(COLUMN_RECORDING_PATH, recordingPath)
         setBoolean(COLUMN_DELETED, deleted)
+        setString(COLUMN_TRANSCRIPTION_STATUS, transcriptionStatus.name)
+        setLong(COLUMN_TRANSCRIPTION_ATTEMPTS, transcriptionAttempts.toLong())
     }
 
     private fun Document.toMemory(): Memory? {
@@ -198,8 +260,22 @@ class KotbaseMemoryService private constructor(
             transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
             recordingPath = getString(COLUMN_RECORDING_PATH),
             deleted = getBoolean(COLUMN_DELETED),
+            transcriptionStatus = transcriptionStatusOf(
+                getString(COLUMN_TRANSCRIPTION_STATUS),
+                getString(COLUMN_TRANSCRIPTION),
+                getString(COLUMN_RECORDING_PATH),
+            ),
+            transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
         )
     }
+
+    /**
+     * Documents written before the status field existed have no value. Those with a recording but no
+     * transcript are queued as [TranscriptionStatus.PENDING] so the recovery sweep picks them up; all others are DONE.
+     */
+    private fun transcriptionStatusOf(stored: String?, transcription: String?, recordingPath: String?): TranscriptionStatus =
+        stored?.let { name -> TranscriptionStatus.entries.firstOrNull { it.name == name } ?: throw IllegalArgumentException(name) }
+            ?: if (recordingPath != null && transcription.isNullOrBlank()) TranscriptionStatus.PENDING else TranscriptionStatus.DONE
 
     companion object {
         private const val KEY_TYPE = "type"
@@ -211,6 +287,8 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_TRANSCRIPTION = "transcription"
         private const val COLUMN_RECORDING_PATH = "recordingPath"
         private const val COLUMN_DELETED = "deleted"
+        private const val COLUMN_TRANSCRIPTION_STATUS = "transcriptionStatus"
+        private const val COLUMN_TRANSCRIPTION_ATTEMPTS = "transcriptionAttempts"
 
         /**
          * Opens the memory store on [database]. Existing memories are loaded before the service is
