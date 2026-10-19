@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.3.1]
+
+- Simplified memory summary tracking to use `SummaryStatus` as the single source of truth. The redundant boolean no longer drives persistence or recovery logic.
+- Updated Android and iOS versioning to 1.3.1 (build 28).
+
 ## [1.3.0]
 
 - Added an on-device memory summarizer on Android, built on LiteRT-LM (Gemma model). Each memory gets one short summary, produced after transcription and retried by the recovery job.
