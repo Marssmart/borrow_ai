@@ -59,10 +59,13 @@ object ModelCatalog {
     /** Static file names per role. Speech models also use `<prefix>-decoder.int8.onnx` and `<prefix>-tokens.txt`. */
     const val LIVE_FILE_NAME = "live-encoder.int8.onnx"
     const val VOICE_FILE_NAME = "voice-encoder.int8.onnx"
-    const val LLM_FILE_NAME = "llm-model.gguf"
+    const val LLM_FILE_NAME = "llm-model.litertlm"
 
-    /** Whisper.cpp GGML files written by earlier catalog versions; the sherpa-onnx runtime cannot load them. */
-    val OBSOLETE_FILE_NAMES = listOf("voice-model.bin", "live-voice-model.bin")
+    /**
+     * Files written by earlier catalog versions that the current runtimes cannot load:
+     * Whisper.cpp GGML speech models and GGUF language models.
+     */
+    val OBSOLETE_FILE_NAMES = listOf("voice-model.bin", "live-voice-model.bin", "llm-model.gguf")
 
     private const val TOKENS_SIZE_BYTES = 816_730L
     private const val TOKENS_SHA256 = "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
@@ -77,11 +80,11 @@ object ModelCatalog {
             live = tiny(role = ModelRole.LIVE_VOICE, localPrefix = "voice"),
             voice = tinyVoice,
             llm = llm(
-                displayName = "Gemma 2B",
-                url = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/855f67caed130e1befc571b52bd181be2e858883/gemma-2-2b-it-Q4_K_M.gguf",
-                revision = "855f67caed130e1befc571b52bd181be2e858883",
-                sizeBytes = 1_708_582_752L,
-                sha256 = "e0aee85060f168f0f2d8473d7ea41ce2f3230c1bc1374847505ea599288a7787",
+                displayName = "Qwen3 0.6B",
+                url = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/e6687177e00897731e7716267eebd4eba0dde7c2/Qwen3-0.6B.litertlm",
+                revision = "e6687177e00897731e7716267eebd4eba0dde7c2",
+                sizeBytes = 613_722_264L,
+                sha256 = "c5f39b4191926786c3e6668b62af4d6eb15248dfc7a5348252a9b406f33f2108",
             ),
         ),
         ModelTier.MID to TierModels(
@@ -99,11 +102,11 @@ object ModelCatalog {
                 decoderSha256 = "9759d217388a01b3a4c7c15533201067b48ae819c4daafc8624e64b9409dc02d",
             ),
             llm = llm(
-                displayName = "Gemma 7B",
-                url = "https://huggingface.co/bartowski/gemma-1.1-7b-it-GGUF/resolve/977053969545d1abfe364d0161f37e0de22fa54a/gemma-1.1-7b-it-Q4_K_M.gguf",
-                revision = "977053969545d1abfe364d0161f37e0de22fa54a",
-                sizeBytes = 5_329_759_200L,
-                sha256 = "47821da72ee9e80b6fd43c6190ad751b485fb61fa5664590f7a73246bcd8332e",
+                displayName = "Gemma 4 E2B",
+                url = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1/gemma-4-E2B-it.litertlm",
+                revision = "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1",
+                sizeBytes = 2_588_147_712L,
+                sha256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
             ),
         ),
         ModelTier.LATEST to TierModels(
@@ -121,11 +124,11 @@ object ModelCatalog {
                 decoderSha256 = "ebc6bfd88e162a46cb3edee8a7e727e1dcbc65cabecb19e2573695e4d495e1af",
             ),
             llm = llm(
-                displayName = "Gemma 9B",
-                url = "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/d731033f3dc4018261fd39896e50984d398b4ac5/gemma-2-9b-it-Q4_K_M.gguf",
-                revision = "d731033f3dc4018261fd39896e50984d398b4ac5",
-                sizeBytes = 5_761_057_728L,
-                sha256 = "13b2a7b4115bbd0900162edcebe476da1ba1fc24e718e8b40d32f6e300f56dfe",
+                displayName = "Gemma 4 E4B",
+                url = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/2eee7ac325f20eb8c9ac1d0e972f7c84663062da/gemma-4-E4B-it.litertlm",
+                revision = "2eee7ac325f20eb8c9ac1d0e972f7c84663062da",
+                sizeBytes = 3_659_530_240L,
+                sha256 = "0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0",
             ),
         ),
     )

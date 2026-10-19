@@ -10,6 +10,11 @@ import arrow.core.right
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.afterFinishedAttempt
+import org.deer.borrowai.data.domain.withGaveUp
+import org.deer.borrowai.data.domain.withSummary
+import org.deer.borrowai.data.domain.withTranscription
+import org.deer.borrowai.data.domain.withTranscriptionFailure
 
 class FakeMemoryService(
     initialMemories: List<Memory> = emptyList(),
@@ -72,6 +77,35 @@ class FakeMemoryService(
         publishMemories()
         true
     }
+
+    override suspend fun recordTranscription(id: String, text: String): Either<MemoryError, Unit> = updateActive(id) {
+        it.withTranscription(text)
+    }
+
+    override suspend fun recordTranscriptionFailure(id: String, error: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withTranscriptionFailure(error) }
+
+    override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> = updateActive(id) {
+        it.afterFinishedAttempt(error = error, empty = false)
+    }
+
+    override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> = updateActive(id) {
+        it.afterFinishedAttempt(error = null, empty = true)
+    }
+
+    override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> = updateActive(id) {
+        it.withSummary(summary)
+    }
+
+    override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> = updateActive(id) { it.withGaveUp() }
+
+    private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
+        mutex.withLock {
+            val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
+            records[id] = change(existing)
+            publishMemories()
+            Unit.right()
+        }
 
     private fun nextId(): String {
         while (true) {
