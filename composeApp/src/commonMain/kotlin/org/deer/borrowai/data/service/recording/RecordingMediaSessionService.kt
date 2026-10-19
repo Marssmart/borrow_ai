@@ -34,6 +34,7 @@ import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
 import org.deer.borrowai.data.service.MutableJob
+import org.deer.borrowai.data.service.summary.describeForStorage
 
 /**
  * Records microphone audio under [recordingsRoot] and saves a memory when recording stops.
@@ -60,6 +61,8 @@ class RecordingMediaSessionService(
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
     private val liveTranscriber: LiveTranscriber? = null,
     private val batchTranscriber: BatchTranscriber? = null,
+    /** Called after a saved recording's transcription is recorded, so the summary job can run right away. */
+    private val onTranscriptionFinished: () -> Unit = {},
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
@@ -280,7 +283,10 @@ class RecordingMediaSessionService(
                     id = recording.recordingId,
                 )
                 // The audio stays on disk when the memory could not be created. RecordingReconciler pairs it on its next sweep.
-                if (created.isRight()) transcribeIntoMemory(recording)
+                if (created.isRight()) {
+                    transcribeIntoMemory(recording)
+                    onTranscriptionFinished()
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -309,23 +315,14 @@ class RecordingMediaSessionService(
      */
     private suspend fun transcribeIntoMemory(recording: ActiveRecording) {
         val transcriber = batchTranscriber ?: return
-        val transcript = try {
-            transcriber.transcribe(recording.absolutePath)
+        try {
+            // A blank transcript is still recorded as done, so the summary job can give up on it at once.
+            memoryService.recordTranscription(recording.recordingId, transcriber.transcribe(recording.absolutePath).orEmpty().trim())
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            null
-        }?.takeIf { it.isNotBlank() } ?: return
-        val memory = memoryService.findById(recording.recordingId).fold({ null }, { it }) ?: return
-        memoryService.update(
-            id = recording.recordingId,
-            draft = MemoryDraft(
-                title = memory.title,
-                summary = memory.summary,
-                transcription = transcript,
-                recordingPath = memory.recordingPath,
-            ),
-        )
+            memoryService.recordTranscriptionFailure(recording.recordingId, exception.describeForStorage())
+        }
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
