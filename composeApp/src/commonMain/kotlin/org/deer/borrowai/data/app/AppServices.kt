@@ -32,6 +32,9 @@ import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
 import org.deer.borrowai.data.service.recording.TranscriptionScheduler
 import org.deer.borrowai.data.service.recording.TranscriptionWorkRunner
+import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
+import org.deer.borrowai.data.service.summary.MemorySummarizer
+import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
 
 class AppServices private constructor(
     val modelSetup: ModelSetupService,
@@ -42,6 +45,7 @@ class AppServices private constructor(
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
+    private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -65,6 +69,7 @@ class AppServices private constructor(
                 // Periodic sweeps must finish before the database closes under them.
                 backgroundJobs.forEach { it.cancel() }
                 backgroundJobs.forEach { it.join() }
+                summarizer.close()
             } finally {
                 finishClose()
             }
@@ -94,6 +99,7 @@ class AppServices private constructor(
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
+            summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -105,6 +111,7 @@ class AppServices private constructor(
             liveTranscriber = liveTranscriber,
             batchTranscriber = batchTranscriber,
             transcriptionScheduler = transcriptionScheduler,
+            summarizer = summarizer,
         )
 
         /**
@@ -124,6 +131,7 @@ class AppServices private constructor(
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
+            summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -143,11 +151,14 @@ class AppServices private constructor(
                     network = modelDevice.network,
                     scope = graphScope,
                 )
+                // The summary job is built after the media session, so the drain reaches it through this holder.
+                var runSummaryRecovery: () -> Unit = {}
                 val transcriptionRunner = TranscriptionWorkRunner(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     batchTranscriber = batchTranscriber,
                     scheduler = transcriptionScheduler,
+                    onTranscriptionFinished = { runSummaryRecovery() },
                 )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
@@ -174,6 +185,13 @@ class AppServices private constructor(
                 ).start(scope = graphScope)
                 // Recovers transcriptions left unfinished by an earlier run, such as a crash or a failed attempt.
                 transcriptionScheduler.enqueueSweep()
+                val summaryRecovery = MemorySummaryRecoveryJob(
+                    memoryService = memories,
+                    summarizer = summarizer,
+                    isRecording = { mediaSession.isBusy },
+                )
+                val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
+                runSummaryRecovery = { graphScope.launch { summaryRecovery.recover() } }
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
@@ -181,7 +199,8 @@ class AppServices private constructor(
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
                     closeScope = graphScope,
-                    backgroundJobs = listOf(reconcilerJob, purgerJob),
+                    backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
+                    summarizer = summarizer,
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

@@ -305,6 +305,7 @@ class RecordingMediaSessionService(
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
 
+
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
         save.cancel()
         fileSystem.delete(recording.temporaryPath, mustExist = false)

@@ -11,11 +11,14 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
+import org.deer.borrowai.data.domain.afterFinishedAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
+import org.deer.borrowai.data.domain.withGaveUp
+import org.deer.borrowai.data.domain.withSummary
 
 class FakeMemoryService(
     initialMemories: List<Memory> = emptyList(),
@@ -94,19 +97,10 @@ class FakeMemoryService(
     }
 
     override suspend fun completeTranscription(id: String, transcription: String): Either<MemoryError, Unit> =
-        mutex.withLock {
-            val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
-            records[id] = existing.withFinishedTranscription(transcription)
-            publishMemories()
-            Unit.right()
-        }
+        updateActive(id) { it.withFinishedTranscription(transcription) }
 
-    override suspend fun failTranscription(id: String): Either<MemoryError, Unit> = mutex.withLock {
-        val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
-        records[id] = existing.withFailedTranscription()
-        publishMemories()
-        Unit.right()
-    }
+    override suspend fun failTranscription(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFailedTranscription() }
 
     override suspend fun requeueUnfinishedTranscriptions(): Either<MemoryError, Int> = mutex.withLock {
         var requeued = 0
@@ -127,6 +121,28 @@ class FakeMemoryService(
         publishMemories()
         requeued.right()
     }
+
+    override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> = updateActive(id) {
+        it.afterFinishedAttempt(error = error, empty = false)
+    }
+
+    override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> = updateActive(id) {
+        it.afterFinishedAttempt(error = null, empty = true)
+    }
+
+    override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> = updateActive(id) {
+        it.withSummary(summary)
+    }
+
+    override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> = updateActive(id) { it.withGaveUp() }
+
+    private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
+        mutex.withLock {
+            val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
+            records[id] = change(existing)
+            publishMemories()
+            Unit.right()
+        }
 
     private fun nextId(): String {
         while (true) {

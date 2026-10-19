@@ -26,12 +26,17 @@ import kotlin.uuid.Uuid
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
+import org.deer.borrowai.data.domain.afterFinishedAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
+import org.deer.borrowai.data.domain.migrateLegacySummaryState
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
+import org.deer.borrowai.data.domain.withGaveUp
+import org.deer.borrowai.data.domain.withSummary
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.StatefulMemoryService
 
@@ -148,6 +153,26 @@ class KotbaseMemoryService private constructor(
         readAll()
     }
 
+    override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> =
+        updateActive(id) { it.afterFinishedAttempt(error = error, empty = false) }
+
+    override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.afterFinishedAttempt(error = null, empty = true) }
+
+    override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withSummary(summary) }
+
+    override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withGaveUp() }
+
+    private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
+        mutex.withLock {
+            either {
+                val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
+                writeAndPublish { database.save(change(existing).toDocument()) }.bind()
+            }
+        }
+
     /**
      * Runs [write] and refreshes the published state as one unit. Cancellation is deferred until
      * both finish, so a committed write never leaves [getState] stale. A refresh failure is
@@ -210,12 +235,49 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_DELETED),
             SelectResult.property(COLUMN_TRANSCRIPTION_STATUS),
             SelectResult.property(COLUMN_TRANSCRIPTION_ATTEMPTS),
+            SelectResult.property(COLUMN_LAST_TRANSCRIPTION_ERROR),
+            SelectResult.property(COLUMN_SUMMARIZED),
+            SelectResult.property(COLUMN_SUMMARY_STATUS),
+            SelectResult.property(COLUMN_SUMMARY_ATTEMPTS),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
         .orderBy(Ordering.property(COLUMN_CREATED_AT).descending())
         .execute()
         .allResults()
+
+    /**
+     * Gives memories saved before summary tracking existed their summary state, using
+     * [migrateLegacySummaryState]. Documents that already have a status are skipped.
+     */
+    private fun migrateSummaryState(): Either<MemoryError, Unit> = persisting {
+        val ids = QueryBuilder
+            .select(SelectResult.expression(Meta.id).`as`(COLUMN_ID))
+            .from(DataSource.database(database))
+            .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
+            .execute()
+            .allResults()
+            .mapNotNull { it.getString(COLUMN_ID) }
+
+        database.inBatch {
+            for (id in ids) {
+                val document = database.getDocument(id) ?: continue
+                if (document.contains(COLUMN_SUMMARY_STATUS)) continue
+                val state = migrateLegacySummaryState(
+                    summary = document.getString(COLUMN_SUMMARY).orEmpty(),
+                    transcription = document.getString(COLUMN_TRANSCRIPTION).orEmpty(),
+                    hasRecording = document.getString(COLUMN_RECORDING_PATH) != null,
+                    legacyAttempts = document.getInt(COLUMN_SUMMARY_ATTEMPTS),
+                )
+                database.save(
+                    document.toMutable()
+                        .setBoolean(COLUMN_SUMMARIZED, state.summarized)
+                        .setString(COLUMN_SUMMARY_STATUS, state.summaryStatus.name)
+                        .setInt(COLUMN_SUMMARY_ATTEMPTS, state.summaryAttempts),
+                )
+            }
+        }
+    }
 
     private fun Result.toListedMemory(): Either<MemoryError, Memory> {
         val id = getString(COLUMN_ID) ?: return MemoryError.Malformed(id = "").left()
@@ -234,6 +296,10 @@ class KotbaseMemoryService private constructor(
                     getString(COLUMN_RECORDING_PATH),
                 ),
                 transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
+                lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
+                summarized = getBoolean(COLUMN_SUMMARIZED),
+                summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
+                summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
             )
         }
     }
@@ -248,6 +314,10 @@ class KotbaseMemoryService private constructor(
         setBoolean(COLUMN_DELETED, deleted)
         setString(COLUMN_TRANSCRIPTION_STATUS, transcriptionStatus.name)
         setLong(COLUMN_TRANSCRIPTION_ATTEMPTS, transcriptionAttempts.toLong())
+        setString(COLUMN_LAST_TRANSCRIPTION_ERROR, lastTranscriptionError)
+        setBoolean(COLUMN_SUMMARIZED, summarized)
+        setString(COLUMN_SUMMARY_STATUS, summaryStatus.name)
+        setInt(COLUMN_SUMMARY_ATTEMPTS, summaryAttempts)
     }
 
     private fun Document.toMemory(): Memory? {
@@ -266,8 +336,16 @@ class KotbaseMemoryService private constructor(
                 getString(COLUMN_RECORDING_PATH),
             ),
             transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
+            lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
+            summarized = getBoolean(COLUMN_SUMMARIZED),
+            summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
+            summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
         )
     }
+
+    /** Throws [IllegalArgumentException] for a missing or unknown status, which decodes as [MemoryError.Malformed]. */
+    private fun decodeSummaryStatus(raw: String?): SummaryStatus =
+        SummaryStatus.valueOf(requireNotNull(raw) { "Missing summaryStatus." })
 
     /**
      * Documents written before the status field existed have no value. Those with a recording but no
@@ -289,10 +367,14 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_DELETED = "deleted"
         private const val COLUMN_TRANSCRIPTION_STATUS = "transcriptionStatus"
         private const val COLUMN_TRANSCRIPTION_ATTEMPTS = "transcriptionAttempts"
+        private const val COLUMN_LAST_TRANSCRIPTION_ERROR = "lastTranscriptionError"
+        private const val COLUMN_SUMMARIZED = "summarized"
+        private const val COLUMN_SUMMARY_STATUS = "summaryStatus"
+        private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
 
         /**
-         * Opens the memory store on [database]. Existing memories are loaded before the service is
-         * returned, so [memories] is accurate from the start.
+         * Opens the memory store on [database]. Existing memories are migrated to the summary
+         * state and loaded before the service is returned, so [memories] is accurate from the start.
          */
         @OptIn(ExperimentalUuidApi::class)
         suspend fun open(
@@ -305,6 +387,8 @@ class KotbaseMemoryService private constructor(
                 epochClock = epochClock,
                 idGenerator = idGenerator,
             )
+            val migrated = withContext(Dispatchers.Default) { service.migrateSummaryState() }
+            if (migrated.isLeft()) return migrated.map { service }
             return service.publishMemories().map { service }
         }
     }

@@ -4,11 +4,38 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.0.23]
+## [1.4.0]
 
 - Added a WorkManager-based transcription recovery system on Android. Memories are saved as `PENDING` and transcribed in the background, instead of inline after recording. A startup sweep requeues memories that were missing or unfinished transcripts.
-- Replaced the transcription state with `transcriptionStatus` (`PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`) and `transcriptionAttempts`, capped at 5 attempts.
-- Updated Android and iOS versioning to 1.0.23 (build 24).
+- Replaced the transcription state with `transcriptionStatus` (`PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`) and `transcriptionAttempts`, capped at 5 attempts. A missing model does not use up an attempt.
+- Updated Android and iOS versioning to 1.4.0 (build 28).
+
+## [1.3.0]
+
+- Added an on-device memory summarizer on Android, built on LiteRT-LM (Gemma model). Each memory gets one short summary, produced after transcription and retried by the recovery job.
+- Summaries are stored per memory. iOS keeps the no-op summarizer for now, so iOS memories get no summaries yet.
+- The download progress ring around the record button now also shows for the transcription and summary model downloads, not only the live voice download.
+- Updated Android and iOS versioning to 1.3.0 (build 27).
+
+## [1.2.0]
+
+- The memory summary recovery job also runs right after a recording's transcription finishes, not only at app start and every 15 minutes.
+- Memories whose transcript is still pending are retried. Blank transcripts from a finished transcription give up at once, which also applies on iOS.
+- Each memory now has a summary status (pending, summarized, empty, or gave up) and stores the last transcription error.
+- The summarizer engine is not wired yet, so the job currently stores no summaries. No UI changes.
+- Updated Android and iOS versioning to 1.2.0 (build 26).
+
+## [1.1.0]
+
+- Added a memory summary recovery job. It runs at app start and every 15 minutes, and retries memories that were saved without a summary. Each memory gets up to 10 attempts. Empty or untranscribable results give up immediately, so they are not retried forever. Existing memories are migrated to the new summary state on first launch.
+- The summarizer engine is not wired yet, so the job currently stores no summaries. No UI changes.
+- Updated Android and iOS versioning to 1.1.0 (build 25).
+
+## [1.0.23]
+
+- Untranscribed memories now look distinct in the saved list: a cream card with a tan border and a muted "Waiting for transcription…" placeholder. They show "Play original" (plays the recording) and no "Play summary".
+- Updated the design guide with the pending memory card style.
+>- Updated Android and iOS versioning to 1.0.23 (build 24).
 
 ## [1.0.22]
 

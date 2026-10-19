@@ -481,13 +481,19 @@ private fun formatDurationParts(totalSeconds: Int): Pair<String, String> {
     return minutes.toString().padStart(2, '0') to seconds.toString().padStart(2, '0')
 }
 
-/** Fraction of the live model downloaded, or null when no live download is in progress. */
+/** Fraction of the current model downloaded, or null when no model download is in progress. */
 private fun liveDownloadProgress(state: ModelSetupState): Float? =
-    if (state.phase == ModelSetupPhase.DOWNLOADING_LIVE_VOICE && state.bytesTotal > 0L) {
+    if (state.phase in DOWNLOAD_PHASES && state.bytesTotal > 0L) {
         state.bytesDownloaded.toFloat() / state.bytesTotal.toFloat()
     } else {
         null
     }
+
+private val DOWNLOAD_PHASES = setOf(
+    ModelSetupPhase.DOWNLOADING_LIVE_VOICE,
+    ModelSetupPhase.DOWNLOADING_VOICE,
+    ModelSetupPhase.DOWNLOADING_LLM,
+)
 
 @Composable
 private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phase) {

@@ -81,6 +81,7 @@ kotlin {
             implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.ktor.client.okhttp)
             implementation(files(sherpaOnnxAar).builtBy(downloadSherpaOnnxAar))
+            implementation(libs.litertlm.android)
         }
 
         // Kotbase needs the native Couchbase Lite library, so its CRUD tests run on a device.
@@ -104,7 +105,7 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 24
+        versionCode = 28
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

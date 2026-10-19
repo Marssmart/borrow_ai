@@ -28,6 +28,8 @@ class TranscriptionWorkRunner(
     private val recordingsRoot: Path,
     private val batchTranscriber: BatchTranscriber?,
     private val scheduler: TranscriptionScheduler,
+    /** Called once a drain has transcribed at least one memory, so the summary job can pick up the new transcripts. */
+    private val onTranscriptionFinished: () -> Unit = {},
 ) {
     /** Queues missing or unfinished transcriptions. Returns how many were requeued. Always schedules a drain so PENDING rows left by an earlier run are picked up. */
     suspend fun sweep(): Int {
@@ -42,29 +44,35 @@ class TranscriptionWorkRunner(
      */
     suspend fun drain(): Boolean {
         val transcriber = batchTranscriber ?: return false
-        while (true) {
-            // Checked before claiming, so a missing model leaves the memory PENDING without using up an attempt.
-            if (!transcriber.isAvailable()) return false
-            val memory = memoryService.claimNextPendingTranscription()
-                .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
-            val relativePath = memory.recordingPath
-            // A null or blank result is a failed attempt. Attempts are capped, so a broken model cannot loop forever.
-            val transcript = if (relativePath == null) {
-                null
-            } else {
-                try {
-                    transcriber.transcribe(recordingsRoot / relativePath)
-                } catch (exception: CancellationException) {
-                    throw exception
-                } catch (exception: Exception) {
+        var transcribed = 0
+        try {
+            while (true) {
+                // Checked before claiming, so a missing model leaves the memory PENDING without using up an attempt.
+                if (!transcriber.isAvailable()) return false
+                val memory = memoryService.claimNextPendingTranscription()
+                    .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
+                val relativePath = memory.recordingPath
+                // A null or blank result is a failed attempt. Attempts are capped, so a broken model cannot loop forever.
+                val transcript = if (relativePath == null) {
                     null
+                } else {
+                    try {
+                        transcriber.transcribe(recordingsRoot / relativePath)
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        null
+                    }
                 }
+                if (transcript.isNullOrBlank()) {
+                    memoryService.failTranscription(memory.id)
+                } else {
+                    memoryService.completeTranscription(memory.id, transcript)
+                }
+                transcribed++
             }
-            if (transcript.isNullOrBlank()) {
-                memoryService.failTranscription(memory.id)
-            } else {
-                memoryService.completeTranscription(memory.id, transcript)
-            }
+        } finally {
+            if (transcribed > 0) onTranscriptionFinished()
         }
     }
 }
