@@ -1,6 +1,8 @@
 package org.deer.borrowai.data.service.recording
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okio.Path
 import org.deer.borrowai.data.service.MemoryService
 
@@ -31,12 +33,18 @@ class TranscriptionWorkRunner(
     /** Called once a drain has transcribed at least one memory, so the summary job can pick up the new transcripts. */
     private val onTranscriptionFinished: () -> Unit = {},
 ) {
+    /** Held for the whole of a drain. The sweep takes it too, so it never requeues rows a live drain is working on. */
+    private val drainLock = Mutex()
+
     /**
      * Queues missing or unfinished transcriptions. Returns false when the store failed, so the job should be retried.
+     * Waits for any running drain first, so IN_PROGRESS rows are only reset when no drain owns them.
      * On success, always schedules a drain so PENDING rows left by an earlier run are picked up.
      */
     suspend fun sweep(): Boolean {
-        memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
+        drainLock.withLock {
+            memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
+        }
         scheduler.enqueueTranscription()
         return true
     }
@@ -47,6 +55,10 @@ class TranscriptionWorkRunner(
      */
     suspend fun drain(): Boolean {
         val transcriber = batchTranscriber ?: return false
+        return drainLock.withLock { drainPending(transcriber) }
+    }
+
+    private suspend fun drainPending(transcriber: BatchTranscriber): Boolean {
         var transcribed = 0
         try {
             while (true) {

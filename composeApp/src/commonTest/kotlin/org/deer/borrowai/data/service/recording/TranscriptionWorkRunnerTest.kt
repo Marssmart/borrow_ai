@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.recording
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import okio.Path
 import okio.Path.Companion.toPath
@@ -120,5 +123,26 @@ class TranscriptionWorkRunnerTest {
         assertTrue(queued)
         assertEquals(TranscriptionStatus.PENDING, memories.get("stuck").transcriptionStatus)
         assertEquals(1, scheduler.transcriptionRequests)
+    }
+
+    @Test
+    fun sweepWaitsForRunningDrainBeforeRequeuing() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+        val gate = CompletableDeferred<Unit>()
+        val runner = runner(memories, transcribe = { gate.await(); "text" })
+
+        val drain = async { runner.drain() }
+        advanceUntilIdle()
+        assertEquals(TranscriptionStatus.IN_PROGRESS, memories.get("a").transcriptionStatus)
+
+        val sweep = async { runner.sweep() }
+        advanceUntilIdle()
+        assertEquals(TranscriptionStatus.IN_PROGRESS, memories.get("a").transcriptionStatus)
+
+        gate.complete(Unit)
+        assertTrue(drain.await())
+        assertTrue(sweep.await())
+        assertEquals(TranscriptionStatus.DONE, memories.get("a").transcriptionStatus)
     }
 }
