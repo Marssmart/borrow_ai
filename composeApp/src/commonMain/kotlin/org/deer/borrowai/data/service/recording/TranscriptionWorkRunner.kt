@@ -31,11 +31,14 @@ class TranscriptionWorkRunner(
     /** Called once a drain has transcribed at least one memory, so the summary job can pick up the new transcripts. */
     private val onTranscriptionFinished: () -> Unit = {},
 ) {
-    /** Queues missing or unfinished transcriptions. Returns how many were requeued. Always schedules a drain so PENDING rows left by an earlier run are picked up. */
-    suspend fun sweep(): Int {
-        val queued = memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return 0 }, ifRight = { it })
+    /**
+     * Queues missing or unfinished transcriptions. Returns false when the store failed, so the job should be retried.
+     * On success, always schedules a drain so PENDING rows left by an earlier run are picked up.
+     */
+    suspend fun sweep(): Boolean {
+        memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
         scheduler.enqueueTranscription()
-        return queued
+        return true
     }
 
     /**

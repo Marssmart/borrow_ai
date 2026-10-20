@@ -2,6 +2,7 @@ package org.deer.borrowai
 
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.test.platform.app.InstrumentationRegistry
 import kotbase.Database
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ class AppServicesViewModelTest {
     fun serviceGraphSurvivesProviderRecreationAndClosesWithItsStore() {
         val store = ViewModelStore()
         val factory = AppServicesViewModelFactory(
+            appContext = InstrumentationRegistry.getInstrumentation().targetContext,
             createModelDevice = { FakeModelDevice() },
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",
@@ -82,6 +84,7 @@ class AppServicesViewModelTest {
         val gate = CompletableDeferred<AppServices>()
         val store = ViewModelStore()
         val viewModel = AppServicesViewModel(
+            appContext = InstrumentationRegistry.getInstrumentation().targetContext,
             modelDevice = FakeModelDevice(),
             epochClock = EpochClock { 1_800_000_000_000L },
             recordingsRoot = FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "borrowai-vm-test",

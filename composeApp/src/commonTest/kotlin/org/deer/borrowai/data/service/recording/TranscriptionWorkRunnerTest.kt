@@ -117,7 +117,7 @@ class TranscriptionWorkRunnerTest {
 
         val queued = runner(memories, { "x" }, scheduler).sweep()
 
-        assertEquals(1, queued)
+        assertTrue(queued)
         assertEquals(TranscriptionStatus.PENDING, memories.get("stuck").transcriptionStatus)
         assertEquals(1, scheduler.transcriptionRequests)
     }

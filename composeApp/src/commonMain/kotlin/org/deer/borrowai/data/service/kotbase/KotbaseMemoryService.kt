@@ -234,6 +234,7 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_RECORDING_PATH),
             SelectResult.property(COLUMN_DELETED),
             SelectResult.property(COLUMN_TRANSCRIPTION_STATUS),
+            SelectResult.property(COLUMN_TRANSCRIPTION_DONE),
             SelectResult.property(COLUMN_TRANSCRIPTION_ATTEMPTS),
             SelectResult.property(COLUMN_LAST_TRANSCRIPTION_ERROR),
             SelectResult.property(COLUMN_SUMMARIZED),
@@ -294,6 +295,7 @@ class KotbaseMemoryService private constructor(
                     getString(COLUMN_TRANSCRIPTION_STATUS),
                     getString(COLUMN_TRANSCRIPTION),
                     getString(COLUMN_RECORDING_PATH),
+                    getBoolean(COLUMN_TRANSCRIPTION_DONE),
                 ),
                 transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
                 lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
@@ -334,6 +336,7 @@ class KotbaseMemoryService private constructor(
                 getString(COLUMN_TRANSCRIPTION_STATUS),
                 getString(COLUMN_TRANSCRIPTION),
                 getString(COLUMN_RECORDING_PATH),
+                getBoolean(COLUMN_TRANSCRIPTION_DONE),
             ),
             transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
             lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
@@ -348,12 +351,22 @@ class KotbaseMemoryService private constructor(
         SummaryStatus.valueOf(requireNotNull(raw) { "Missing summaryStatus." })
 
     /**
-     * Documents written before the status field existed have no value. Those with a recording but no
-     * transcript are queued as [TranscriptionStatus.PENDING] so the recovery sweep picks them up; all others are DONE.
+     * Documents written before the status field existed have no value. A legacy document that finished
+     * transcription (`transcriptionDone`) is DONE even when its transcript is blank. Otherwise a document with a
+     * recording but no transcript is queued as [TranscriptionStatus.PENDING] so the recovery sweep picks it up.
      */
-    private fun transcriptionStatusOf(stored: String?, transcription: String?, recordingPath: String?): TranscriptionStatus =
+    private fun transcriptionStatusOf(
+        stored: String?,
+        transcription: String?,
+        recordingPath: String?,
+        legacyDone: Boolean,
+    ): TranscriptionStatus =
         stored?.let { name -> TranscriptionStatus.entries.firstOrNull { it.name == name } ?: throw IllegalArgumentException(name) }
-            ?: if (recordingPath != null && transcription.isNullOrBlank()) TranscriptionStatus.PENDING else TranscriptionStatus.DONE
+            ?: when {
+                legacyDone -> TranscriptionStatus.DONE
+                recordingPath != null && transcription.isNullOrBlank() -> TranscriptionStatus.PENDING
+                else -> TranscriptionStatus.DONE
+            }
 
     companion object {
         private const val KEY_TYPE = "type"
@@ -366,6 +379,7 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_RECORDING_PATH = "recordingPath"
         private const val COLUMN_DELETED = "deleted"
         private const val COLUMN_TRANSCRIPTION_STATUS = "transcriptionStatus"
+        private const val COLUMN_TRANSCRIPTION_DONE = "transcriptionDone"
         private const val COLUMN_TRANSCRIPTION_ATTEMPTS = "transcriptionAttempts"
         private const val COLUMN_LAST_TRANSCRIPTION_ERROR = "lastTranscriptionError"
         private const val COLUMN_SUMMARIZED = "summarized"

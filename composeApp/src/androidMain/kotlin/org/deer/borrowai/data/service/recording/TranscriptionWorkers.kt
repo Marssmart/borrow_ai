@@ -21,10 +21,10 @@ internal class WorkManagerTranscriptionScheduler(context: Context) : Transcripti
     private val workManager = WorkManager.getInstance(context.applicationContext)
 
     override fun enqueueTranscription() {
-        // APPEND chains a request made during an active run, so it is not dropped. REPLACE would cancel the run mid-transcription.
+        // APPEND_OR_REPLACE chains a request made during an active run so it is not dropped, and replaces a failed or cancelled chain so it cannot block later drains. REPLACE would cancel the run mid-transcription.
         workManager.enqueueUniqueWork(
             DRAIN_WORK_NAME,
-            ExistingWorkPolicy.APPEND,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             OneTimeWorkRequestBuilder<TranscriptionDrainWorker>().build(),
         )
     }
@@ -55,7 +55,6 @@ internal class TranscriptionDrainWorker(context: Context, params: WorkerParamete
 internal class TranscriptionSweepWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val runner = TranscriptionRunnerHolder.runner ?: return Result.retry()
-        runner.sweep()
-        return Result.success()
+        return if (runner.sweep()) Result.success() else Result.retry()
     }
 }

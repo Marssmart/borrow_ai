@@ -157,19 +157,27 @@ fun Memory.withFailedTranscription(): Memory = copy(
     },
 )
 
-/** A claim interrupted by a crash is requeued without refunding its attempt, so a crashing recording still stops. */
-fun Memory.requeuedForTranscription(): Memory = copy(transcriptionStatus = TranscriptionStatus.PENDING)
+/**
+ * A claim interrupted by a crash is requeued without refunding its attempt, so a crashing recording still stops.
+ * If the interrupted claim used the last attempt, the memory is FAILED instead of being claimed again.
+ */
+fun Memory.requeuedForTranscription(): Memory = copy(
+    transcriptionStatus = if (transcriptionAttempts >= MAX_TRANSCRIPTION_ATTEMPTS) {
+        TranscriptionStatus.FAILED
+    } else {
+        TranscriptionStatus.PENDING
+    },
+)
 
 /**
- * True when an active memory has a recording but no transcript and was never claimed by the pipeline. Legacy
- * memories, which predate the status field, read as DONE with zero attempts, so this finds them.
+ * True when an active memory has a recording but no transcript and is waiting to be transcribed. Legacy memories
+ * whose batch transcription finished (even with a blank result) decode as DONE, so they are not picked up here.
  */
 fun Memory.isMissingTranscription(): Boolean =
     !deleted &&
         recordingPath != null &&
         transcription.isBlank() &&
-        transcriptionStatus == TranscriptionStatus.DONE &&
-        transcriptionAttempts == 0
+        transcriptionStatus == TranscriptionStatus.PENDING
 
 data class MemoryDraft(
     val title: String,
