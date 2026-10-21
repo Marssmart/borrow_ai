@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.3.4]
+
+- Added a `native-developer` custom agent in `.github/agents/`. It implements native Android and iOS changes using current platform practices. It plans first, checks the iOS deployment target and minSdk before using newer APIs, and follows the MR and version rules in `AGENTS.md`.
+- Updated Android and iOS versioning to 1.3.4 (build 31).
+
 ## [1.3.3]
 
 - Added a `native-simplifier` custom agent in `.github/agents/`. It reviews native Android and iOS code for hand-rolled plumbing that platform APIs already cover, and proposes replacements.
