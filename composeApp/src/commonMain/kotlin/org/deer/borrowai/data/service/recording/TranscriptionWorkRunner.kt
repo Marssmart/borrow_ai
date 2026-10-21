@@ -100,7 +100,7 @@ class TranscriptionWorkRunner(
                 val written = if (transcript.isNullOrBlank()) {
                     memoryService.failTranscription(memory.id, failure ?: "Transcription returned no text")
                 } else {
-                    memoryService.completeTranscription(memory.id, transcript)
+                    memoryService.completeTranscription(memory.id, transcript.trim())
                 }
                 // A failed write leaves the row IN_PROGRESS. Returning false makes WorkManager retry, and the sweep requeues it.
                 if (written.isLeft()) return false
