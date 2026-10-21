@@ -9,7 +9,7 @@
     <string name="memory_play_summary">Play summary</string>
     <string name="memory_stop_summary">Stop summary</string>
     <string name="memory_audio_playing">Original audio is playing</string>
-    <string name="memory_audio_not_playing">Original audio is not playing</string>
+    <string name="memory_audio_not_playing">Audio is not playing</string>
     <string name="memory_summary_audio_playing">Summary audio is playing</string>
     <string name="memory_play_recording">Play recording</string>
     <string name="memory_stop_recording">Stop recording playback</string>
