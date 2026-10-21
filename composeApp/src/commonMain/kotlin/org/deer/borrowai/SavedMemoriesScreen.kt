@@ -285,7 +285,10 @@ private fun MemoryCard(
 ) {
     val hasTranscript = memory.transcription.isNotBlank()
     val isFailed = !hasTranscript && memory.transcriptionStatus == TranscriptionStatus.FAILED
-    val isPending = !hasTranscript && !isFailed
+    val isPending = !hasTranscript && (
+        memory.transcriptionStatus == TranscriptionStatus.PENDING ||
+            memory.transcriptionStatus == TranscriptionStatus.IN_PROGRESS
+        )
     Card(
         modifier = Modifier.fillMaxWidth()
             .then(
