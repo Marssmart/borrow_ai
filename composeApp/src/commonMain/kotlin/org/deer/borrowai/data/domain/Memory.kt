@@ -149,12 +149,13 @@ fun Memory.claimedForTranscription(): Memory = copy(
 
 fun Memory.withFinishedTranscription(text: String): Memory = withTranscription(text)
 
-fun Memory.withFailedTranscription(): Memory = copy(
+fun Memory.withFailedTranscription(error: String?): Memory = copy(
     transcriptionStatus = if (transcriptionAttempts >= MAX_TRANSCRIPTION_ATTEMPTS) {
         TranscriptionStatus.FAILED
     } else {
         TranscriptionStatus.PENDING
     },
+    lastTranscriptionError = error ?: lastTranscriptionError,
 )
 
 /**

@@ -99,8 +99,8 @@ class FakeMemoryService(
     override suspend fun completeTranscription(id: String, transcription: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withFinishedTranscription(transcription) }
 
-    override suspend fun failTranscription(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withFailedTranscription() }
+    override suspend fun failTranscription(id: String, error: String?): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFailedTranscription(error) }
 
     override suspend fun requeueUnfinishedTranscriptions(): Either<MemoryError, Int> = mutex.withLock {
         var requeued = 0

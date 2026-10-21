@@ -113,6 +113,16 @@ class TranscriptionWorkRunnerTest {
     }
 
     @Test
+    fun failedAttemptRecordsTheTranscriberErrorAsReason() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+
+        runner(memories, { error("model crashed") }).drain()
+
+        assertEquals("IllegalStateException: model crashed", memories.get("a").lastTranscriptionError)
+    }
+
+    @Test
     fun sweepRequeuesUnfinishedWorkAndSchedulesDrain() = runTest {
         val memories = memories()
         memories.addPending("stuck", TranscriptionStatus.IN_PROGRESS)

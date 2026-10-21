@@ -53,13 +53,12 @@ class TranscriptionWorkRunner(
      * Waits for any running drain first, so IN_PROGRESS rows are only reset when no drain owns them.
      * On success, always schedules a drain so PENDING rows left by an earlier run are picked up.
      */
-    suspend fun sweep(): Boolean {
+    suspend fun sweep(): Boolean = drainLock.withLock {
+        // Checked under the lock, so a shutdown that starts after this check waits for the requeue to finish.
         if (stopped) return false
-        drainLock.withLock {
-            memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
-        }
+        memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
         scheduler.enqueueTranscription()
-        return true
+        true
     }
 
     /**
@@ -68,8 +67,10 @@ class TranscriptionWorkRunner(
      */
     suspend fun drain(): Boolean {
         val transcriber = batchTranscriber ?: return false
-        if (stopped) return false
-        return drainLock.withLock { drainPending(transcriber) }
+        return drainLock.withLock {
+            if (stopped) return false
+            drainPending(transcriber)
+        }
     }
 
     private suspend fun drainPending(transcriber: BatchTranscriber): Boolean {
@@ -82,7 +83,9 @@ class TranscriptionWorkRunner(
                     .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
                 val relativePath = memory.recordingPath
                 // A null or blank result is a failed attempt. Attempts are capped, so a broken model cannot loop forever.
+                var failure: String? = null
                 val transcript = if (relativePath == null) {
+                    failure = "Recording file is missing"
                     null
                 } else {
                     try {
@@ -90,14 +93,17 @@ class TranscriptionWorkRunner(
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
+                        failure = "${exception::class.simpleName}: ${exception.message}"
                         null
                     }
                 }
-                if (transcript.isNullOrBlank()) {
-                    memoryService.failTranscription(memory.id)
+                val written = if (transcript.isNullOrBlank()) {
+                    memoryService.failTranscription(memory.id, failure ?: "Transcription returned no text")
                 } else {
                     memoryService.completeTranscription(memory.id, transcript)
                 }
+                // A failed write leaves the row IN_PROGRESS. Returning false makes WorkManager retry, and the sweep requeues it.
+                if (written.isLeft()) return false
                 transcribed++
             }
         } finally {

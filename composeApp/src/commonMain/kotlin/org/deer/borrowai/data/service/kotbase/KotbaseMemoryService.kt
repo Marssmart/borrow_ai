@@ -97,10 +97,10 @@ class KotbaseMemoryService private constructor(
             }
         }
 
-    override suspend fun failTranscription(id: String): Either<MemoryError, Unit> = mutex.withLock {
+    override suspend fun failTranscription(id: String, error: String?): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-            writeAndPublish { database.save(existing.withFailedTranscription().toDocument()) }.bind()
+            writeAndPublish { database.save(existing.withFailedTranscription(error).toDocument()) }.bind()
         }
     }
 

@@ -44,8 +44,8 @@ interface MemoryService {
     /** Stores [transcription] and marks the memory DONE. Returns [MemoryError.NotFound] when it is missing or deleted. */
     suspend fun completeTranscription(id: String, transcription: String): Either<MemoryError, Unit>
 
-    /** Records a failed attempt: back to PENDING while attempts remain, otherwise FAILED. */
-    suspend fun failTranscription(id: String): Either<MemoryError, Unit>
+    /** Records a failed attempt with [error] as the reason: back to PENDING while attempts remain, otherwise FAILED. */
+    suspend fun failTranscription(id: String, error: String?): Either<MemoryError, Unit>
 
     /**
      * Sweeps transcription work left unfinished: IN_PROGRESS claims go back to PENDING, and legacy memories that have a
