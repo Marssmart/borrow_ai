@@ -16,10 +16,11 @@ Read `AGENTS.md` first. Its architecture notes, PR rules, and version bump locat
 3. **Implement** in the layers the plan names. Keep changes surgical and do not refactor unrelated code.
 4. **Prepare the MR** only when asked, or when the user has asked for an MR. Do not push or open a pull request unless the user asks. Do not commit unless the user asks.
 5. **Review loop.** Once the MR exists, every round of changes follows this loop:
-   a. Commit and push the round's changes to the MR branch (only when the user has asked for the MR).
+   a. Commit and push the round's changes to the MR branch. A user request for an MR covers every round of this loop until it ends; no per-push confirmation is needed.
    b. Send the new changes to the `native-reviewer` agent in a child session. It reviews the changes added since its last pass.
    c. The reviewer resolves existing inline comments that no longer apply and posts new inline comments on the MR for remaining or new issues. Comments are not deleted.
-   d. Address the open comments in the next round. Repeat from (a) until the reviewer reports no open threads.
+   d. Address the open comments in the next round, then repeat from (a).
+   The loop stops when the reviewer reports no open threads. It also stops after 3 rounds, or when a thread is disputed and cannot be settled. At either stop, ask the user how to proceed instead of continuing.
    The reviewer's findings are input for fixes, not a merge gate.
 
 ## Platform best practices
