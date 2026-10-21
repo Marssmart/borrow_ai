@@ -8,7 +8,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Added a WorkManager-based transcription recovery system on Android. Memories are saved as `PENDING` and transcribed in the background, instead of inline after recording. A startup sweep requeues memories that were missing or unfinished transcripts.
 - Replaced the transcription state with `transcriptionStatus` (`PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`) and `transcriptionAttempts`, capped at 5 attempts. A missing model does not use up an attempt.
-- Updated Android and iOS versioning to 1.4.0 (build 28).
+- Updated Android and iOS versioning to 1.4.0 (build 29).
+
+## [1.3.1]
+
+- Removed the "Play original" button from saved memories. Each memory now shows only "Play recording" and "Play summary" (when a summary exists). The design guide was updated to match.
+- Updated Android and iOS versioning to 1.3.1 (build 28).
 
 ## [1.3.0]
 

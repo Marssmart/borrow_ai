@@ -676,7 +676,7 @@
     ];
     const playbackPhases = [
       { track: null, duration: 1_700 },
-      { track: "original", duration: 2_300 },
+      { track: "recording", duration: 2_300 },
       { track: null, duration: 1_200 },
       { track: "summary", duration: 2_300 },
       { track: null, duration: 1_700 },
@@ -688,7 +688,7 @@
     })[character]);
     const preview = (value) => value.length > 240 ? `${value.slice(0, 240).trimEnd()}...` : value;
     const audioButtons = (untranscribed = false) => `<div class="audio-actions">
-      <span class="audio-action" data-play-track="original"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play original</span></span>
+      <span class="audio-action" data-play-track="recording"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play recording</span></span>
       ${untranscribed ? "" : `<span class="audio-action" data-play-track="summary"><span class="audio-action-icon" aria-hidden="true">▶</span><span class="audio-action-label">Play summary</span></span>`}
     </div>`;
     const summaryIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h8l4 4V20H6z"/><path d="M14 4.5v4h4M9 12h6M9 15.5h6"/></svg>`;
@@ -849,7 +849,7 @@
       document.querySelectorAll(".memory-card").forEach((card, index) => {
         const activeTrack = index === 0 ? track : null;
         card.classList.toggle("is-playing", activeTrack !== null);
-        card.querySelector("[data-audio-glyph]").textContent = activeTrack === "original" ? "Ⅱ" : "▶";
+        card.querySelector("[data-audio-glyph]").textContent = activeTrack === "recording" ? "Ⅱ" : "▶";
         card.querySelectorAll("[data-play-track]").forEach((button) => {
           const selected = activeTrack === button.dataset.playTrack;
           button.querySelector(".audio-action-icon").textContent = selected ? "Ⅱ" : "▶";
