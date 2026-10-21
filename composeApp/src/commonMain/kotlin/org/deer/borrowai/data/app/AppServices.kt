@@ -66,6 +66,8 @@ class AppServices private constructor(
         closeScope.launch {
             try {
                 mediaSession.awaitPendingWork()
+                // Transcription workers may still hold the runner, so stop it before the database closes under them.
+                transcriptionRunner.shutdown()
                 // Periodic sweeps must finish before the database closes under them.
                 backgroundJobs.forEach { it.cancel() }
                 backgroundJobs.forEach { it.join() }

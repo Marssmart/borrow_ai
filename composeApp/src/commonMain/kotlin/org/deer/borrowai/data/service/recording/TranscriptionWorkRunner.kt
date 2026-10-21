@@ -36,12 +36,25 @@ class TranscriptionWorkRunner(
     /** Held for the whole of a drain. The sweep takes it too, so it never requeues rows a live drain is working on. */
     private val drainLock = Mutex()
 
+    @Volatile
+    private var stopped = false
+
+    /**
+     * Stops new sweeps and drains, then waits for a running drain to finish its current memory. Call before
+     * closing the database, because a worker may still hold this runner after its owner is cleared.
+     */
+    suspend fun shutdown() {
+        stopped = true
+        drainLock.withLock { }
+    }
+
     /**
      * Queues missing or unfinished transcriptions. Returns false when the store failed, so the job should be retried.
      * Waits for any running drain first, so IN_PROGRESS rows are only reset when no drain owns them.
      * On success, always schedules a drain so PENDING rows left by an earlier run are picked up.
      */
     suspend fun sweep(): Boolean {
+        if (stopped) return false
         drainLock.withLock {
             memoryService.requeueUnfinishedTranscriptions().fold(ifLeft = { return false }, ifRight = { })
         }
@@ -55,6 +68,7 @@ class TranscriptionWorkRunner(
      */
     suspend fun drain(): Boolean {
         val transcriber = batchTranscriber ?: return false
+        if (stopped) return false
         return drainLock.withLock { drainPending(transcriber) }
     }
 
@@ -63,7 +77,7 @@ class TranscriptionWorkRunner(
         try {
             while (true) {
                 // Checked before claiming, so a missing model leaves the memory PENDING without using up an attempt.
-                if (!transcriber.isAvailable()) return false
+                if (stopped || !transcriber.isAvailable()) return false
                 val memory = memoryService.claimNextPendingTranscription()
                     .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
                 val relativePath = memory.recordingPath

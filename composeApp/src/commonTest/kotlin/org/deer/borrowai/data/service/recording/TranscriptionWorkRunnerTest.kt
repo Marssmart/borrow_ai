@@ -145,4 +145,27 @@ class TranscriptionWorkRunnerTest {
         assertTrue(sweep.await())
         assertEquals(TranscriptionStatus.DONE, memories.get("a").transcriptionStatus)
     }
+
+    @Test
+    fun shutdownWaitsForRunningDrainAndBlocksLaterWork() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+        memories.addPending("b")
+        val gate = CompletableDeferred<Unit>()
+        val runner = runner(memories, transcribe = { gate.await(); "text" })
+
+        val drain = async { runner.drain() }
+        advanceUntilIdle()
+
+        val shutdown = async { runner.shutdown() }
+        advanceUntilIdle()
+        assertFalse(shutdown.isCompleted)
+
+        gate.complete(Unit)
+        shutdown.await()
+        assertFalse(drain.await())
+        assertFalse(runner.drain())
+        assertFalse(runner.sweep())
+        assertEquals(TranscriptionStatus.PENDING, memories.get("b").transcriptionStatus)
+    }
 }
