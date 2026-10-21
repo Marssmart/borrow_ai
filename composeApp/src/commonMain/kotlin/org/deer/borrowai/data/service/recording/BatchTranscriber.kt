@@ -8,5 +8,8 @@ import okio.Path
  * cancellation.
  */
 interface BatchTranscriber {
+    /** False when the models or runtime are missing. Callers must not count such a state as a failed attempt. */
+    suspend fun isAvailable(): Boolean = true
+
     suspend fun transcribe(recordingPath: Path): String?
 }

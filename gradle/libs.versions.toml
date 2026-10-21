@@ -9,6 +9,7 @@ okio = "3.18.2"
 kotbase = "3.2.4-1.2.0"
 androidx-test = "1.6.1"
 arrow = "2.2.2"
+work = "2.10.5"
 litertlm = "0.16.1"
 
 [libraries]
@@ -24,6 +25,7 @@ okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
 kotbase-couchbase-lite = { module = "dev.kotbase:couchbase-lite", version.ref = "kotbase" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
 
 [plugins]

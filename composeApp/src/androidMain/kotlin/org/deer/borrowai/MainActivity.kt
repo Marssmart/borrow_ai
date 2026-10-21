@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(
             this,
             AppServicesViewModelFactory(
+                appContext = applicationContext,
                 // Built only when the ViewModel is created, so recreated activities don't register a second callback.
                 createModelDevice = { AndroidModelDevice(applicationContext) },
                 epochClock = EpochClock { System.currentTimeMillis() },

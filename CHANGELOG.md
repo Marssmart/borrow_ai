@@ -4,11 +4,22 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.3.4]
+## [1.4.1]
+
+- Added a `native-developer` custom agent in `.github/agents/`. It implements native Android and iOS changes using current platform practices. It plans first, checks the iOS deployment target and minSdk before using newer APIs, and follows the MR and version rules in `AGENTS.md`. It runs a review loop with `native-reviewer` (3 rounds maximum).
+- Updated Android and iOS versioning to 1.4.1 (build 32).
+
+## [1.4.0]
+
+- Added a WorkManager-based transcription recovery system on Android. Memories are saved as `PENDING` and transcribed in the background, instead of inline after recording. A startup sweep requeues memories that were missing or unfinished transcripts.
+- Replaced the transcription state with `transcriptionStatus` (`PENDING`, `IN_PROGRESS`, `DONE`, `FAILED`) and `transcriptionAttempts`, capped at 5 attempts. A missing model does not use up an attempt.
+- Failed transcription attempts now record the reason in `lastTranscriptionError`. A failed write makes the drain job retry instead of reporting success.
+- Updated Android and iOS versioning to 1.4.0 (build 31).
+
+## [1.3.3]
 
 - Added a `native-simplifier` custom agent in `.github/agents/`. It reviews native Android and iOS code for hand-rolled plumbing that platform APIs already cover, and proposes replacements.
-- Added a `native-developer` custom agent in `.github/agents/`. It implements native Android and iOS changes using current platform practices. It plans first, checks the iOS deployment target and minSdk before using newer APIs, and follows the MR and version rules in `AGENTS.md`.
-- Updated Android and iOS versioning to 1.3.4 (build 31).
+- Updated Android and iOS versioning to 1.3.3 (build 30).
 
 ## [1.3.1]
 

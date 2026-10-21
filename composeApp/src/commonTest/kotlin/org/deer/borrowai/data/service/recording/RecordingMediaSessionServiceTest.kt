@@ -26,6 +26,8 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
+import org.deer.borrowai.data.service.recording.TranscriptionScheduler
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
@@ -132,7 +134,7 @@ class RecordingMediaSessionServiceTest {
         epochClock: EpochClock = EpochClock { 1_800_000_000_000L },
         monotonicMillis: () -> Long = { 0L },
         liveTranscriber: LiveTranscriber? = null,
-        batchTranscriber: BatchTranscriber? = null,
+        scheduler: TranscriptionScheduler = TranscriptionScheduler.None,
     ) = RecordingMediaSessionService(
         memoryService = memories,
         recorder = recorder,
@@ -145,54 +147,31 @@ class RecordingMediaSessionServiceTest {
         idGenerator = { "rec-1" },
         monotonicMillis = monotonicMillis,
         liveTranscriber = liveTranscriber,
-        batchTranscriber = batchTranscriber,
+        transcriptionScheduler = scheduler,
     )
 
-    private class FakeBatchTranscriber(
-        private val result: () -> String? = { "full transcript" },
-    ) : BatchTranscriber {
-        val transcribedPaths = mutableListOf<Path>()
+    private class FakeScheduler : TranscriptionScheduler {
+        var transcriptionRequests = 0
 
-        override suspend fun transcribe(recordingPath: Path): String? {
-            transcribedPaths += recordingPath
-            return result()
+        override fun enqueueTranscription() {
+            transcriptionRequests++
         }
+
+        override fun enqueueSweep() = Unit
     }
 
     @Test
-    fun finishedRecordingStoresBatchTranscriptOnMemory() = runTest {
+    fun finishedRecordingSavesPendingTranscriptionAndSchedulesIt() = runTest {
         val fs = FakeFileSystem()
         val memories = memories()
-        val batch = FakeBatchTranscriber()
+        val scheduler = FakeScheduler()
         val service = service(
             FakeRecorder(fileSystem = fs),
             FakePermission(CompletableDeferred(true)),
             memories,
             fs,
             backgroundScope,
-            batchTranscriber = batch,
-        )
-
-        service.startRecording()
-        runCurrent()
-        assertNotNull(service.stopRecording())
-        service.awaitPendingWork()
-
-        assertEquals(listOf(recordingFile), batch.transcribedPaths)
-        assertEquals("full transcript", memories.getState().value.single().transcription)
-    }
-
-    @Test
-    fun batchTranscriptionFailureKeepsRecordingWithEmptyTranscript() = runTest {
-        val fs = FakeFileSystem()
-        val memories = memories()
-        val service = service(
-            FakeRecorder(fileSystem = fs),
-            FakePermission(CompletableDeferred(true)),
-            memories,
-            fs,
-            backgroundScope,
-            batchTranscriber = FakeBatchTranscriber { throw IllegalStateException("decode failed") },
+            scheduler = scheduler,
         )
 
         service.startRecording()
@@ -202,29 +181,10 @@ class RecordingMediaSessionServiceTest {
 
         val saved = memories.getState().value.single()
         assertEquals("", saved.transcription)
+        assertEquals(TranscriptionStatus.PENDING, saved.transcriptionStatus)
         assertEquals("recordings/rec-1.m4a", saved.recordingPath)
+        assertEquals(1, scheduler.transcriptionRequests)
         assertTrue(fs.exists(recordingFile))
-    }
-
-    @Test
-    fun blankBatchTranscriptIsNotStored() = runTest {
-        val fs = FakeFileSystem()
-        val memories = memories()
-        val service = service(
-            FakeRecorder(fileSystem = fs),
-            FakePermission(CompletableDeferred(true)),
-            memories,
-            fs,
-            backgroundScope,
-            batchTranscriber = FakeBatchTranscriber { "   " },
-        )
-
-        service.startRecording()
-        runCurrent()
-        assertNotNull(service.stopRecording())
-        service.awaitPendingWork()
-
-        assertEquals("", memories.getState().value.single().transcription)
     }
 
     private class FakeLiveTranscriber : LiveTranscriber {
@@ -449,8 +409,11 @@ class RecordingMediaSessionServiceTest {
         val fs = FakeFileSystem()
         val recorder = FakeRecorder(fileSystem = fs)
         val failingMemories = object : MemoryService by memories() {
-            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> =
-                MemoryError.Persistence(IOException("disk full")).left()
+            override suspend fun create(
+                draft: MemoryDraft,
+                id: String?,
+                transcriptionStatus: TranscriptionStatus,
+            ): Either<MemoryError, Memory> = MemoryError.Persistence(IOException("disk full")).left()
         }
         val service = service(recorder, FakePermission(CompletableDeferred(true)), failingMemories, fs, backgroundScope)
 
@@ -469,9 +432,13 @@ class RecordingMediaSessionServiceTest {
         val gate = CompletableDeferred<Unit>()
         val delegate = memories()
         val slowMemories = object : MemoryService by delegate {
-            override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> {
+            override suspend fun create(
+                draft: MemoryDraft,
+                id: String?,
+                transcriptionStatus: TranscriptionStatus,
+            ): Either<MemoryError, Memory> {
                 gate.await()
-                return delegate.create(draft, id)
+                return delegate.create(draft, id, transcriptionStatus)
             }
         }
         val fs = FakeFileSystem()
