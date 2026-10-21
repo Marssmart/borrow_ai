@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.3.1]
+
+- Added a `native-reviewer` custom agent (`.github/agents/native-reviewer.agent.md`) for reviewing native Android and iOS changes: permissions, lifecycle, state transitions, recording and audio, background jobs, persistence, and platform interop.
+- Updated Android and iOS versioning to 1.3.1 (build 28).
+
 ## [1.3.0]
 
 - Added an on-device memory summarizer on Android, built on LiteRT-LM (Gemma model). Each memory gets one short summary, produced after transcription and retried by the recovery job.

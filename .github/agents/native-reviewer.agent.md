@@ -1,5 +1,5 @@
 ---
-name: native-review
+name: native-reviewer
 description: Code reviewer specialized in native mobile development for BorrowAI (Kotlin Multiplatform with Compose, Android and iOS). Reviews permissions, lifecycle, state and state transitions, audio/recording, background work, persistence, and platform-specific interop. Use for reviewing pull requests and diffs touching androidMain, iosMain, iosApp, or commonMain services.
 ---
 
