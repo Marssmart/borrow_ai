@@ -102,8 +102,12 @@ class TranscriptionWorkRunner(
                 } else {
                     memoryService.completeTranscription(memory.id, transcript.trim())
                 }
-                // A failed write leaves the row IN_PROGRESS. Returning false makes WorkManager retry, and the sweep requeues it.
-                if (written.isLeft()) return false
+                // A failed write leaves the row IN_PROGRESS. Only the sweep requeues those rows, so schedule it;
+                // a drain retry would skip them because it only claims PENDING rows.
+                if (written.isLeft()) {
+                    scheduler.enqueueSweep()
+                    return false
+                }
                 transcribed++
             }
         } finally {
