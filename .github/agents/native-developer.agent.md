@@ -20,6 +20,7 @@ Read `AGENTS.md` first. Its architecture notes, PR rules, and version bump locat
    b. Send the new changes to the `native-reviewer` agent in a child session. It reviews the changes added since its last pass.
    c. The reviewer resolves existing inline comments that no longer apply and posts new inline comments on the MR for remaining or new issues. Comments are not deleted.
    d. Address the open comments in the next round, then repeat from (a).
+   A round is one fix commit and push (step a), followed by one reviewer run (step b). The initial MR push is not a round.
    The loop stops when the reviewer reports no open threads. It also stops after 3 rounds, or when a thread is disputed and cannot be settled. At either stop, ask the user how to proceed instead of continuing.
    The reviewer's findings are input for fixes, not a merge gate.
 
