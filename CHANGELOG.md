@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.3.1]
 
-- Added a `native-reviewer` custom agent (`.github/agents/native-reviewer.agent.md`) for reviewing native Android and iOS changes: permissions, lifecycle, state transitions, recording and audio, background jobs, persistence, and platform interop.
+- Removed the "Play original" button from saved memories. Each memory now shows only "Play recording" and "Play summary" (when a summary exists). The design guide was updated to match.
 - Updated Android and iOS versioning to 1.3.1 (build 28).
 
 ## [1.3.0]
