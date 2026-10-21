@@ -15,7 +15,12 @@ Read `AGENTS.md` first. Its architecture notes, PR rules, and version bump locat
 2. **Get a simplification pass on the plan** when the change is non-trivial, using the `native-simplifier` agent. Revise the plan from its feedback.
 3. **Implement** in the layers the plan names. Keep changes surgical and do not refactor unrelated code.
 4. **Prepare the MR** only when asked, or when the user has asked for an MR. Do not push or open a pull request unless the user asks. Do not commit unless the user asks.
-5. **Hand off for review** with the `native-reviewer` agent when asked. Its findings are input for fixes, not a merge gate.
+5. **Review loop.** Once the MR exists, every round of changes follows this loop:
+   a. Commit and push the round's changes to the MR branch (only when the user has asked for the MR).
+   b. Send the new changes to the `native-reviewer` agent in a child session. It reviews the changes added since its last pass.
+   c. The reviewer resolves existing inline comments that no longer apply and posts new inline comments on the MR for remaining or new issues. Comments are not deleted.
+   d. Address the open comments in the next round. Repeat from (a) until the reviewer reports no open threads.
+   The reviewer's findings are input for fixes, not a merge gate.
 
 ## Platform best practices
 
