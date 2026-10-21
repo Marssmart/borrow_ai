@@ -45,6 +45,8 @@ class AppServices private constructor(
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
+    /** Summary recoveries launched from transcription callbacks. Written under the runner's lock, read after its shutdown. */
+    private val callbackJobs: MutableList<Job> = mutableListOf(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
     private val onClose: () -> Unit = {},
 ) {
@@ -68,9 +70,10 @@ class AppServices private constructor(
                 mediaSession.awaitPendingWork()
                 // Transcription workers may still hold the runner, so stop it before the database closes under them.
                 transcriptionRunner.shutdown()
-                // Periodic sweeps must finish before the database closes under them.
-                backgroundJobs.forEach { it.cancel() }
-                backgroundJobs.forEach { it.join() }
+                // Periodic sweeps and summary recoveries must finish before the database closes under them.
+                val jobs = backgroundJobs + callbackJobs
+                jobs.forEach { it.cancel() }
+                jobs.forEach { it.join() }
                 summarizer.close()
             } finally {
                 finishClose()
@@ -154,6 +157,7 @@ class AppServices private constructor(
                     scope = graphScope,
                 )
                 // The summary job is built after the media session, so the drain reaches it through this holder.
+                val callbackJobs = mutableListOf<Job>()
                 var runSummaryRecovery: () -> Unit = {}
                 val transcriptionRunner = TranscriptionWorkRunner(
                     memoryService = memories,
@@ -193,7 +197,7 @@ class AppServices private constructor(
                     isRecording = { mediaSession.isBusy },
                 )
                 val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
-                runSummaryRecovery = { graphScope.launch { summaryRecovery.recover() } }
+                runSummaryRecovery = { callbackJobs += graphScope.launch { summaryRecovery.recover() } }
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
@@ -202,6 +206,7 @@ class AppServices private constructor(
                     graphJob = graphJob,
                     closeScope = graphScope,
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
+                    callbackJobs = callbackJobs,
                     summarizer = summarizer,
                     onClose = { database.close() },
                 )

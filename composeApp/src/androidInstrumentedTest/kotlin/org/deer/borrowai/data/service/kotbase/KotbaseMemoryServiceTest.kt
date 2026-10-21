@@ -12,6 +12,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
@@ -185,8 +186,10 @@ class KotbaseMemoryServiceTest {
             MemoryDraft("Failing", "", "", "recordings/f.m4a"),
             transcriptionStatus = TranscriptionStatus.PENDING,
         ).getOrNull()!!
-        first.claimNextPendingTranscription()
-        first.failTranscription(created.id, "IllegalStateException: boom")
+        repeat(MAX_TRANSCRIPTION_ATTEMPTS) {
+            first.claimNextPendingTranscription()
+            first.failTranscription(created.id, "IllegalStateException: boom")
+        }
 
         requireNotNull(database).close()
         database = Database(databaseName)
