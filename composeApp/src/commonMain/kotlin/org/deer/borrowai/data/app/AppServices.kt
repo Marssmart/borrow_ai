@@ -59,15 +59,11 @@ class AppServices private constructor(
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
 
-        try {
-            mediaSession.close()
-        } catch (failure: Throwable) {
-            finishClose()
-            throw failure
-        }
+        val failure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {
             try {
-                mediaSession.awaitPendingWork()
+                // A failed media close has no pending save to wait for, but workers still need stopping before the database closes.
+                if (failure == null) mediaSession.awaitPendingWork()
                 // Transcription workers may still hold the runner, so stop it before the database closes under them.
                 transcriptionRunner.shutdown()
                 // Periodic sweeps and summary recoveries must finish before the database closes under them.
@@ -80,6 +76,7 @@ class AppServices private constructor(
                 finishClose()
             }
         }
+        failure?.let { throw it }
     }
 
     private fun finishClose() {
