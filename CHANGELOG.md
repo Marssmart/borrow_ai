@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.3.3]
+
+- Added a `native-simplifier` custom agent in `.github/agents/`. It reviews native Android and iOS code for hand-rolled plumbing that platform APIs already cover, and proposes replacements.
+- Updated Android and iOS versioning to 1.3.3 (build 30).
+
 ## [1.3.1]
 
 - Removed the "Play original" button from saved memories. Each memory now shows only "Play recording" and "Play summary" (when a summary exists). The design guide was updated to match.
