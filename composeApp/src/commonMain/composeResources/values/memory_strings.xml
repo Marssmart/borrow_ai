@@ -5,9 +5,7 @@
     <string name="memory_original_transcription">ORIGINAL TRANSCRIPTION</string>
     <string name="memory_back_to_memories">← Memories</string>
     <string name="memory_capture">Capture</string>
-    <string name="memory_play_original">Play original</string>
     <string name="memory_waiting_transcription">Waiting for transcription…</string>
-    <string name="memory_stop_original">Stop original</string>
     <string name="memory_play_summary">Play summary</string>
     <string name="memory_stop_summary">Stop summary</string>
     <string name="memory_audio_playing">Original audio is playing</string>

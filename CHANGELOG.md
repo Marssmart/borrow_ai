@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.3.1]
+
+- Removed the "Play original" button from saved memories. Each memory now shows only "Play recording" and "Play summary" (when a summary exists). The design guide was updated to match.
+- Updated Android and iOS versioning to 1.3.1 (build 28).
+
 ## [1.3.0]
 
 - Added an on-device memory summarizer on Android, built on LiteRT-LM (Gemma model). Each memory gets one short summary, produced after transcription and retried by the recovery job.
