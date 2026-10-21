@@ -19,7 +19,7 @@ import org.deer.borrowai.data.service.summary.createSummarizer
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
-import org.deer.borrowai.data.service.recording.TranscriptionRunnerHolder
+import org.deer.borrowai.data.service.recording.TranscriptionWorkerFactory
 import org.deer.borrowai.data.service.recording.WorkManagerTranscriptionScheduler
 
 internal class AppServicesViewModel(
@@ -30,6 +30,8 @@ internal class AppServicesViewModel(
     private val recorder: AudioRecorder,
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
+    private val transcriptionWorkerFactory: TranscriptionWorkerFactory =
+        (appContext.applicationContext as BorrowAiApplication).transcriptionWorkerFactory,
     private val createServices: suspend () -> AppServices = {
         // The transcriber resolves model files when recording starts, so creation stays free of file IO.
         val liveTranscriber = createLiveTranscriber(
@@ -67,7 +69,7 @@ internal class AppServicesViewModel(
             if (cleared) {
                 created.close()
             } else {
-                TranscriptionRunnerHolder.runner = created.transcriptionRunner
+                transcriptionWorkerFactory.attach(created.transcriptionRunner)
                 servicesState.value = created
             }
         }
@@ -76,7 +78,7 @@ internal class AppServicesViewModel(
     override fun onCleared() {
         cleared = true
         // Workers must stop using the runner before the database closes under it.
-        TranscriptionRunnerHolder.runner = null
+        transcriptionWorkerFactory.detach()
         servicesState.value?.close()
         modelDevice.close()
         super.onCleared()

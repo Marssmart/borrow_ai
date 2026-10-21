@@ -3,18 +3,40 @@ package org.deer.borrowai.data.service.recording
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
-import androidx.work.WorkManager
-import androidx.work.WorkerParameters
+import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerFactory
+import androidx.work.WorkerParameters
 
 /**
- * Hands WorkManager workers the runner of the live graph. Workers can start in a process with no
- * graph yet, so they retry until [AppServicesViewModel] publishes one, and it clears the holder
- * before closing the graph.
+ * Builds the transcription workers with the runner of the live graph. WorkManager is configured
+ * with this factory by [org.deer.borrowai.BorrowAiApplication]. The runner is null until
+ * [attach] publishes one, so workers started earlier retry, and [detach] clears it before the graph closes.
  */
-internal object TranscriptionRunnerHolder {
+internal class TranscriptionWorkerFactory : WorkerFactory() {
     @Volatile
-    var runner: TranscriptionWorkRunner? = null
+    private var runner: TranscriptionWorkRunner? = null
+
+    fun attach(runner: TranscriptionWorkRunner) {
+        this.runner = runner
+    }
+
+    fun detach() {
+        runner = null
+    }
+
+    override fun createWorker(
+        appContext: Context,
+        workerClassName: String,
+        workerParameters: WorkerParameters,
+    ): ListenableWorker? = when (workerClassName) {
+        TranscriptionDrainWorker::class.java.name ->
+            TranscriptionDrainWorker(appContext, workerParameters) { runner }
+        TranscriptionSweepWorker::class.java.name ->
+            TranscriptionSweepWorker(appContext, workerParameters) { runner }
+        else -> null
+    }
 }
 
 internal class WorkManagerTranscriptionScheduler(context: Context) : TranscriptionScheduler {
@@ -44,17 +66,25 @@ internal class WorkManagerTranscriptionScheduler(context: Context) : Transcripti
 }
 
 /** Job 2: transcribes PENDING memories until none remain. */
-internal class TranscriptionDrainWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+internal class TranscriptionDrainWorker(
+    context: Context,
+    params: WorkerParameters,
+    private val runnerProvider: () -> TranscriptionWorkRunner?,
+) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val runner = TranscriptionRunnerHolder.runner ?: return Result.retry()
+        val runner = runnerProvider() ?: return Result.retry()
         return if (runner.drain()) Result.success() else Result.retry()
     }
 }
 
 /** Job 1: at startup, requeues memories whose transcription never finished. */
-internal class TranscriptionSweepWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+internal class TranscriptionSweepWorker(
+    context: Context,
+    params: WorkerParameters,
+    private val runnerProvider: () -> TranscriptionWorkRunner?,
+) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val runner = TranscriptionRunnerHolder.runner ?: return Result.retry()
+        val runner = runnerProvider() ?: return Result.retry()
         return if (runner.sweep()) Result.success() else Result.retry()
     }
 }
