@@ -68,3 +68,12 @@ interface MemoryService {
     /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
     suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
 }
+
+/**
+ * Defaults for concrete services. Kotlin does not inherit default arguments into overrides, so calls on a concrete
+ * type that omit these arguments resolve here.
+ */
+suspend fun MemoryService.create(
+    draft: MemoryDraft,
+    id: String? = null,
+): Either<MemoryError, Memory> = create(draft, id, TranscriptionStatus.DONE)

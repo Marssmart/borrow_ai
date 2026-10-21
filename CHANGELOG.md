@@ -46,7 +46,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Untranscribed memories now look distinct in the saved list: a cream card with a tan border and a muted "Waiting for transcription…" placeholder. They show "Play original" (plays the recording) and no "Play summary".
 - Updated the design guide with the pending memory card style.
->- Updated Android and iOS versioning to 1.0.23 (build 24).
+- Updated Android and iOS versioning to 1.0.23 (build 24).
 
 ## [1.0.22]
 

@@ -13,6 +13,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
 
 class KotbaseMemoryServiceTest {
@@ -161,6 +162,39 @@ class KotbaseMemoryServiceTest {
 
         assertIs<MemoryError.Persistence>(createFailure)
         assertIs<MemoryError.Persistence>(findFailure)
+    }
+
+    @Test
+    fun legacyRecordingWithoutTranscriptIsRecoveredAsPendingAfterReopen() = runTest {
+        openService()
+        saveRawMemory(id = "legacy-1", recordingPath = "recordings/legacy.m4a")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val recovered = reopened.findById("legacy-1").getOrNull()!!
+        assertEquals(TranscriptionStatus.PENDING, recovered.transcriptionStatus)
+        assertEquals("legacy-1", reopened.claimNextPendingTranscription().getOrNull()?.id)
+    }
+
+    @Test
+    fun failedTranscriptionStatusAndReasonPersistAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(
+            MemoryDraft("Failing", "", "", "recordings/f.m4a"),
+            transcriptionStatus = TranscriptionStatus.PENDING,
+        ).getOrNull()!!
+        first.claimNextPendingTranscription()
+        first.failTranscription(created.id, "IllegalStateException: boom")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertEquals(TranscriptionStatus.FAILED, found.transcriptionStatus)
+        assertEquals("IllegalStateException: boom", found.lastTranscriptionError)
     }
 
     private fun saveRawMemory(id: String, recordingPath: String) {
