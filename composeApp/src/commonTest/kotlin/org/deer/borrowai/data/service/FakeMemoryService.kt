@@ -10,11 +10,15 @@ import arrow.core.right
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
+import org.deer.borrowai.data.domain.claimedForTranscription
+import org.deer.borrowai.data.domain.isMissingTranscription
+import org.deer.borrowai.data.domain.requeuedForTranscription
+import org.deer.borrowai.data.domain.withFailedTranscription
+import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
-import org.deer.borrowai.data.domain.withTranscription
-import org.deer.borrowai.data.domain.withTranscriptionFailure
 
 class FakeMemoryService(
     initialMemories: List<Memory> = emptyList(),
@@ -37,7 +41,11 @@ class FakeMemoryService(
         records.values.toList().right()
     }
 
-    override suspend fun create(draft: MemoryDraft, id: String?): Either<MemoryError, Memory> = mutex.withLock {
+    override suspend fun create(
+        draft: MemoryDraft,
+        id: String?,
+        transcriptionStatus: TranscriptionStatus,
+    ): Either<MemoryError, Memory> = mutex.withLock {
         val memory = Memory(
             id = id ?: nextId(),
             createdAtEpochMillis = epochClock.nowEpochMillis(),
@@ -45,6 +53,7 @@ class FakeMemoryService(
             summary = draft.summary,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
+            transcriptionStatus = transcriptionStatus,
         )
         records[memory.id] = memory
         publishMemories()
@@ -78,12 +87,40 @@ class FakeMemoryService(
         true
     }
 
-    override suspend fun recordTranscription(id: String, text: String): Either<MemoryError, Unit> = updateActive(id) {
-        it.withTranscription(text)
+    override suspend fun claimNextPendingTranscription(): Either<MemoryError, Memory?> = mutex.withLock {
+        val next = records.values
+            .filter { !it.deleted && it.transcriptionStatus == TranscriptionStatus.PENDING }
+            .minByOrNull(Memory::createdAtEpochMillis)
+            ?.claimedForTranscription()
+        if (next != null) records[next.id] = next
+        next.right()
     }
 
-    override suspend fun recordTranscriptionFailure(id: String, error: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withTranscriptionFailure(error) }
+    override suspend fun completeTranscription(id: String, transcription: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFinishedTranscription(transcription) }
+
+    override suspend fun failTranscription(id: String, error: String?): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFailedTranscription(error) }
+
+    override suspend fun requeueUnfinishedTranscriptions(): Either<MemoryError, Int> = mutex.withLock {
+        var requeued = 0
+        records.replaceAll { _, memory ->
+            when {
+                memory.deleted -> memory
+                memory.transcriptionStatus == TranscriptionStatus.IN_PROGRESS -> {
+                    requeued++
+                    memory.requeuedForTranscription()
+                }
+                memory.isMissingTranscription() -> {
+                    requeued++
+                    memory.copy(transcriptionStatus = TranscriptionStatus.PENDING)
+                }
+                else -> memory
+            }
+        }
+        publishMemories()
+        requeued.right()
+    }
 
     override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> = updateActive(id) {
         it.afterFinishedAttempt(error = error, empty = false)

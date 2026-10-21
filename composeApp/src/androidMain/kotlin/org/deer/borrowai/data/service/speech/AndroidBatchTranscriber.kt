@@ -55,14 +55,17 @@ internal class LazyBatchTranscriber(
     private val lock = Any()
     private var delegate: BatchTranscriber? = null
 
-    override suspend fun transcribe(recordingPath: Path): String? {
+    override suspend fun isAvailable(): Boolean = resolve() != null
+
+    override suspend fun transcribe(recordingPath: Path): String? = resolve()?.transcribe(recordingPath)
+
+    private suspend fun resolve(): BatchTranscriber? {
         // Model verification hashes whole files, so it must not run on the caller's (possibly Main) dispatcher.
-        val resolved = withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             synchronized(lock) {
                 delegate ?: createBatchTranscriberIfAvailable(modelDirectory, totalRamBytes)?.also { delegate = it }
             }
-        } ?: return null
-        return resolved.transcribe(recordingPath)
+        }
     }
 }
 

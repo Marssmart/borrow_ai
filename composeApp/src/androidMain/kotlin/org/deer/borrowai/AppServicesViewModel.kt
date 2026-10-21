@@ -1,5 +1,6 @@
 package org.deer.borrowai
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -18,14 +19,19 @@ import org.deer.borrowai.data.service.summary.createSummarizer
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
+import org.deer.borrowai.data.service.recording.TranscriptionWorkerFactory
+import org.deer.borrowai.data.service.recording.WorkManagerTranscriptionScheduler
 
 internal class AppServicesViewModel(
+    private val appContext: Context,
     private val modelDevice: ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
     private val recorder: AudioRecorder,
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
+    private val transcriptionWorkerFactory: TranscriptionWorkerFactory =
+        (appContext.applicationContext as BorrowAiApplication).transcriptionWorkerFactory,
     private val createServices: suspend () -> AppServices = {
         // The transcriber resolves model files when recording starts, so creation stays free of file IO.
         val liveTranscriber = createLiveTranscriber(
@@ -41,6 +47,7 @@ internal class AppServicesViewModel(
             microphonePermission = microphonePermission,
             liveTranscriber = liveTranscriber,
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
+            transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
             summarizer = createSummarizer(
                 modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
                 totalRamBytes = modelDevice.totalRamBytes,
@@ -62,6 +69,7 @@ internal class AppServicesViewModel(
             if (cleared) {
                 created.close()
             } else {
+                transcriptionWorkerFactory.attach(created.transcriptionRunner)
                 servicesState.value = created
             }
         }
@@ -69,6 +77,8 @@ internal class AppServicesViewModel(
 
     override fun onCleared() {
         cleared = true
+        // Workers must stop using the runner before the database closes under it.
+        transcriptionWorkerFactory.detach()
         servicesState.value?.close()
         modelDevice.close()
         super.onCleared()
@@ -76,6 +86,7 @@ internal class AppServicesViewModel(
 }
 
 internal class AppServicesViewModelFactory(
+    private val appContext: Context,
     private val createModelDevice: () -> ModelDevice,
     private val epochClock: EpochClock,
     private val recordingsRoot: Path,
@@ -89,6 +100,7 @@ internal class AppServicesViewModelFactory(
         }
         return modelClass.cast(
             AppServicesViewModel(
+                appContext = appContext,
                 modelDevice = createModelDevice(),
                 epochClock = epochClock,
                 recordingsRoot = recordingsRoot,

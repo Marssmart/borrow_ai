@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
@@ -85,6 +86,7 @@ import borrowai.composeapp.generated.resources.memory_return_to_recording
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_stop_summary
+import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_audio_playing
@@ -281,7 +283,12 @@ private fun MemoryCard(
     onPlaySummary: () -> Unit,
     onPlayRecording: () -> Unit,
 ) {
-    val isPending = memory.transcription.isBlank()
+    val hasTranscript = memory.transcription.isNotBlank()
+    val isFailed = !hasTranscript && memory.transcriptionStatus == TranscriptionStatus.FAILED
+    val isPending = !hasTranscript && (
+        memory.transcriptionStatus == TranscriptionStatus.PENDING ||
+            memory.transcriptionStatus == TranscriptionStatus.IN_PROGRESS
+        )
     Card(
         modifier = Modifier.fillMaxWidth()
             .then(
@@ -336,6 +343,15 @@ private fun MemoryCard(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+            }
+
+            if (isFailed) {
+                Text(
+                    stringResource(Res.string.memory_transcription_failed),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = FontStyle.Italic,
+                )
             }
 
             if (isPending) {
