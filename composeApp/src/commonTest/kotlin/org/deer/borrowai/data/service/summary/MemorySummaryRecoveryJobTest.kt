@@ -1,6 +1,9 @@
 package org.deer.borrowai.data.service.summary
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -279,6 +282,35 @@ class MemorySummaryRecoveryJobTest {
         assertEquals(1, recovery.recover())
         assertFalse(recovery.summaryModelMissing.value)
         assertEquals(SummaryStatus.SUMMARIZED, service.get("a").summaryStatus)
+    }
+
+    @Test
+    fun modelMissingFlagIsNotClearedByAnotherRunStillInProgress() = runTest {
+        val service = service(memory("a"))
+        val gate = CompletableDeferred<Unit>()
+        var firstCall = true
+        val summarizer = ScriptedSummarizer {
+            if (firstCall) {
+                firstCall = false
+                SummaryResult.ModelMissing
+            } else {
+                gate.await()
+                SummaryResult.ModelMissing
+            }
+        }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        val overlapping = async { recovery.recover() }
+        runCurrent()
+        assertEquals(2, summarizer.calls)
+        assertTrue(recovery.summaryModelMissing.value, "A run still in progress must not clear the notice")
+
+        gate.complete(Unit)
+        overlapping.await()
+        assertTrue(recovery.summaryModelMissing.value)
     }
 
     @Test
