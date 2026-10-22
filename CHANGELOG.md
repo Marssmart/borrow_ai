@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.7]
+
+- Reworked the `native-developer` custom agent into a coordinator model. The coordinator splits work into items and runs each one in its own child session, which also uses `native-developer`. At most 3 worker sessions are active at once, and a worker that merges its MR frees a slot for the next item.
+- Updated Android and iOS versioning to 1.4.7 (build 38).
+
 ## [1.4.6]
 
 - Recording failures are now shown to the user. If the microphone cannot start, or a finished recording cannot be saved, a dialog explains what happened. The partial file is discarded and no memory is created.
