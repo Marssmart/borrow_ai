@@ -5,6 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -23,6 +26,11 @@ class MemorySummaryRecoveryJob(
     private val isRecording: () -> Boolean,
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
 ) {
+    private val modelMissing = MutableStateFlow(false)
+
+    /** True when the last [recover] run stopped because the summary model file is not on the device. */
+    val summaryModelMissing: StateFlow<Boolean> = modelMissing.asStateFlow()
+
     /** Processes eligible memories once. Returns how many summaries were stored. */
     suspend fun recover(): Int {
         if (isRecording()) return 0
@@ -30,41 +38,60 @@ class MemorySummaryRecoveryJob(
             ifLeft = { return 0 },
             ifRight = { it },
         )
+        // Tracked per run so an overlapping run cannot reset or read another run's missing-model result.
+        var missingThisRun = false
+        var interrupted = false
         var stored = 0
         for (memory in memories.filter(::isEligible)) {
-            if (isRecording()) break
-            try {
-                if (process(memory)) stored++
+            if (isRecording()) {
+                interrupted = true
+                break
+            }
+            val outcome = try {
+                process(memory)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 // The memory keeps its count and is retried on the next run.
+                Outcome.NOT_STORED
+            }
+            if (outcome == Outcome.STORED) stored++
+            // A missing model will be missing for every memory, so stop instead of repeating the same result.
+            if (outcome == Outcome.MODEL_MISSING) {
+                missingThisRun = true
+                break
             }
         }
+        // An interrupted run that did not reach the model has no result, so it keeps the previous flag.
+        if (!interrupted || missingThisRun) modelMissing.value = missingThisRun
         return stored
     }
 
     private fun isEligible(memory: Memory): Boolean = memory.isSummaryRetryable
 
-    /** Returns true only when a summary was stored. */
-    private suspend fun process(memory: Memory): Boolean {
+    private enum class Outcome { STORED, NOT_STORED, MODEL_MISSING }
+
+    private suspend fun process(memory: Memory): Outcome {
         // No transcript means nothing to summarize: skip without calling the summarizer or counting an attempt.
-        if (memory.transcription.isBlank()) return false
+        if (memory.transcription.isBlank()) return Outcome.NOT_STORED
         return when (val result = summarize(memory.transcription)) {
             is SummaryResult.Summary -> if (result.text.isBlank()) {
                 memoryService.recordEmpty(memory.id)
-                false
+                Outcome.NOT_STORED
+            } else if (memoryService.recordSummary(memory.id, result.text).isRight()) {
+                Outcome.STORED
             } else {
-                memoryService.recordSummary(memory.id, result.text).isRight()
+                Outcome.NOT_STORED
             }
             SummaryResult.Empty -> {
                 memoryService.recordEmpty(memory.id)
-                false
+                Outcome.NOT_STORED
             }
-            SummaryResult.Unavailable -> false
+            SummaryResult.Unavailable -> Outcome.NOT_STORED
+            SummaryResult.ModelMissing -> Outcome.MODEL_MISSING
             is SummaryResult.Failed -> {
                 memoryService.recordFinishedAttempt(memory.id, result.cause.describeForStorage())
-                false
+                Outcome.NOT_STORED
             }
         }
     }

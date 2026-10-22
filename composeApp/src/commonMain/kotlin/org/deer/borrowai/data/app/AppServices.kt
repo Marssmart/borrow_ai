@@ -8,13 +8,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotbase.Database
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
+import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
@@ -36,6 +43,15 @@ import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
 import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
 
+/**
+ * Shows the missing-model notice only until model setup reports ready, so it clears as soon as the download
+ * finishes instead of waiting for the next recovery run.
+ */
+internal fun summaryModelMissingNotice(
+    missing: StateFlow<Boolean>,
+    setup: StateFlow<ModelSetupState>,
+): Flow<Boolean> = combine(missing, setup) { isMissing, state -> isMissing && !state.isReady }
+
 class AppServices internal constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
@@ -48,6 +64,8 @@ class AppServices internal constructor(
     /** Parent of summary recoveries launched from transcription callbacks. Completed children detach themselves. */
     private val callbackGroup: Job = Job(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+    /** True while the summary model file is missing, so recovery cannot summarize anything. */
+    val summaryModelMissing: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow(),
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -221,6 +239,8 @@ class AppServices internal constructor(
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
                     callbackGroup = callbackGroup,
                     summarizer = summarizer,
+                    summaryModelMissing = summaryModelMissingNotice(summaryRecovery.summaryModelMissing, modelSetup.state)
+                        .stateIn(graphScope, SharingStarted.Eagerly, false),
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

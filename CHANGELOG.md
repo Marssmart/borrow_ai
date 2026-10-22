@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.11]
+
+- Android no longer silently skips memory summaries when the summary model is not downloaded. The saved memories page now shows a notice that summaries are paused, and where to see the model download progress.
+- Summary recovery no longer counts a missing model as a failed attempt. A run stops at the first memory that needs the missing model instead of calling the summarizer for every pending memory.
+- Updated Android and iOS versioning to 1.4.11 (build 42).
+
 ## [1.4.10]
 
 - Transcription WorkManager jobs now stop retrying. A drain or sweep that has not finished is retried with backoff up to 5 attempts, then reports failure. A job that finds no transcription runner attached gives up after 3 attempts. Previously both retried forever. Memories left pending are picked up by the next recording or app start.

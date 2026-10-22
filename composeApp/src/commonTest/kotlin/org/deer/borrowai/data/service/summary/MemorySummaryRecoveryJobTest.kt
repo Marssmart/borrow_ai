@@ -1,6 +1,9 @@
 package org.deer.borrowai.data.service.summary
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -244,5 +247,100 @@ class MemorySummaryRecoveryJobTest {
         job(service, summarizer).recover()
 
         assertEquals(1, service.get("a").summaryAttempts)
+    }
+
+    @Test
+    fun missingModelStopsRunAfterFirstCallAndDoesNotCount() = runTest {
+        val service = service(memory("a"), memory("b"), memory("c"))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+
+        assertEquals(0, recovery.recover())
+
+        assertEquals(1, summarizer.calls, "A missing model is not retried for every memory in the same run")
+        assertTrue(recovery.summaryModelMissing.value)
+        listOf("a", "b", "c").forEach { id ->
+            val unchanged = service.get(id)
+            assertEquals(0, unchanged.summaryAttempts)
+            assertEquals(SummaryStatus.PENDING, unchanged.summaryStatus)
+        }
+    }
+
+    @Test
+    fun missingModelFlagClearsWhenModelBecomesAvailable() = runTest {
+        val service = service(memory("a"))
+        var modelPresent = false
+        val summarizer = ScriptedSummarizer {
+            if (modelPresent) SummaryResult.Summary("A short summary") else SummaryResult.ModelMissing
+        }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        modelPresent = true
+        assertEquals(1, recovery.recover())
+        assertFalse(recovery.summaryModelMissing.value)
+        assertEquals(SummaryStatus.SUMMARIZED, service.get("a").summaryStatus)
+    }
+
+    @Test
+    fun modelMissingFlagIsNotClearedByAnotherRunStillInProgress() = runTest {
+        val service = service(memory("a"))
+        val gate = CompletableDeferred<Unit>()
+        var firstCall = true
+        val summarizer = ScriptedSummarizer {
+            if (firstCall) {
+                firstCall = false
+                SummaryResult.ModelMissing
+            } else {
+                gate.await()
+                SummaryResult.ModelMissing
+            }
+        }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        val overlapping = async { recovery.recover() }
+        runCurrent()
+        assertEquals(2, summarizer.calls)
+        assertTrue(recovery.summaryModelMissing.value, "A run still in progress must not clear the notice")
+
+        gate.complete(Unit)
+        overlapping.await()
+        assertTrue(recovery.summaryModelMissing.value)
+    }
+
+    @Test
+    fun modelMissingFlagIsKeptWhenRecordingInterruptsRunBeforeModelIsChecked() = runTest {
+        val service = service(memory("a"))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        // First check is the start of recover(), second is the loop check before the first memory.
+        var checks = 0
+        val interrupted = job(service, summarizer, isRecording = { ++checks > 1 })
+        val callsBefore = summarizer.calls
+
+        assertEquals(0, interrupted.recover())
+
+        assertEquals(callsBefore, summarizer.calls)
+        assertTrue(recovery.summaryModelMissing.value, "An interrupted run that never checked the model must not clear the notice")
+    }
+
+    @Test
+    fun modelMissingFlagStaysFalseWithoutEligibleMemories() = runTest {
+        val service = service(memory("summarized", summary = "done", summaryStatus = SummaryStatus.SUMMARIZED))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+
+        assertEquals(0, summarizer.calls)
+        assertFalse(recovery.summaryModelMissing.value)
     }
 }

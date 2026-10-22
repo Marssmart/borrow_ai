@@ -18,6 +18,9 @@ sealed interface SummaryResult {
     /** No summarizer engine is available on this build. The attempt is not counted. */
     data object Unavailable : SummaryResult
 
+    /** The summary model file is not on the device. The attempt is not counted, and the user is told to download it. */
+    data object ModelMissing : SummaryResult
+
     /** The summarizer failed or timed out. The attempt is counted and the cause is stored as the last error. */
     data class Failed(val cause: Throwable) : SummaryResult
 }

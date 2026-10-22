@@ -25,4 +25,5 @@
     <string name="memory_playback_memory_missing_message">This saved memory is no longer available.</string>
     <string name="memory_playback_request_failed_message">Playback could not be started. Try again.</string>
     <string name="memory_playback_recording_unavailable_message">The recording for this memory is not available on this device.</string>
+    <string name="memory_summary_model_missing">Summaries are paused because the summary model is not downloaded yet. Model setup status is shown on the capture screen.</string>
 </resources>

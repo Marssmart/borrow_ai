@@ -32,7 +32,7 @@ internal fun createSummarizer(modelDirectory: Path, totalRamBytes: Long, cacheDi
     )
 
 /**
- * Summarizes a transcription with a LiteRT-LM model. Returns [SummaryResult.Unavailable] while the model file is
+ * Summarizes a transcription with a LiteRT-LM model. Returns [SummaryResult.ModelMissing] while the model file is
  * missing. The engine loads on the first summary. Summaries run one at a time, and each memory gets a fresh
  * conversation so earlier summaries do not leak into later ones.
  */
@@ -48,7 +48,7 @@ internal class AndroidSummarizer(
 
     override suspend fun summarize(transcription: String): SummaryResult = gate.withLock {
         val present = withContext(Dispatchers.IO) { store.isPresent(spec) }
-        if (!present) return@withLock SummaryResult.Unavailable
+        if (!present) return@withLock SummaryResult.ModelMissing
         try {
             withTimeout(timeoutMillis) {
                 withContext(Dispatchers.Default) {
