@@ -298,12 +298,13 @@ class RecordingMediaSessionServiceTest {
     @Test
     fun liveTranscriberReportedFailureIsExposedWhileRecording() = runTest {
         val transcriber = FakeLiveTranscriber()
-        val recorder = FakeRecorder()
+        val fileSystem = FakeFileSystem()
+        val recorder = FakeRecorder(fileSystem = fileSystem)
         val service = service(
             recorder,
             FakePermission(CompletableDeferred(true)),
             memories(),
-            FakeFileSystem(),
+            fileSystem,
             backgroundScope,
             liveTranscriber = transcriber,
         )
