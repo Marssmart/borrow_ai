@@ -20,8 +20,6 @@ import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -90,36 +88,10 @@ internal class AndroidLiveTranscriber(
     // Kept across stop() so a restart still waits for an unfinished previous teardown.
     private var lastFinished: CountDownLatch? = null
 
-    // One daemon thread serves every timed-out handoff. Each handoff waits on an earlier latch in the same chain, so
-    // FIFO order is safe and stuck teardowns do not each pin a new thread. Core size 0 lets the worker exit after it
-    // has been idle, so it does not outlive the transcription work it serves.
-    private val handoffExecutor: ExecutorService by lazy {
-        ThreadPoolExecutor(
-            0, 1, HANDOFF_IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS, LinkedBlockingQueue(),
-        ) { task -> Thread(task, "live-transcriber-handoff").apply { isDaemon = true } }
-    }
-
-    // Guarded by [lock]. Sessions that gave up behind a stuck teardown. They share one queued handoff task, so repeated
-    // restarts cannot pile up tasks while the native teardown never completes.
-    private val giveUpLatches = mutableListOf<CountDownLatch>()
-    private var giveUpHandoffQueued = false
-
-    /** Releases [finished] once [previous] completes, sharing a single queued task among all give-ups. */
-    private fun handOffAfter(previous: CountDownLatch, finished: CountDownLatch) {
-        synchronized(lock) {
-            giveUpLatches += finished
-            if (giveUpHandoffQueued) return
-            giveUpHandoffQueued = true
-            handoffExecutor.execute {
-                previous.await()
-                synchronized(lock) {
-                    giveUpLatches.forEach { it.countDown() }
-                    giveUpLatches.clear()
-                    giveUpHandoffQueued = false
-                }
-            }
-        }
-    }
+    // Guarded by [lock]. Teardown of an engine that timed out and may still be inside native inference. While it is
+    // pending, no session may open another engine, so later sessions report ENGINE_FAILED without waiting again.
+    // A single latch bounds this state no matter how many restarts happen.
+    private var stuckTeardown: CountDownLatch? = null
 
     override fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit) {
         val next: Session
@@ -177,15 +149,19 @@ internal class AndroidLiveTranscriber(
         fun run(onPartial: (String) -> Unit) {
             var recognizer: LiveDecoder? = null
             var decoder: ExecutorService? = null
-            var finishHandedOff = false
             try {
                 if (previousFinished != null && !previousFinished.await(previousTeardownTimeoutMs, TimeUnit.MILLISECONDS)) {
                     // The previous recognizer may still be inside native inference. Opening another engine now could run
-                    // two at once, so this session gives up. Later sessions must keep waiting for the stuck one.
+                    // two at once, so this session gives up. It owns no native resources, so it releases its own latch
+                    // right away; the shared stuckTeardown check below keeps later sessions from opening an engine.
                     Log.w(LOG_TAG, "Previous live transcription did not finish in time; not starting a new engine")
+                    synchronized(lock) { stuckTeardown = previousFinished }
                     report(LiveTranscriptionFailure.ENGINE_FAILED)
-                    finishHandedOff = true
-                    handOffAfter(previousFinished, finished)
+                    return
+                }
+                val stuck = synchronized(lock) { stuckTeardown?.takeIf { it.count > 0L } }
+                if (stuck != null) {
+                    report(LiveTranscriptionFailure.ENGINE_FAILED)
                     return
                 }
                 if (!isActive()) return
@@ -250,7 +226,7 @@ internal class AndroidLiveTranscriber(
                 val pendingRecognizer = recognizer
                 if (pendingDecoder == null) {
                     runCatching { pendingRecognizer?.release() }
-                    if (!finishHandedOff) finished.countDown()
+                finished.countDown()
                 } else {
                     // Native inference may still be using the recognizer. Wait off this thread for the decoder to stop
                     // before releasing it, and only then let the next session start.
@@ -391,4 +367,3 @@ internal class AndroidLiveTranscriber(
 }
 
 private const val LOG_TAG = "AndroidLiveTranscriber"
-private const val HANDOFF_IDLE_TIMEOUT_SECONDS = 30L
