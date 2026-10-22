@@ -10,8 +10,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Exercises the seams that do not need the native sherpa-onnx runtime or a real AudioRecord. Capture and decode
- * behavior on device is not covered here.
+ * Exercises the transcriber with fake audio and decoder seams, so capture and decode failure branches run without the
+ * native sherpa-onnx runtime or a real AudioRecord. Real device audio and inference are not covered here.
  */
 class AndroidLiveTranscriberTest {
     private val waitMs = 5_000L
@@ -148,4 +148,188 @@ class AndroidLiveTranscriberTest {
         while (list.size < expected && System.nanoTime() < deadline) Thread.sleep(10)
         assertEquals(expected, list.size, "Timed out waiting for $expected failure report(s)")
     }
+
+    private fun awaitLatch(latch: CountDownLatch) {
+        assertTrue(latch.await(waitMs, TimeUnit.MILLISECONDS), "Timed out waiting for latch")
+    }
+
+    @Test
+    fun microphoneUnavailableReportsOnceAndReleasesDecoder() {
+        val decoder = FakeDecoder()
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = transcriber(audio = null, decoder = decoder)
+
+        transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+        try {
+            awaitCount(failures, 1)
+            Thread.sleep(100)
+            assertEquals(listOf(LiveTranscriptionFailure.MICROPHONE_UNAVAILABLE), failures.toList())
+            awaitLatch(decoder.released)
+        } finally {
+            transcriber.stop()
+        }
+    }
+
+    @Test
+    fun microphoneStartFailureReportsMicrophoneUnavailableAndReleasesAudio() {
+        val audio = FakeAudio(startThrows = true)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = transcriber(audio = audio)
+
+        transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+        try {
+            awaitCount(failures, 1)
+            awaitLatch(audio.released)
+            assertEquals(listOf(LiveTranscriptionFailure.MICROPHONE_UNAVAILABLE), failures.toList())
+        } finally {
+            transcriber.stop()
+        }
+    }
+
+    @Test
+    fun engineInitFailureReportsEngineFailed() {
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = AndroidLiveTranscriber(
+            resolveModelPaths = { LiveModelPaths("encoder", "decoder", "tokens") },
+            openDecoder = { throw IllegalStateException("native init failed") },
+            openAudio = { FakeAudio() },
+        )
+
+        transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+        try {
+            awaitCount(failures, 1)
+            Thread.sleep(100)
+            assertEquals(listOf(LiveTranscriptionFailure.ENGINE_FAILED), failures.toList())
+        } finally {
+            transcriber.stop()
+        }
+    }
+
+    @Test
+    fun audioReadEndingWhileActiveReportsAudioInterrupted() {
+        val audio = FakeAudio(endAfterReads = 0)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = transcriber(audio = audio)
+
+        transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+        try {
+            awaitCount(failures, 1)
+            awaitLatch(audio.released)
+            assertEquals(listOf(LiveTranscriptionFailure.AUDIO_INTERRUPTED), failures.toList())
+        } finally {
+            transcriber.stop()
+        }
+    }
+
+    @Test
+    fun decodeFailureReportsTranscriptionFailedAndStopsCapture() {
+        val audio = FakeAudio()
+        val decoder = FakeDecoder(throws = true)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = transcriber(audio = audio, decoder = decoder)
+
+        transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+        try {
+            awaitCount(failures, 1)
+            awaitLatch(audio.released)
+            awaitLatch(decoder.released)
+            Thread.sleep(100)
+            assertEquals(listOf(LiveTranscriptionFailure.TRANSCRIPTION_FAILED), failures.toList())
+        } finally {
+            transcriber.stop()
+        }
+    }
+
+    @Test
+    fun decodedTextIsEmittedAsPartialWithoutFailure() {
+        val partials = CopyOnWriteArrayList<String>()
+        val partialSeen = CountDownLatch(1)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val audio = FakeAudio()
+        val transcriber = transcriber(audio = audio, decoder = FakeDecoder(text = "  hello world  "))
+
+        transcriber.start(
+            onPartial = {
+                partials.add(it)
+                partialSeen.countDown()
+            },
+            onFailure = { failures.add(it) },
+        )
+        try {
+            awaitLatch(partialSeen)
+            assertEquals(listOf("hello world"), partials.toList())
+        } finally {
+            transcriber.stop()
+        }
+
+        awaitLatch(audio.released)
+        Thread.sleep(100)
+        assertTrue(failures.isEmpty(), "Successful decoding must not report a failure, got $failures")
+    }
+
+    @Test
+    fun userStopDuringCaptureReportsNothing() {
+        val partialSeen = CountDownLatch(1)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val audio = FakeAudio()
+        val transcriber = transcriber(audio = audio, decoder = FakeDecoder())
+
+        transcriber.start(onPartial = { partialSeen.countDown() }, onFailure = { failures.add(it) })
+        awaitLatch(partialSeen)
+        transcriber.stop()
+
+        awaitLatch(audio.released)
+        Thread.sleep(100)
+        assertTrue(failures.isEmpty(), "A user stop must not be reported as a failure, got $failures")
+    }
+
+    private fun transcriber(
+        audio: LiveAudioSource? = FakeAudio(),
+        decoder: LiveDecoder = FakeDecoder(),
+    ) = AndroidLiveTranscriber(
+        resolveModelPaths = { LiveModelPaths("encoder", "decoder", "tokens") },
+        openDecoder = { decoder },
+        openAudio = { audio },
+    )
+}
+
+/**
+ * Microphone stand-in. Each read returns one chunk after a short pause, like a real AudioRecord, until [endAfterReads]
+ * reads have returned data; after that every read returns -1 to model an interrupted device.
+ */
+private class FakeAudio(
+    private val startThrows: Boolean = false,
+    private val endAfterReads: Int? = null,
+) : LiveAudioSource {
+    val released = CountDownLatch(1)
+    private val reads = AtomicInteger(0)
+
+    override fun startRecording() {
+        if (startThrows) throw IllegalStateException("microphone busy")
+    }
+
+    override fun read(buffer: ShortArray, offset: Int, size: Int): Int {
+        val call = reads.incrementAndGet()
+        if (endAfterReads != null && call > endAfterReads) return -1
+        Thread.sleep(1)
+        return size
+    }
+
+    override fun stop() = Unit
+
+    override fun release() = released.countDown()
+}
+
+private class FakeDecoder(
+    private val text: String = "hello",
+    private val throws: Boolean = false,
+) : LiveDecoder {
+    val released = CountDownLatch(1)
+
+    override fun decode(samples: FloatArray): String {
+        if (throws) throw IllegalStateException("inference failed")
+        return text
+    }
+
+    override fun release() = released.countDown()
 }

@@ -36,6 +36,20 @@ internal fun createLiveTranscriber(modelDirectory: Path, totalRamBytes: Long): L
 
 internal data class LiveModelPaths(val encoder: String, val decoder: String, val tokens: String)
 
+/** Microphone input for live transcription. The default implementation wraps [AudioRecord]. */
+internal interface LiveAudioSource {
+    fun startRecording()
+    fun read(buffer: ShortArray, offset: Int, size: Int): Int
+    fun stop()
+    fun release()
+}
+
+/** Whisper recognizer for live transcription. The default implementation wraps sherpa-onnx. */
+internal interface LiveDecoder {
+    fun decode(samples: FloatArray): String
+    fun release()
+}
+
 private fun resolveLiveModelPaths(modelDirectory: Path, totalRamBytes: Long): LiveModelPaths? {
     if (!SherpaOnnxRuntime.isAvailable) return null
     val specs = ModelCatalog.modelsForRam(totalRamBytes).live
@@ -67,6 +81,8 @@ private fun resolveLiveModelPaths(modelDirectory: Path, totalRamBytes: Long): Li
 internal class AndroidLiveTranscriber(
     private val resolveModelPaths: () -> LiveModelPaths?,
     private val previousTeardownTimeoutMs: Long = PREVIOUS_TEARDOWN_TIMEOUT_MS,
+    private val openDecoder: (LiveModelPaths) -> LiveDecoder = { paths -> openSherpaDecoder(paths) },
+    private val openAudio: () -> LiveAudioSource? = { openMicrophone() },
 ) : LiveTranscriber {
     private val lock = Any()
     private var session: Session? = null
@@ -136,7 +152,7 @@ internal class AndroidLiveTranscriber(
         // Guarded by [lock]. Lets stop() halt capture even while the worker is still setting up.
         private var active: Boolean = true
         private var failureReported: Boolean = false
-        private var record: AudioRecord? = null
+        private var record: LiveAudioSource? = null
 
         /** Must be called with [lock] held. */
         fun stopLocked() {
@@ -159,7 +175,7 @@ internal class AndroidLiveTranscriber(
         private fun report(failure: LiveTranscriptionFailure) = synchronized(lock) { reportLocked(failure) }
 
         fun run(onPartial: (String) -> Unit) {
-            var recognizer: OfflineRecognizer? = null
+            var recognizer: LiveDecoder? = null
             var decoder: ExecutorService? = null
             var finishHandedOff = false
             try {
@@ -184,7 +200,7 @@ internal class AndroidLiveTranscriber(
                     return
                 }
                 recognizer = try {
-                    createRecognizer(paths)
+                    openDecoder(paths)
                 } catch (t: Throwable) {
                     Log.w(LOG_TAG, "Live transcription engine failed to initialize", t)
                     report(LiveTranscriptionFailure.ENGINE_FAILED)
@@ -192,7 +208,7 @@ internal class AndroidLiveTranscriber(
                 }
                 if (!isActive()) return
                 val audio = try {
-                    createAudioRecord()
+                    openAudio()
                 } catch (t: Throwable) {
                     Log.w(LOG_TAG, "Could not create live audio input", t)
                     null
@@ -249,8 +265,8 @@ internal class AndroidLiveTranscriber(
         }
 
         private fun capture(
-            audio: AudioRecord,
-            recognizer: OfflineRecognizer,
+            audio: LiveAudioSource,
+            recognizer: LiveDecoder,
             decoder: ExecutorService,
             onPartial: (String) -> Unit,
         ) {
@@ -278,7 +294,7 @@ internal class AndroidLiveTranscriber(
                 decoder.execute {
                     try {
                         val samples = synchronized(windowLock) { window.snapshot() }
-                        val text = decode(recognizer, samples)
+                        val text = recognizer.decode(samples).trim()
                         if (text.isNotBlank() && text != lastText) {
                             lastText = text
                             // Checked under the lock so stop() guarantees no callback after it returns.
@@ -300,24 +316,19 @@ internal class AndroidLiveTranscriber(
             }
         }
 
-        private fun createRecognizer(paths: LiveModelPaths): OfflineRecognizer {
-            val config = OfflineRecognizerConfig(
-                featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
-                modelConfig = OfflineModelConfig(
-                    whisper = whisperModelConfig(encoder = paths.encoder, decoder = paths.decoder),
-                    tokens = paths.tokens,
-                    numThreads = THREADS,
-                    debug = false,
-                    provider = "cpu",
-                ),
-                decodingMethod = "greedy_search",
-            )
-            // A null AssetManager makes the AAR load the model from the filesystem paths above. The AAR exposes no
-            // dedicated path-based constructor.
-            return OfflineRecognizer(null, config)
-        }
+    }
 
-        private fun createAudioRecord(): AudioRecord? {
+    private companion object {
+        const val SAMPLE_RATE = 16_000
+        const val FEATURE_DIM = 80
+        const val THREADS = 2
+        const val CHUNK_SAMPLES = SAMPLE_RATE / 10
+        const val DECODE_INTERVAL_SAMPLES = SAMPLE_RATE
+        const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 2
+        const val WINDOW_SAMPLES = SAMPLE_RATE * 30
+        const val PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000L
+
+        private fun openMicrophone(): LiveAudioSource? {
             val minBuffer = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
@@ -335,30 +346,47 @@ internal class AndroidLiveTranscriber(
                 record.release()
                 return null
             }
-            return record
+            return AudioRecordSource(record)
         }
 
-        private fun decode(recognizer: OfflineRecognizer, samples: FloatArray): String {
-            val stream = recognizer.createStream()
-            try {
-                stream.acceptWaveform(samples, SAMPLE_RATE)
-                recognizer.decode(stream)
-                return recognizer.getResult(stream).text.trim()
-            } finally {
-                stream.release()
+        private fun openSherpaDecoder(paths: LiveModelPaths): LiveDecoder {
+            val config = OfflineRecognizerConfig(
+                featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = FEATURE_DIM),
+                modelConfig = OfflineModelConfig(
+                    whisper = whisperModelConfig(encoder = paths.encoder, decoder = paths.decoder),
+                    tokens = paths.tokens,
+                    numThreads = THREADS,
+                    debug = false,
+                    provider = "cpu",
+                ),
+                decodingMethod = "greedy_search",
+            )
+            // A null AssetManager makes the AAR load the model from the filesystem paths above. The AAR exposes no
+            // dedicated path-based constructor.
+            return SherpaDecoder(OfflineRecognizer(null, config))
+        }
+
+        private class AudioRecordSource(private val record: AudioRecord) : LiveAudioSource {
+            override fun startRecording() = record.startRecording()
+            override fun read(buffer: ShortArray, offset: Int, size: Int): Int = record.read(buffer, offset, size)
+            override fun stop() = record.stop()
+            override fun release() = record.release()
+        }
+
+        private class SherpaDecoder(private val recognizer: OfflineRecognizer) : LiveDecoder {
+            override fun decode(samples: FloatArray): String {
+                val stream = recognizer.createStream()
+                try {
+                    stream.acceptWaveform(samples, SAMPLE_RATE)
+                    recognizer.decode(stream)
+                    return recognizer.getResult(stream).text
+                } finally {
+                    stream.release()
+                }
             }
-        }
-    }
 
-    private companion object {
-        const val SAMPLE_RATE = 16_000
-        const val FEATURE_DIM = 80
-        const val THREADS = 2
-        const val CHUNK_SAMPLES = SAMPLE_RATE / 10
-        const val DECODE_INTERVAL_SAMPLES = SAMPLE_RATE
-        const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 2
-        const val WINDOW_SAMPLES = SAMPLE_RATE * 30
-        const val PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000L
+            override fun release() = recognizer.release()
+        }
     }
 }
 
