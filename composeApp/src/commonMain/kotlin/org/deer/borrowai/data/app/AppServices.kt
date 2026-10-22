@@ -36,7 +36,7 @@ import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
 import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
 
-class AppServices private constructor(
+class AppServices internal constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
