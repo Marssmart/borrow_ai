@@ -23,6 +23,13 @@ enum class MicrophoneDenial {
     PERMANENTLY_DENIED,
 }
 
+/** Classifies a microphone permission result. [showRationale] is only meaningful after a denial. */
+internal fun microphoneDenialAfter(granted: Boolean, showRationale: Boolean): MicrophoneDenial? = when {
+    granted -> null
+    showRationale -> MicrophoneDenial.RATIONALE_REQUIRED
+    else -> MicrophoneDenial.PERMANENTLY_DENIED
+}
+
 /** Requests microphone access. Returns true only when the user has granted it. */
 interface MicrophonePermission {
     suspend fun request(): Boolean

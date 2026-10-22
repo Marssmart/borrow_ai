@@ -11,7 +11,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
-import java.lang.ref.WeakReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,8 +29,7 @@ import kotlinx.coroutines.withContext
 class ActivityMicrophonePermission : MicrophonePermission {
     private var context: Context? = null
 
-    // Weak so the ViewModel that outlives activities does not keep a destroyed activity alive.
-    private var activity: WeakReference<ComponentActivity>? = null
+    private var activity: ComponentActivity? = null
     private var launcher: ActivityResultLauncher<String>? = null
     private var pending: CompletableDeferred<Boolean>? = null
     private val mutableDenial = MutableStateFlow<MicrophoneDenial?>(null)
@@ -40,7 +38,7 @@ class ActivityMicrophonePermission : MicrophonePermission {
 
     fun attach(activity: ComponentActivity) {
         context = activity.applicationContext
-        this.activity = WeakReference(activity)
+        this.activity = activity
         launcher = activity.registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { granted -> onResult(granted) }
@@ -62,25 +60,29 @@ class ActivityMicrophonePermission : MicrophonePermission {
     }
 
     private fun onResult(granted: Boolean) {
-        mutableDenial.value = if (granted) {
-            null
-        } else if (activity?.get()?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true) {
-            // Only meaningful after a result: before a request, Android reports false for both cases.
-            MicrophoneDenial.RATIONALE_REQUIRED
-        } else {
-            MicrophoneDenial.PERMANENTLY_DENIED
-        }
+        // Only meaningful after a result: before a request, Android reports false for both cases.
+        val showRationale = activity?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true
+        mutableDenial.value = microphoneDenialAfter(granted, showRationale)
         pending?.complete(granted)
         pending = null
     }
 
-    /** Clears a denial when the user has granted access in Settings. Call from the activity's onResume. */
+    /**
+     * Re-reads the denial when the user returns from Settings. Clears it once access is granted, and
+     * reclassifies it when the user changed the setting but access is still denied. Call from onResume.
+     */
     fun refreshDenial() {
         val appContext = context ?: return
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
             mutableDenial.value = null
+        } else if (mutableDenial.value != null) {
+            val current = activity ?: return
+            mutableDenial.value = microphoneDenialAfter(
+                granted = false,
+                showRationale = current.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO),
+            )
         }
     }
 
