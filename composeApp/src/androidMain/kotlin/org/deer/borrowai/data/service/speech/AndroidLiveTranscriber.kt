@@ -20,6 +20,8 @@ import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -73,9 +75,12 @@ internal class AndroidLiveTranscriber(
     private var lastFinished: CountDownLatch? = null
 
     // One daemon thread serves every timed-out handoff. Each handoff waits on an earlier latch in the same chain, so
-    // FIFO order is safe and stuck teardowns do not each pin a new thread.
+    // FIFO order is safe and stuck teardowns do not each pin a new thread. Core size 0 lets the worker exit after it
+    // has been idle, so it does not outlive the transcription work it serves.
     private val handoffExecutor: ExecutorService by lazy {
-        Executors.newSingleThreadExecutor { task -> Thread(task, "live-transcriber-handoff").apply { isDaemon = true } }
+        ThreadPoolExecutor(
+            0, 1, HANDOFF_IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS, LinkedBlockingQueue(),
+        ) { task -> Thread(task, "live-transcriber-handoff").apply { isDaemon = true } }
     }
 
     // Guarded by [lock]. Sessions that gave up behind a stuck teardown. They share one queued handoff task, so repeated
@@ -358,3 +363,4 @@ internal class AndroidLiveTranscriber(
 }
 
 private const val LOG_TAG = "AndroidLiveTranscriber"
+private const val HANDOFF_IDLE_TIMEOUT_SECONDS = 30L
