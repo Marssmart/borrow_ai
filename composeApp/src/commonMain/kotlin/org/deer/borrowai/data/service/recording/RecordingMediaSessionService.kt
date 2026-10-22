@@ -98,6 +98,8 @@ class RecordingMediaSessionService(
 
     override fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest> {
         ensureOpen()
+        // A recording failure stays visible until dismissed on the capture screen, so playback must not overwrite it.
+        if (mutableState.value is MediaSessionState.Failed) return PlaybackError.RecordingUnavailable.left()
         val memory = findMemory(target) ?: return PlaybackError.MemoryNotFound.left()
         val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackError.RecordingUnavailable.left()
 

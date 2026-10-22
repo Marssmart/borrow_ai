@@ -309,6 +309,27 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun playbackRequestWhileSaveFailureIsShownKeepsFailureAndDoesNotPlay() = runTest {
+        val player = FakeAudioPlayer()
+        val fs = FakeFileSystem()
+        val recorder = FakeRecorder(failOnStop = true, fileSystem = fs)
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.startRecording()
+        runCurrent()
+        assertNull(service.stopRecording())
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+
+        val target = PlaybackTarget(memory.id, PlaybackContent.RECORDING)
+        assertEquals(PlaybackError.RecordingUnavailable.left(), service.requestPlayback(target))
+
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(player.playedPaths.isEmpty())
+    }
+
+    @Test
     fun grantedPermissionStartsRecordingIntoRecordingsFolder() = runTest {
         val recorder = FakeRecorder()
         val fs = FakeFileSystem()
