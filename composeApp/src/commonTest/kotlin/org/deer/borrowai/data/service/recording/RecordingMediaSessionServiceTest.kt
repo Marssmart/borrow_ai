@@ -330,6 +330,47 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun cleanupFailureAfterFinalizeFailureStillPublishesSaveFailure() = runTest {
+        val base = FakeFileSystem()
+        val failingDeleteFs = object : ForwardingFileSystem(base) {
+            override fun delete(path: Path, mustExist: Boolean) {
+                throw IOException("storage became read-only")
+            }
+        }
+        val recorder = FakeRecorder(failOnStop = true, fileSystem = base)
+        val memories = memories()
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, failingDeleteFs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        assertNull(service.stopRecording())
+
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(memories.getState().value.isEmpty())
+    }
+
+    @Test
+    fun promotionFailureAfterStopPublishesSaveFailureAndCreatesNoMemory() = runTest {
+        val base = FakeFileSystem()
+        val failingMoveFs = object : ForwardingFileSystem(base) {
+            override fun atomicMove(source: Path, target: Path) {
+                throw IOException("promotion failed")
+            }
+        }
+        val recorder = FakeRecorder(fileSystem = base)
+        val memories = memories()
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, failingMoveFs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        assertNull(service.stopRecording())
+        runCurrent()
+
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(memories.getState().value.isEmpty())
+    }
+
+    @Test
     fun grantedPermissionStartsRecordingIntoRecordingsFolder() = runTest {
         val recorder = FakeRecorder()
         val fs = FakeFileSystem()

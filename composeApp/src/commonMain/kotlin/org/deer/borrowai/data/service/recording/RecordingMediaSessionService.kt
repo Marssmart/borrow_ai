@@ -323,14 +323,19 @@ class RecordingMediaSessionService(
     }
 
     private fun failRecordingStart(temporaryPath: Path) {
-        fileSystem.delete(temporaryPath, mustExist = false)
+        deleteBestEffort(temporaryPath)
         mutableState.value = MediaSessionState.Failed(RecordingError.MicrophoneUnavailable)
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
         save.cancel()
-        fileSystem.delete(recording.temporaryPath, mustExist = false)
-        fileSystem.delete(recording.absolutePath, mustExist = false)
+        deleteBestEffort(recording.temporaryPath)
+        deleteBestEffort(recording.absolutePath)
+    }
+
+    // A cleanup failure must not skip publishing the recording error, so each delete is attempted independently.
+    private fun deleteBestEffort(path: Path) {
+        runCatching { fileSystem.delete(path, mustExist = false) }
     }
 
     /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. A failure is not busy work. */
