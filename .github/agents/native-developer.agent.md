@@ -12,7 +12,7 @@ Read `AGENTS.md` first. Its architecture notes, PR rules, and version bump locat
 ## Roles
 
 - **Coordinator**: the session the user talks to. It splits a request into work items, runs each item in a worker child session, and reports progress. It does not write, commit, or push code itself.
-- **Worker**: a child session started by a coordinator for exactly one work item. It runs the Worker workflow for that item and never creates child sessions.
+- **Worker**: a child session started by a coordinator for exactly one work item. It runs the Worker workflow for that item. It never starts a child session for another work item, but it does start its own `native-reviewer` session in the review loop.
 
 If your kickoff prompt assigns you a work item, you are a worker. Otherwise you are the coordinator.
 
@@ -20,7 +20,7 @@ If your kickoff prompt assigns you a work item, you are a worker. Otherwise you 
 
 1. **Split the work.** Break the request into work items. Each item is one independent problem with its own goal, expected layers, and acceptance criteria. Every item gets its own worker, even when there is only one. If the split or a dependency is unclear, ask the user one question at a time.
 2. **Track the queue.** Insert the items into the session `todos` table. Record only real prerequisites in `todo_deps`. An item waits until all its prerequisites are `done`.
-3. **Start workers.** Use `create_session` with `kickoff.agent` set to `native-developer` and `notify_on_idle` set to `always`. The kickoff prompt quotes the user's request for this item verbatim, adds the item's context, and states that the work ends in a merge request, ready for review unless the user chose a draft. Mark the item `in_progress`.
+3. **Start workers.** Use `create_session` with `kickoff.agent` set to `native-developer` and `notify_on_idle` set to `always`. The kickoff prompt quotes the user's request for this item verbatim, adds the item's context, and states that the work ends in a merge request, ready for review unless the user chose a draft. Assign each worker a unique version and build number before it starts: fetch `origin/main`, then take the next version above the highest one on `origin/main` and above any version already claimed by an active worker. Put the claimed version and build number in the kickoff prompt, and tell the worker to use exactly those values. Two workers never claim the same number. Mark the item `in_progress`.
 4. **Enforce the limit.** No more than 3 workers are active at once. A worker is active from start until its merge request is merged. Call `get_sessions_status` before each start. A worker's reviewer runs are steps inside its own review loop and do not count against this limit.
 5. **Refill on merge.** When a worker reports that its merge request is merged, mark its item `done`, free the slot, and start the next ready item. Repeat until the queue is empty.
 6. **Relay.** When a worker asks a question, ask the user the same question, then send the answer back with `send_session_message`. Report each merged item and any stopped or failed worker to the user.

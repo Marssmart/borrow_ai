@@ -75,6 +75,12 @@ class RecordingMediaSessionService(
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
     override val playbackAvailable: Boolean = true
+    override val microphoneDenial: StateFlow<MicrophoneDenial?>
+        get() = microphonePermission.denial
+
+    override fun openMicrophoneSettings() {
+        microphonePermission.openSettings()
+    }
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()

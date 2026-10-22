@@ -10,14 +10,17 @@ import okio.Path.Companion.toPath
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.AndroidModelDevice
 import org.deer.borrowai.data.service.recording.AndroidAudioPlayer
+import org.deer.borrowai.data.service.recording.ActivityMicrophonePermission
 import org.deer.borrowai.data.service.recording.AndroidAudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermissionViewModel
 
 class MainActivity : ComponentActivity() {
+    private lateinit var microphonePermission: ActivityMicrophonePermission
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The permission outlives recreation, so each activity re-attaches its launcher before use.
-        val microphonePermission = ViewModelProvider(this)[MicrophonePermissionViewModel::class.java]
+        microphonePermission = ViewModelProvider(this)[MicrophonePermissionViewModel::class.java]
             .permission
             .also { it.attach(this) }
         val viewModel = ViewModelProvider(
@@ -38,5 +41,11 @@ class MainActivity : ComponentActivity() {
             val services by viewModel.services.collectAsState()
             services?.let { App(it) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The user may have granted the microphone in Settings while the app was in the background.
+        microphonePermission.refreshDenial()
     }
 }
