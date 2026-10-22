@@ -90,6 +90,8 @@ class AndroidLiveTranscriberTest {
                 failures.toList(),
             )
             assertEquals(1, resolveCalls.get(), "No new engine may be opened while the previous one is stuck")
+            val handoffThreads = Thread.getAllStackTraces().keys.count { it.name == "live-transcriber-handoff" }
+            assertTrue(handoffThreads <= 1, "Timed-out handoffs must share one thread, found $handoffThreads")
         } finally {
             transcriber.stop()
             releaseFirst.countDown()

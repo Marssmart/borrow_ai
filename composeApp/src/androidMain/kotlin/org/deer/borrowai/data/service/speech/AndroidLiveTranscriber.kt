@@ -72,6 +72,12 @@ internal class AndroidLiveTranscriber(
     // Kept across stop() so a restart still waits for an unfinished previous teardown.
     private var lastFinished: CountDownLatch? = null
 
+    // One daemon thread serves every timed-out handoff. Each handoff waits on an earlier latch in the same chain, so
+    // FIFO order is safe and stuck teardowns do not each pin a new thread.
+    private val handoffExecutor: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor { task -> Thread(task, "live-transcriber-handoff").apply { isDaemon = true } }
+    }
+
     override fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit) {
         val next: Session
         synchronized(lock) {
@@ -137,10 +143,10 @@ internal class AndroidLiveTranscriber(
                     report(LiveTranscriptionFailure.ENGINE_FAILED)
                     finishHandedOff = true
                     val previous = previousFinished
-                    Thread({
+                    handoffExecutor.execute {
                         previous.await()
                         finished.countDown()
-                    }, "live-transcriber-release").apply { isDaemon = true }.start()
+                    }
                     return
                 }
                 if (!isActive()) return
