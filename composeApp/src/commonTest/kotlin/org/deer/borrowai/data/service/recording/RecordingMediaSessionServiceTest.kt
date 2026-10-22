@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -65,7 +66,14 @@ class RecordingMediaSessionServiceTest {
     }
 
     private class FakePermission(private val granted: CompletableDeferred<Boolean>) : MicrophonePermission {
+        override val denial = MutableStateFlow<MicrophoneDenial?>(null)
+        var openSettingsCount = 0
+
         override suspend fun request(): Boolean = granted.await()
+
+        override fun openSettings() {
+            openSettingsCount++
+        }
     }
 
     private fun memories() = FakeMemoryService(
@@ -122,6 +130,20 @@ class RecordingMediaSessionServiceTest {
         assertFalse(fs.exists("/app/files/recordings/temp_rec-1.m4a".toPath()))
         assertTrue(memories.findById("rec-1").isLeft())
         assertIs<MediaSessionState.Idle>(session.state.value)
+    }
+
+    @Test
+    fun microphoneDenialReflectsPermissionAndOpenSettingsDelegates() = runTest {
+        val permission = FakePermission(CompletableDeferred(false))
+        val service = service(FakeRecorder(), permission, memories(), FakeFileSystem(), backgroundScope)
+
+        assertNull(service.microphoneDenial.value)
+
+        permission.denial.value = MicrophoneDenial.PERMANENTLY_DENIED
+        assertEquals(MicrophoneDenial.PERMANENTLY_DENIED, service.microphoneDenial.value)
+
+        service.openMicrophoneSettings()
+        assertEquals(1, permission.openSettingsCount)
     }
 
     private fun service(

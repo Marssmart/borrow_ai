@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.5]
+
+- Show guidance on the capture screen when microphone permission is denied. A rationale with an "Allow" button appears when Android says a rationale should be shown. An "Open Settings" button appears when the permission is permanently denied.
+- Re-check microphone permission on resume, so the guidance clears after the user grants access in Settings.
+- Updated Android and iOS versioning to 1.4.5 (build 36).
+
 ## [1.4.3]
 
 - Fixed `AppServices.close()` skipping `awaitPendingWork()` when `mediaSession.close()` threw. A save started before close could then race the database close. Each close step now runs even when an earlier step throws, and the close order is unchanged: media session, pending saves, jobs, database.

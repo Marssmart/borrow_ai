@@ -3,9 +3,11 @@ package org.deer.borrowai
 import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.recording.MicrophoneDenial
 
 internal class CaptureUiStateHolder(
     private val mediaSessionService: MediaSessionService,
@@ -19,6 +21,10 @@ internal class CaptureUiStateHolder(
 
     /** Raw recording does not depend on the transcription model being ready. */
     val canRecord: Boolean get() = mediaSessionService.recordingAvailable
+
+    val microphoneDenial: StateFlow<MicrophoneDenial?> get() = mediaSessionService.microphoneDenial
+
+    fun openMicrophoneSettings() = mediaSessionService.openMicrophoneSettings()
 
     suspend fun observeMediaSession() {
         mediaSessionService.state.collect { bindMediaSession(it) }
