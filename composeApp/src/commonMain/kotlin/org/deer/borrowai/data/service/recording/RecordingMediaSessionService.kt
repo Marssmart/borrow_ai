@@ -269,12 +269,31 @@ class RecordingMediaSessionService(
             holdToRecord = holdToRecord,
         )
         startTicker()
-        // Live transcription is best-effort. A failure here leaves the recording running without a transcript.
+        // Live transcription is best-effort. A failure keeps the recording running and is surfaced as state.
         liveTranscriber?.let { transcriber ->
             runCatching {
-                transcriber.start { text ->
-                    mutableState.update { current ->
-                        if (current is MediaSessionState.Recording) current.copy(transcription = text) else current
+                transcriber.start(
+                    onPartial = { text ->
+                        mutableState.update { current ->
+                            if (current is MediaSessionState.Recording) current.copy(transcription = text) else current
+                        }
+                    },
+                    onFailure = { failure ->
+                        mutableState.update { current ->
+                            if (current is MediaSessionState.Recording) {
+                                current.copy(liveTranscriptionFailure = failure)
+                            } else {
+                                current
+                            }
+                        }
+                    },
+                )
+            }.onFailure {
+                mutableState.update { current ->
+                    if (current is MediaSessionState.Recording) {
+                        current.copy(liveTranscriptionFailure = LiveTranscriptionFailure.ENGINE_FAILED)
+                    } else {
+                        current
                     }
                 }
             }

@@ -2,16 +2,21 @@ package org.deer.borrowai
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import arrow.core.left
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
+import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 
 class CaptureUiStateHolderTest {
     @Test
@@ -75,6 +80,36 @@ class CaptureUiStateHolderTest {
         assertEquals(2, mediaSession.startCount)
     }
 
+    @Test
+    fun liveTranscriptionFailureFromSessionIsExposedUntilRecordingStops() = runTest {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { holder.observeMediaSession() }
+
+        holder.toggleRecording()
+        mediaSession.reportLiveFailure(LiveTranscriptionFailure.MICROPHONE_UNAVAILABLE)
+
+        assertEquals(LiveTranscriptionFailure.MICROPHONE_UNAVAILABLE, holder.uiState.value().liveTranscriptionFailure)
+        assertTrue(holder.uiState.isRecording())
+
+        holder.toggleRecording()
+
+        assertNull(holder.uiState.value().liveTranscriptionFailure)
+    }
+
+    @Test
+    fun liveTranscriptionFailureIsClearedWhenSessionReturnsToIdle() = runTest {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { holder.observeMediaSession() }
+
+        holder.toggleRecording()
+        mediaSession.reportLiveFailure(LiveTranscriptionFailure.ENGINE_FAILED)
+        mediaSession.stopRecording()
+
+        assertNull(holder.uiState.value().liveTranscriptionFailure)
+    }
+
     private class FakeMediaSessionService(
         override val recordingAvailable: Boolean = true,
     ) : MediaSessionService {
@@ -101,6 +136,11 @@ class CaptureUiStateHolderTest {
             stopCount++
             mutableState.value = MediaSessionState.Idle
             return RecordingResult(elapsedMillis = 0L, transcription = "")
+        }
+
+        fun reportLiveFailure(failure: LiveTranscriptionFailure) {
+            val current = mutableState.value as MediaSessionState.Recording
+            mutableState.value = current.copy(liveTranscriptionFailure = failure)
         }
 
         override fun requestPlayback(target: PlaybackTarget) = PlaybackError.MemoryNotFound.left()

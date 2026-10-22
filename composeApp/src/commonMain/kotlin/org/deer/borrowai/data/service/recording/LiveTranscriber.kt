@@ -2,15 +2,37 @@ package org.deer.borrowai.data.service.recording
 
 /**
  * Produces a live transcript alongside a recording. It captures its own audio, separate from the recorder that saves
- * the memory file. Implementations must never throw into the recording flow: when live transcription cannot run,
- * [start] returns false or the transcriber stays silent, and the recording continues normally.
+ * the memory file. Implementations must never throw into the recording flow: when live transcription cannot run or
+ * stops early, they report a [LiveTranscriptionFailure] and the recording continues normally.
  */
 interface LiveTranscriber {
-    /** Starts capturing. [onPartial] receives the full current transcript and may be called from a background thread. */
-    fun start(onPartial: (String) -> Unit): Boolean
+    /**
+     * Starts capturing. [onPartial] receives the full current transcript and may be called from a background thread.
+     * [onFailure] is called at most once per session, from a background thread, when live transcription cannot start
+     * or stops early. It is never called after [stop] returns.
+     */
+    fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit)
 
-    /** Stops capturing. After this returns, [onPartial] is never called again. */
+    /** Stops capturing. After this returns, [onPartial] and [onFailure] are never called again. */
     fun stop()
+}
+
+/** Why live transcription could not run or stopped early. The saved recording is never affected. */
+enum class LiveTranscriptionFailure {
+    /** The speech model or native runtime is missing or could not be verified. */
+    MODEL_UNAVAILABLE,
+
+    /** The speech recognizer failed to initialize. */
+    ENGINE_FAILED,
+
+    /** The microphone could not be opened for live capture. */
+    MICROPHONE_UNAVAILABLE,
+
+    /** Audio input stopped delivering samples during a session. */
+    AUDIO_INTERRUPTED,
+
+    /** A decode pass failed, so live text stopped. */
+    TRANSCRIPTION_FAILED,
 }
 
 /**
