@@ -59,9 +59,11 @@ class AppServices internal constructor(
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
 
-        val failure = runCatching { mediaSession.close() }.exceptionOrNull()
+        val mediaFailure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {
+            // The media failure leads the list so it is the one reported, and later failures are suppressed onto it.
             val failures = mutableListOf<Throwable>()
+            mediaFailure?.let { failures += it }
             // Each step records its failure and continues, so the database still closes after any earlier step throws.
             // Cancellation is recorded like any other failure on purpose.
             suspend fun step(block: suspend () -> Unit) {
@@ -90,7 +92,6 @@ class AppServices internal constructor(
                 throw first
             }
         }
-        failure?.let { throw it }
     }
 
     private fun finishClose() {

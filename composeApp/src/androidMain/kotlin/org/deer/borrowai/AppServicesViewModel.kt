@@ -79,12 +79,8 @@ internal class AppServicesViewModel(
         cleared = true
         // Workers must stop using the runner before the database closes under it.
         transcriptionWorkerFactory.detach()
-        try {
-            servicesState.value?.close()
-        } finally {
-            // Closes even when the graph close throws, so the network monitor never outlives the ViewModel.
-            modelDevice.close()
-        }
+        servicesState.value?.close()
+        modelDevice.close()
         super.onCleared()
     }
 }

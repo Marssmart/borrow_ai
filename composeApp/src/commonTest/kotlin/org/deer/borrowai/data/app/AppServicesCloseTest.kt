@@ -30,9 +30,7 @@ import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.SummaryResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
-import kotlin.test.assertTrue
 
 class AppServicesCloseTest {
     private val recordingsRoot: Path = "/app/files/recordings".toPath()
@@ -45,12 +43,11 @@ class AppServicesCloseTest {
         val media = RecordingMediaSession(events, closeFailure = IllegalStateException("media close"))
         val services = servicesWith(media, events, failures, RecordingSummarizer(events))
 
-        val thrown = assertFailsWith<IllegalStateException> { services.close() }
+        services.close()
         advanceUntilIdle()
 
-        assertEquals("media close", thrown.message)
+        assertEquals("media close", failures.single().message)
         assertEquals(expectedOrder, events)
-        assertTrue(failures.isEmpty())
     }
 
     @Test
@@ -68,6 +65,27 @@ class AppServicesCloseTest {
         val reported = failures.single()
         assertSame(awaitFailure, reported)
         assertEquals(listOf("summarizer"), reported.suppressed.map { it.message })
+        assertEquals(expectedOrder, events)
+    }
+
+    @Test
+    fun `a media close failure is reported first and later failures are suppressed onto it`() = runTest {
+        val events = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val mediaFailure = IllegalStateException("media close")
+        val media = RecordingMediaSession(
+            events,
+            closeFailure = mediaFailure,
+            awaitFailure = IllegalStateException("await"),
+        )
+        val services = servicesWith(media, events, failures, RecordingSummarizer(events))
+
+        services.close()
+        advanceUntilIdle()
+
+        val reported = failures.single()
+        assertSame(mediaFailure, reported)
+        assertEquals(listOf("await"), reported.suppressed.map { it.message })
         assertEquals(expectedOrder, events)
     }
 
