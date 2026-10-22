@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service
 import arrow.core.Either
 import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 import org.deer.borrowai.data.service.recording.MicrophoneDenial
 import org.deer.borrowai.data.service.recording.NoMicrophoneDenial
 
@@ -45,6 +46,7 @@ sealed interface MediaSessionState {
         val transcription: String,
         val pendingPlayback: PlaybackTarget? = null,
         val holdToRecord: Boolean = false,
+        val liveTranscriptionFailure: LiveTranscriptionFailure? = null,
     ) : MediaSessionState
 
     data class Playing(

@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.8]
+
+- Surfaced live transcription failures on the capture screen. Model load failures, speech engine init failures, microphone failures, audio input interruptions, and recognizer errors previously were only logged or left the transcript empty. A notice now appears while recording, and recording continues without a live transcript.
+- Live transcription failures are reported at most once per recording session.
+- Updated Android and iOS versioning to 1.4.8 (build 39).
+
 ## [1.4.7]
 
 - Reworked the `native-developer` custom agent into a coordinator model. The coordinator splits work into items and runs each one in its own child session, which also uses `native-developer`. At most 3 worker sessions are active at once, and a worker that merges its MR frees a slot for the next item.

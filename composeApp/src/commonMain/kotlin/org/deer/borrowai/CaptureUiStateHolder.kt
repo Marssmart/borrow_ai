@@ -74,6 +74,7 @@ internal class CaptureUiStateHolder(
                 isHoldRecording = false,
                 elapsedSeconds = (result.elapsedMillis / MILLIS_PER_SECOND).toInt(),
                 transcript = "",
+                liveTranscriptionFailure = null,
             )
         }
     }
@@ -86,6 +87,7 @@ internal class CaptureUiStateHolder(
                     isRecording = false,
                     isHoldRecording = false,
                     transcript = "",
+                    liveTranscriptionFailure = null,
                 )
             }
         }
@@ -98,6 +100,7 @@ internal class CaptureUiStateHolder(
                 isHoldRecording = holdToRecord,
                 elapsedSeconds = (elapsedMillis / MILLIS_PER_SECOND).toInt(),
                 transcript = transcription,
+                liveTranscriptionFailure = liveTranscriptionFailure,
             )
 
             MediaSessionState.Idle, is MediaSessionState.Playing, is MediaSessionState.Failed ->

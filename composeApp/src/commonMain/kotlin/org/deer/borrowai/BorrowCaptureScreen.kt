@@ -49,9 +49,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -79,6 +81,11 @@ import borrowai.composeapp.generated.resources.capture_model_choosing
 import borrowai.composeapp.generated.resources.capture_model_downloading_live
 import borrowai.composeapp.generated.resources.capture_model_downloading_summarization
 import borrowai.composeapp.generated.resources.capture_model_downloading_transcription
+import borrowai.composeapp.generated.resources.capture_live_failed_audio_interrupted
+import borrowai.composeapp.generated.resources.capture_live_failed_engine
+import borrowai.composeapp.generated.resources.capture_live_failed_microphone
+import borrowai.composeapp.generated.resources.capture_live_failed_model
+import borrowai.composeapp.generated.resources.capture_live_failed_transcription
 import borrowai.composeapp.generated.resources.capture_model_failed_model
 import borrowai.composeapp.generated.resources.capture_model_failed_model_detail
 import borrowai.composeapp.generated.resources.capture_model_failed_network
@@ -107,6 +114,16 @@ import borrowai.composeapp.generated.resources.capture_tap_to_stop
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
+import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
+
+private fun liveTranscriptionFailureResource(failure: LiveTranscriptionFailure): StringResource =
+    when (failure) {
+        LiveTranscriptionFailure.MODEL_UNAVAILABLE -> Res.string.capture_live_failed_model
+        LiveTranscriptionFailure.ENGINE_FAILED -> Res.string.capture_live_failed_engine
+        LiveTranscriptionFailure.MICROPHONE_UNAVAILABLE -> Res.string.capture_live_failed_microphone
+        LiveTranscriptionFailure.AUDIO_INTERRUPTED -> Res.string.capture_live_failed_audio_interrupted
+        LiveTranscriptionFailure.TRANSCRIPTION_FAILED -> Res.string.capture_live_failed_transcription
+    }
 
 @Composable
 internal fun BorrowCaptureScreen(
@@ -231,6 +248,15 @@ internal fun BorrowCaptureScreen(
                 if (modelFailureDetail != null) {
                     Text(
                         text = modelFailureDetail,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                uiState.liveTranscriptionFailure?.let { failure ->
+                    Text(
+                        text = stringResource(liveTranscriptionFailureResource(failure)),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -28,7 +28,6 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
-import org.deer.borrowai.data.service.recording.TranscriptionScheduler
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
@@ -216,25 +215,33 @@ class RecordingMediaSessionServiceTest {
         var starts = 0
         var stops = 0
         private var onPartial: ((String) -> Unit)? = null
+        private var onFailure: ((LiveTranscriptionFailure) -> Unit)? = null
 
-        override fun start(onPartial: (String) -> Unit): Boolean {
+        override fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit) {
             starts++
             this.onPartial = onPartial
-            return true
+            this.onFailure = onFailure
         }
 
         override fun stop() {
             stops++
             onPartial = null
+            onFailure = null
         }
 
         fun emit(text: String) {
             onPartial?.invoke(text)
         }
+
+        fun fail(failure: LiveTranscriptionFailure) {
+            onFailure?.invoke(failure)
+        }
     }
 
     private object ThrowingLiveTranscriber : LiveTranscriber {
-        override fun start(onPartial: (String) -> Unit): Boolean = throw IllegalStateException("model missing")
+        override fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit) {
+            throw IllegalStateException("model missing")
+        }
 
         override fun stop() = Unit
     }
@@ -282,8 +289,38 @@ class RecordingMediaSessionServiceTest {
         service.startRecording(holdToRecord = true)
         runCurrent()
 
-        assertEquals("", assertIs<MediaSessionState.Recording>(service.state.value).transcription)
+        val recording = assertIs<MediaSessionState.Recording>(service.state.value)
+        assertEquals("", recording.transcription)
+        assertEquals(LiveTranscriptionFailure.ENGINE_FAILED, recording.liveTranscriptionFailure)
         assertEquals(listOf("/app/files/recordings/temp_rec-1.m4a"), recorder.startedPaths)
+    }
+
+    @Test
+    fun liveTranscriberReportedFailureIsExposedWhileRecording() = runTest {
+        val transcriber = FakeLiveTranscriber()
+        val fileSystem = FakeFileSystem()
+        val recorder = FakeRecorder(fileSystem = fileSystem)
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories(),
+            fileSystem,
+            backgroundScope,
+            liveTranscriber = transcriber,
+        )
+
+        service.startRecording(holdToRecord = true)
+        runCurrent()
+        transcriber.fail(LiveTranscriptionFailure.AUDIO_INTERRUPTED)
+
+        val recording = assertIs<MediaSessionState.Recording>(service.state.value)
+        assertEquals(LiveTranscriptionFailure.AUDIO_INTERRUPTED, recording.liveTranscriptionFailure)
+        assertEquals(listOf("/app/files/recordings/temp_rec-1.m4a"), recorder.startedPaths)
+
+        service.stopRecording()
+        runCurrent()
+
+        assertIs<MediaSessionState.Idle>(service.state.value)
     }
 
     @Test

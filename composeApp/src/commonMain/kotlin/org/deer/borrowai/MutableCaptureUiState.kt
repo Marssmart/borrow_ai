@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 
 internal class MutableCaptureUiState(initial: UiState) {
     data class UiState(
@@ -11,6 +12,7 @@ internal class MutableCaptureUiState(initial: UiState) {
         val isHoldRecording: Boolean = false,
         val elapsedSeconds: Int = 0,
         val transcript: String = "",
+        val liveTranscriptionFailure: LiveTranscriptionFailure? = null,
     )
 
     private val mutableState = MutableStateFlow(initial)

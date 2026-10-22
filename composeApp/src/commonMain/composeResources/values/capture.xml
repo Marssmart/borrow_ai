@@ -34,4 +34,9 @@
     <string name="capture_mic_rationale_allow">Allow</string>
     <string name="capture_mic_permanently_denied_body">Microphone access is off. Turn it on in Settings to record.</string>
     <string name="capture_mic_open_settings">Open Settings</string>
+    <string name="capture_live_failed_model">Live transcript unavailable: the model could not be loaded. Recording continues without a live transcript.</string>
+    <string name="capture_live_failed_engine">Live transcript unavailable: the speech engine failed to start. Recording continues without a live transcript.</string>
+    <string name="capture_live_failed_microphone">Live transcript unavailable: the microphone could not be opened for transcription. Recording continues.</string>
+    <string name="capture_live_failed_audio_interrupted">Live transcript stopped: audio input was interrupted. Recording continues.</string>
+    <string name="capture_live_failed_transcription">Live transcript stopped after an error. Recording continues.</string>
 </resources>
