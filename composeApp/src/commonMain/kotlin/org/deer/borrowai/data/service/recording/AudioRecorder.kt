@@ -5,7 +5,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 /** Captures microphone audio into a single file. Platform implementations write AAC audio in an M4A container. */
 interface AudioRecorder {
-    /** Begins capture into [absolutePath]. Throws [RecordingUnavailableException] if capture cannot start. */
+    /**
+     * Begins capture into [absolutePath]. Throws [RecordingUnavailableException] if capture cannot start, and
+     * [java.io.IOException] if the output file cannot be created.
+     */
     fun start(absolutePath: String)
 
     /** Finalizes the file started by [start]. Throws [RecordingUnavailableException] if the file cannot be finalized. */

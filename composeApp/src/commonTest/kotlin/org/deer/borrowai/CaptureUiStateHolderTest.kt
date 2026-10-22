@@ -107,6 +107,9 @@ class CaptureUiStateHolderTest {
         override fun confirmPendingPlayback() = PlaybackError.NoPendingConfirmation.left()
         override fun cancelPendingPlayback() = false
         override fun stopPlayback() = Unit
+        override fun dismissRecordingError() {
+            if (mutableState.value is MediaSessionState.Failed) mutableState.value = MediaSessionState.Idle
+        }
         override fun close() = Unit
     }
 }

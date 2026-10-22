@@ -30,6 +30,10 @@ internal class CaptureUiStateHolder(
         mediaSessionService.state.collect { bindMediaSession(it) }
     }
 
+    fun dismissRecordingError() {
+        mediaSessionService.dismissRecordingError()
+    }
+
     fun toggleRecording() {
         if (uiState.isRecording()) {
             stopRecording()
@@ -78,7 +82,7 @@ internal class CaptureUiStateHolder(
         uiState.update { currentUiState ->
             when (mediaSessionState) {
                 is MediaSessionState.Recording -> mediaSessionState.toUiState()
-                MediaSessionState.Idle, is MediaSessionState.Playing -> currentUiState.copy(
+                MediaSessionState.Idle, is MediaSessionState.Playing, is MediaSessionState.Failed -> currentUiState.copy(
                     isRecording = false,
                     isHoldRecording = false,
                     transcript = "",
@@ -96,7 +100,8 @@ internal class CaptureUiStateHolder(
                 transcript = transcription,
             )
 
-            MediaSessionState.Idle, is MediaSessionState.Playing -> MutableCaptureUiState.UiState()
+            MediaSessionState.Idle, is MediaSessionState.Playing, is MediaSessionState.Failed ->
+                MutableCaptureUiState.UiState()
         }
 
     internal companion object {

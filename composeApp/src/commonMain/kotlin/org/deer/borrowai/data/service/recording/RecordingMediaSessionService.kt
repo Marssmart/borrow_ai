@@ -33,6 +33,7 @@ import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
+import org.deer.borrowai.data.service.RecordingError
 import org.deer.borrowai.data.service.RecordingResult
 import org.deer.borrowai.data.service.MutableJob
 
@@ -74,6 +75,8 @@ class RecordingMediaSessionService(
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
+    // Playback is decided per file in requestPlayback (missing, empty, or unplayable files return RecordingUnavailable),
+    // so the service itself is always able to attempt playback.
     override val playbackAvailable: Boolean = true
     override val microphoneDenial: StateFlow<MicrophoneDenial?>
         get() = microphonePermission.denial
@@ -101,6 +104,8 @@ class RecordingMediaSessionService(
 
     override fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest> {
         ensureOpen()
+        // A recording failure stays visible until dismissed on the capture screen, so playback must not overwrite it.
+        if (mutableState.value is MediaSessionState.Failed) return PlaybackError.RecordingUnavailable.left()
         val memory = findMemory(target) ?: return PlaybackError.MemoryNotFound.left()
         val absolutePath = playableRecordingPath(target, memory) ?: return PlaybackError.RecordingUnavailable.left()
 
@@ -119,7 +124,10 @@ class RecordingMediaSessionService(
             clearPendingPlayback()
             return (if (memory == null) PlaybackError.MemoryNotFound else PlaybackError.RecordingUnavailable).left()
         }
-        finishRecording()
+        // A failed save leaves Failed(SaveFailed) in place for the user to see, so playback must not overwrite it.
+        if (finishRecording() == null && mutableState.value is MediaSessionState.Failed) {
+            return PlaybackError.RecordingUnavailable.left()
+        }
         return startPlayback(target, absolutePath)
     }
 
@@ -134,6 +142,10 @@ class RecordingMediaSessionService(
     override fun stopPlayback() {
         ensureOpen()
         stopActivePlayback()
+    }
+
+    override fun dismissRecordingError() {
+        mutableState.update { if (it is MediaSessionState.Failed) MediaSessionState.Idle else it }
     }
 
     override suspend fun awaitPendingWork() {
@@ -223,12 +235,19 @@ class RecordingMediaSessionService(
         val temporaryPath = recordingsRoot / temporaryRecordingRelativePath(recordingId)
         try {
             temporaryPath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
+        } catch (exception: IOException) {
+            // The recordings folder is not writable, so the capture cannot be saved. The microphone was never opened.
+            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
+            return
+        }
+        try {
             recorder.start(temporaryPath.toString())
         } catch (exception: IOException) {
-            fileSystem.delete(temporaryPath, mustExist = false)
+            // The recorder could not create its output file. The microphone is not the cause, so this is a save failure.
+            failRecordingStart(temporaryPath, RecordingError.SaveFailed)
             return
         } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(temporaryPath, mustExist = false)
+            failRecordingStart(temporaryPath, RecordingError.MicrophoneUnavailable)
             return
         }
         // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
@@ -300,27 +319,39 @@ class RecordingMediaSessionService(
         try {
             recorder.stop()
             fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
-        } catch (exception: RecordingUnavailableException) {
+        } catch (exception: Exception) {
+            // Any finalize failure leaves no usable file. Cancelling the pending save keeps close() and busy checks from waiting on it.
             discardUnfinishedRecording(recording, save)
-            return null
-        } catch (exception: IOException) {
-            discardUnfinishedRecording(recording, save)
+            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
             return null
         }
         save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
 
+    private fun failRecordingStart(temporaryPath: Path, error: RecordingError) {
+        deleteBestEffort(temporaryPath)
+        mutableState.value = MediaSessionState.Failed(error)
+    }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
         save.cancel()
-        fileSystem.delete(recording.temporaryPath, mustExist = false)
-        fileSystem.delete(recording.absolutePath, mustExist = false)
+        deleteBestEffort(recording.temporaryPath)
+        deleteBestEffort(recording.absolutePath)
     }
 
-    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. */
+    // A cleanup failure must not skip publishing the recording error, so each delete is attempted independently.
+    private fun deleteBestEffort(path: Path) {
+        runCatching { fileSystem.delete(path, mustExist = false) }
+    }
+
+    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. A failure is not busy work. */
     val isBusy: Boolean
-        get() = activeRecording != null || pendingSaves.value.isNotEmpty() || mutableState.value !is MediaSessionState.Idle
+        get() {
+            val state = mutableState.value
+            return activeRecording != null || pendingSaves.value.isNotEmpty() ||
+                (state !is MediaSessionState.Idle && state !is MediaSessionState.Failed)
+        }
 
     private fun startTicker() {
         tickerJob.launch {
