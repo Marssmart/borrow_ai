@@ -36,7 +36,7 @@ import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
 import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
 
-class AppServices private constructor(
+class AppServices internal constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
@@ -59,24 +59,39 @@ class AppServices private constructor(
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
 
-        val failure = runCatching { mediaSession.close() }.exceptionOrNull()
+        val mediaFailure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {
+            // The media failure leads the list so it is the one reported, and later failures are suppressed onto it.
+            val failures = mutableListOf<Throwable>()
+            mediaFailure?.let { failures += it }
+            // Each step records its failure and continues, so the database still closes after any earlier step throws.
+            // Cancellation is recorded like any other failure on purpose.
+            suspend fun step(block: suspend () -> Unit) {
+                runCatching { block() }.onFailure { failures += it }
+            }
             try {
-                // A failed media close has no pending save to wait for, but workers still need stopping before the database closes.
-                if (failure == null) mediaSession.awaitPendingWork()
+                // Saves started before close must finish, even when the media close failed, before the database closes.
+                step { mediaSession.awaitPendingWork() }
                 // Transcription workers may still hold the runner, so stop it before the database closes under them.
-                transcriptionRunner.shutdown()
+                step { transcriptionRunner.shutdown() }
                 // Periodic sweeps and summary recoveries must finish before the database closes under them.
-                backgroundJobs.forEach { it.cancel() }
-                backgroundJobs.forEach { it.join() }
-                callbackGroup.cancel()
-                callbackGroup.join()
-                summarizer.close()
+                step {
+                    backgroundJobs.forEach { it.cancel() }
+                    backgroundJobs.forEach { it.join() }
+                }
+                step {
+                    callbackGroup.cancel()
+                    callbackGroup.join()
+                }
+                step { summarizer.close() }
             } finally {
                 finishClose()
             }
+            failures.firstOrNull()?.let { first ->
+                failures.drop(1).forEach(first::addSuppressed)
+                throw first
+            }
         }
-        failure?.let { throw it }
     }
 
     private fun finishClose() {
