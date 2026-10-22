@@ -78,6 +78,24 @@ fun Memory.withSummary(summary: String): Memory = copy(
     summaryStatus = SummaryStatus.SUMMARIZED,
 )
 
+/** The summary status for a memory created with [summary]. A non-blank summary is already summarized. */
+fun summaryStatusFor(summary: String): SummaryStatus =
+    if (summary.isNotBlank()) SummaryStatus.SUMMARIZED else SummaryStatus.PENDING
+
+/**
+ * The memory with its summary text replaced by an edit. A blank edit to a summarized memory makes it pending
+ * again with fresh attempts, so the recovery job generates a new summary.
+ */
+fun Memory.withEditedSummary(summary: String): Memory = when {
+    summary.isNotBlank() -> copy(summary = summary, summaryStatus = SummaryStatus.SUMMARIZED)
+    summaryStatus == SummaryStatus.SUMMARIZED -> copy(
+        summary = summary,
+        summaryStatus = SummaryStatus.PENDING,
+        summaryAttempts = 0,
+    )
+    else -> copy(summary = summary)
+}
+
 fun Memory.withGaveUp(): Memory = copy(
     summaryAttempts = MAX_SUMMARY_ATTEMPTS,
     summaryStatus = SummaryStatus.GAVE_UP,
