@@ -7,6 +7,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 ## [1.4.3]
 
 - Fixed `AppServices.close()` skipping `awaitPendingWork()` when `mediaSession.close()` threw. A save started before close could then race the database close. Each close step now runs even when an earlier step throws, and the close order is unchanged: media session, pending saves, jobs, database.
+- Android `AppServicesViewModel.onCleared()` now closes the model device even when the graph close throws.
 - Updated Android and iOS versioning to 1.4.3 (build 34).
 
 ## [1.4.2]
