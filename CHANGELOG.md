@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.3]
+
+- Show guidance on the capture screen when microphone permission is denied. A rationale with an "Allow" button appears when Android says a rationale should be shown. An "Open Settings" button appears when the permission is permanently denied.
+- Re-check microphone permission on resume, so the guidance clears after the user grants access in Settings.
+- Updated Android and iOS versioning to 1.4.3 (build 34).
+
 ## [1.4.2]
 
 - Simplified memory summary tracking to use `SummaryStatus` as the single source of truth. The redundant stored `summarized` boolean was removed. `summarized` is now a computed property derived from `summaryStatus`, so existing callers still compile and the value cannot drift.

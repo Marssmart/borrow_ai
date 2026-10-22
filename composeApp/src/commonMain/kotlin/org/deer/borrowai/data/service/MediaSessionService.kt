@@ -3,6 +3,8 @@ package org.deer.borrowai.data.service
 import arrow.core.Either
 import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.service.recording.MicrophoneDenial
+import org.deer.borrowai.data.service.recording.NoMicrophoneDenial
 
 enum class PlaybackContent {
     TRANSCRIPTION,
@@ -72,6 +74,13 @@ interface MediaSessionService {
     /** False when this service cannot start a raw recording. Recording controls should be disabled. */
     val recordingAvailable: Boolean
         get() = true
+
+    /** Why microphone access was denied, or null when it is granted. Platforms without denial tracking report null. */
+    val microphoneDenial: StateFlow<MicrophoneDenial?>
+        get() = NoMicrophoneDenial
+
+    /** Opens the system screen where the user can grant microphone access. */
+    fun openMicrophoneSettings() {}
 
     fun startRecording(holdToRecord: Boolean = false)
 
