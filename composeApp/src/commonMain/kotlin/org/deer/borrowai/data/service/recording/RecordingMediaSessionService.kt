@@ -114,7 +114,10 @@ class RecordingMediaSessionService(
             clearPendingPlayback()
             return (if (memory == null) PlaybackError.MemoryNotFound else PlaybackError.RecordingUnavailable).left()
         }
-        finishRecording()
+        // A failed save leaves Failed(SaveFailed) in place for the user to see, so playback must not overwrite it.
+        if (finishRecording() == null && mutableState.value is MediaSessionState.Failed) {
+            return PlaybackError.RecordingUnavailable.left()
+        }
         return startPlayback(target, absolutePath)
     }
 
@@ -222,6 +225,12 @@ class RecordingMediaSessionService(
         val temporaryPath = recordingsRoot / temporaryRecordingRelativePath(recordingId)
         try {
             temporaryPath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
+        } catch (exception: IOException) {
+            // The recordings folder is not writable, so the capture cannot be saved. The microphone was never opened.
+            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
+            return
+        }
+        try {
             recorder.start(temporaryPath.toString())
         } catch (exception: IOException) {
             failRecordingStart(temporaryPath)
@@ -299,11 +308,8 @@ class RecordingMediaSessionService(
         try {
             recorder.stop()
             fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
-        } catch (exception: RecordingUnavailableException) {
-            discardUnfinishedRecording(recording, save)
-            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
-            return null
-        } catch (exception: IOException) {
+        } catch (exception: Exception) {
+            // Any finalize failure leaves no usable file. Cancelling the pending save keeps close() and busy checks from waiting on it.
             discardUnfinishedRecording(recording, save)
             mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
             return null

@@ -284,8 +284,28 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertTrue(recorder.startedPaths.isEmpty())
-        assertEquals(MediaSessionState.Failed(RecordingError.MicrophoneUnavailable), service.state.value)
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
         assertNull(service.stopRecording())
+    }
+
+    @Test
+    fun saveFailureDuringConfirmedPlaybackKeepsFailureAndDoesNotPlay() = runTest {
+        val player = FakeAudioPlayer()
+        val fs = FakeFileSystem()
+        val recorder = FakeRecorder(failOnStop = true, fileSystem = fs)
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.startRecording()
+        runCurrent()
+        val target = PlaybackTarget(memory.id, PlaybackContent.RECORDING)
+        assertEquals(PlaybackRequest.ConfirmationRequired(target).right(), service.requestPlayback(target))
+        assertEquals(PlaybackError.RecordingUnavailable.left(), service.confirmPendingPlayback())
+        runCurrent()
+
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(player.playedPaths.isEmpty())
     }
 
     @Test

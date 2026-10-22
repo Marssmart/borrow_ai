@@ -26,8 +26,8 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             mediaRecorder.prepare()
             mediaRecorder.start()
         } catch (exception: Exception) {
-            mediaRecorder.release()
             val unavailable = RecordingUnavailableException("Could not start microphone capture", exception)
+            runCatching { mediaRecorder.release() }.exceptionOrNull()?.let(unavailable::addSuppressed)
             stopForegroundService(unavailable)
             throw unavailable
         }
@@ -44,7 +44,14 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             // MediaRecorder.stop() throws when no audio was captured. The file is unusable, so report it.
             failure = RecordingUnavailableException("Could not finalize recording", exception)
         } finally {
-            mediaRecorder.release()
+            runCatching { mediaRecorder.release() }.exceptionOrNull()?.let { releaseFailure ->
+                val current = failure
+                if (current == null) {
+                    failure = RecordingUnavailableException("Could not release recorder", releaseFailure)
+                } else {
+                    current.addSuppressed(releaseFailure)
+                }
+            }
             stopForegroundService(failure)
         }
         failure?.let { throw it }
