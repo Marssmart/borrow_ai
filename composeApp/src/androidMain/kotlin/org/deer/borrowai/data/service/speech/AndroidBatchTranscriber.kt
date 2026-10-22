@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.speech
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -95,6 +96,9 @@ internal class AndroidBatchTranscriber(
                 texts.joinToString(" ")
             } catch (failure: CancellationException) {
                 throw failure
+            } catch (failure: TranscriptionStalledException) {
+                Log.w(LOG_TAG, "Batch transcription stalled; the attempt is returned as failed", failure)
+                null
             } catch (_: Throwable) {
                 // Batch transcription is best-effort; the saved recording stays without a transcript.
                 null
@@ -127,8 +131,11 @@ internal class AndroidBatchTranscriber(
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
+            val stallGuard = DecodeStallGuard(STALL_TIMEOUT_MS)
             while (!outputDone) {
                 currentCoroutineContext().ensureActive()
+                stallGuard.check()
+                var progressed = false
                 if (!inputDone) {
                     val inputIndex = decoder.dequeueInputBuffer(TIMEOUT_US)
                     if (inputIndex >= 0) {
@@ -141,10 +148,12 @@ internal class AndroidBatchTranscriber(
                             decoder.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
                             extractor.advance()
                         }
+                        progressed = true
                     }
                 }
                 when (val outputIndex = decoder.dequeueOutputBuffer(info, TIMEOUT_US)) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        progressed = true
                         val format = decoder.outputFormat
                         channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
                         val newRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
@@ -172,9 +181,11 @@ internal class AndroidBatchTranscriber(
                             }
                         }
                         decoder.releaseOutputBuffer(outputIndex, false)
+                        progressed = true
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                     }
                 }
+                if (progressed) stallGuard.progress()
             }
             window.flush(onWindow)
         } finally {
@@ -216,7 +227,38 @@ internal class AndroidBatchTranscriber(
         const val FEATURE_DIM = 80
         const val THREADS = 2
         const val TIMEOUT_US = 10_000L
+        const val STALL_TIMEOUT_MS = 30_000L
         const val PCM16_SCALE = 32768f
+    }
+}
+
+private const val LOG_TAG = "AndroidBatchTranscriber"
+
+/** Raised when the audio decoder makes no input or output progress for the stall timeout, instead of hanging. */
+internal class TranscriptionStalledException(timeoutMillis: Long) :
+    IllegalStateException("Audio decode made no progress for $timeoutMillis ms")
+
+/**
+ * Fails a decode whose codec stops consuming input and producing output. Progress is measured on a monotonic clock, so
+ * a healthy decode that keeps moving never trips it.
+ */
+internal class DecodeStallGuard(
+    private val timeoutMillis: Long,
+    private val nanoTime: () -> Long = { System.nanoTime() },
+) {
+    private val timeoutNanos = timeoutMillis * NANOS_PER_MILLI
+    private var lastProgressNanos = nanoTime()
+
+    fun progress() {
+        lastProgressNanos = nanoTime()
+    }
+
+    fun check() {
+        if (nanoTime() - lastProgressNanos > timeoutNanos) throw TranscriptionStalledException(timeoutMillis)
+    }
+
+    private companion object {
+        const val NANOS_PER_MILLI = 1_000_000L
     }
 }
 

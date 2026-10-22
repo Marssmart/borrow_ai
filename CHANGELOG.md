@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.9]
+
+- Batch transcription no longer hangs forever when the audio decoder stalls. If the decoder produces no input or output progress for 30 seconds, the stall is logged and the attempt counts as failed. The memory is requeued for another attempt and is marked as failed only after the maximum number of transcription attempts.
+- Updated Android and iOS versioning to 1.4.9 (build 40).
+
 ## [1.4.8]
 
 - Surfaced live transcription failures on the capture screen. Model load failures, speech engine init failures, microphone failures, audio input interruptions, and recognizer errors previously were only logged or left the transcript empty. A notice now appears while recording, and recording continues without a live transcript.
