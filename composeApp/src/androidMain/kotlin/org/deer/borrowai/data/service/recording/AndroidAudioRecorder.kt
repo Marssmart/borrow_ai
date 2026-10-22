@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
 import java.io.File
+import java.io.IOException
 
 /** Records microphone audio as AAC in an M4A container using [MediaRecorder]. */
 class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
@@ -25,10 +26,14 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             mediaRecorder.setOutputFile(file.absolutePath)
             mediaRecorder.prepare()
             mediaRecorder.start()
+        } catch (exception: IOException) {
+            // prepare() opens the output file, so an IOException here is a storage failure, not a microphone one.
+            releaseAfterFailedStart(mediaRecorder, exception)
+            throw exception
         } catch (exception: Exception) {
-            mediaRecorder.release()
-            MicrophoneForegroundService.stop(context)
-            throw RecordingUnavailableException("Could not start microphone capture", exception)
+            val unavailable = RecordingUnavailableException("Could not start microphone capture", exception)
+            releaseAfterFailedStart(mediaRecorder, unavailable)
+            throw unavailable
         }
         recorder = mediaRecorder
     }
@@ -36,14 +41,35 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
     override fun stop() {
         val mediaRecorder = recorder ?: return
         recorder = null
+        var failure: RecordingUnavailableException? = null
         try {
             mediaRecorder.stop()
         } catch (exception: RuntimeException) {
             // MediaRecorder.stop() throws when no audio was captured. The file is unusable, so report it.
-            throw RecordingUnavailableException("Could not finalize recording", exception)
+            failure = RecordingUnavailableException("Could not finalize recording", exception)
         } finally {
-            mediaRecorder.release()
-            MicrophoneForegroundService.stop(context)
+            runCatching { mediaRecorder.release() }.exceptionOrNull()?.let { releaseFailure ->
+                val current = failure
+                if (current == null) {
+                    failure = RecordingUnavailableException("Could not release recorder", releaseFailure)
+                } else {
+                    current.addSuppressed(releaseFailure)
+                }
+            }
+            stopForegroundService(failure)
+        }
+        failure?.let { throw it }
+    }
+
+    private fun releaseAfterFailedStart(mediaRecorder: MediaRecorder, primary: Exception) {
+        runCatching { mediaRecorder.release() }.exceptionOrNull()?.let(primary::addSuppressed)
+        stopForegroundService(primary)
+    }
+
+    /** A failure to stop the service must not replace the recorder's own result, so it is attached to that failure. */
+    private fun stopForegroundService(primary: Throwable?) {
+        runCatching { MicrophoneForegroundService.stop(context) }.exceptionOrNull()?.let { secondary ->
+            primary?.addSuppressed(secondary)
         }
     }
 

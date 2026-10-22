@@ -155,6 +155,8 @@ class AppServicesCloseTest {
         override fun cancelPendingPlayback(): Boolean = error("not used by close")
 
         override fun stopPlayback() = error("not used by close")
+
+        override fun dismissRecordingError() = error("not used by close")
     }
 
     private class RecordingSummarizer(

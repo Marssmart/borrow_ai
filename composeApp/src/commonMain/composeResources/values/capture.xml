@@ -8,6 +8,10 @@
     <string name="capture_recording_label">RECORDING</string>
     <string name="capture_tap_or_hold">TAP OR HOLD</string>
     <string name="capture_elapsed_duration">%1$s:%2$s</string>
+    <string name="capture_recording_error_title">Recording failed</string>
+    <string name="capture_recording_error_microphone">BorrowAI could not start the microphone. Check that no other app is using it, then try again.</string>
+    <string name="capture_recording_error_save">This recording could not be saved. Try recording again.</string>
+    <string name="capture_recording_error_dismiss">OK</string>
     <string name="capture_models_unavailable">Recording unavailable until model setup is complete</string>
     <string name="capture_model_choosing">Choosing model for your device</string>
     <string name="capture_model_downloading_live">Downloading Live Transcription Model</string>
