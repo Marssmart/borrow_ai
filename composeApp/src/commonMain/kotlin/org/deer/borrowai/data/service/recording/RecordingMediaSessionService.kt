@@ -243,10 +243,11 @@ class RecordingMediaSessionService(
         try {
             recorder.start(temporaryPath.toString())
         } catch (exception: IOException) {
-            failRecordingStart(temporaryPath)
+            // The recorder could not create its output file. The microphone is not the cause, so this is a save failure.
+            failRecordingStart(temporaryPath, RecordingError.SaveFailed)
             return
         } catch (exception: RecordingUnavailableException) {
-            failRecordingStart(temporaryPath)
+            failRecordingStart(temporaryPath, RecordingError.MicrophoneUnavailable)
             return
         }
         // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
@@ -328,9 +329,9 @@ class RecordingMediaSessionService(
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
 
-    private fun failRecordingStart(temporaryPath: Path) {
+    private fun failRecordingStart(temporaryPath: Path, error: RecordingError) {
         deleteBestEffort(temporaryPath)
-        mutableState.value = MediaSessionState.Failed(RecordingError.MicrophoneUnavailable)
+        mutableState.value = MediaSessionState.Failed(error)
     }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {

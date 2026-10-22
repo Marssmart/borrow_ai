@@ -10,6 +10,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - A failed microphone start no longer hides its original error when the foreground service also fails to stop. The original error is kept and the secondary error is attached to it.
 - Android audio playback no longer keeps a stale audio focus request after focus is denied.
 - Cleanup of a failed recording no longer hides the save error. Each leftover file is removed independently, so one failed delete does not stop the error from being shown.
+- A recordings folder or output file that cannot be created is now reported as a save failure, not a microphone failure.
 - Updated Android and iOS versioning to 1.4.6 (build 37).
 
 ## [1.4.5]

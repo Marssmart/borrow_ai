@@ -49,12 +49,14 @@ class RecordingMediaSessionServiceTest {
         private val failOnStart: Boolean = false,
         private val failOnStop: Boolean = false,
         private val fileSystem: FileSystem? = null,
+        private val failOnOutputFile: Boolean = false,
     ) : AudioRecorder {
         val startedPaths = mutableListOf<String>()
         var stopCount = 0
 
         override fun start(absolutePath: String) {
             if (failOnStart) throw RecordingUnavailableException("no mic")
+            if (failOnOutputFile) throw IOException("cannot create output file")
             startedPaths += absolutePath
             // Real recorders create the output file on start, so promotion has something to move.
             fileSystem?.write(absolutePath.toPath()) { writeUtf8("audio") }
@@ -452,6 +454,26 @@ class RecordingMediaSessionServiceTest {
         val saved = memories.getState().value.single()
         assertEquals("recordings/rec-1.m4a", saved.recordingPath)
         assertEquals("", saved.title)
+    }
+
+    @Test
+    fun outputFileFailureReportsSaveErrorNotMicrophoneWithoutSavingMemory() = runTest {
+        val memories = memories()
+        val fs = FakeFileSystem()
+        val service = service(
+            FakeRecorder(failOnOutputFile = true),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+        )
+
+        service.startRecording()
+        runCurrent()
+
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(memories.getState().value.isEmpty())
+        assertFalse(fs.exists("/app/files/recordings/temp_rec-1.m4a".toPath()))
     }
 
     @Test
