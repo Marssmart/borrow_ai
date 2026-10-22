@@ -40,9 +40,13 @@ class MemorySummaryRecoveryJob(
         )
         // Tracked per run so an overlapping run cannot reset or read another run's missing-model result.
         var missingThisRun = false
+        var interrupted = false
         var stored = 0
         for (memory in memories.filter(::isEligible)) {
-            if (isRecording()) break
+            if (isRecording()) {
+                interrupted = true
+                break
+            }
             val outcome = try {
                 process(memory)
             } catch (exception: CancellationException) {
@@ -58,7 +62,8 @@ class MemorySummaryRecoveryJob(
                 break
             }
         }
-        modelMissing.value = missingThisRun
+        // An interrupted run that did not reach the model has no result, so it keeps the previous flag.
+        if (!interrupted || missingThisRun) modelMissing.value = missingThisRun
         return stored
     }
 

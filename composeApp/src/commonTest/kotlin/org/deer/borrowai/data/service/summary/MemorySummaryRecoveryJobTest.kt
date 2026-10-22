@@ -314,6 +314,25 @@ class MemorySummaryRecoveryJobTest {
     }
 
     @Test
+    fun modelMissingFlagIsKeptWhenRecordingInterruptsRunBeforeModelIsChecked() = runTest {
+        val service = service(memory("a"))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        // First check is the start of recover(), second is the loop check before the first memory.
+        var checks = 0
+        val interrupted = job(service, summarizer, isRecording = { ++checks > 1 })
+        val callsBefore = summarizer.calls
+
+        assertEquals(0, interrupted.recover())
+
+        assertEquals(callsBefore, summarizer.calls)
+        assertTrue(recovery.summaryModelMissing.value, "An interrupted run that never checked the model must not clear the notice")
+    }
+
+    @Test
     fun modelMissingFlagStaysFalseWithoutEligibleMemories() = runTest {
         val service = service(memory("summarized", summary = "done", summaryStatus = SummaryStatus.SUMMARIZED))
         val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
