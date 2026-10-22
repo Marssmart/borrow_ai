@@ -28,9 +28,6 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
-import org.deer.borrowai.data.service.recording.LiveTranscriber
-import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
-import org.deer.borrowai.data.service.recording.TranscriptionScheduler
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent

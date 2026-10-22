@@ -49,9 +49,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -254,6 +256,7 @@ internal fun BorrowCaptureScreen(
                 uiState.liveTranscriptionFailure?.let { failure ->
                     Text(
                         text = stringResource(liveTranscriptionFailureResource(failure)),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

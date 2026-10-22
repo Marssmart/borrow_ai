@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [LiveTranscriptionFailure.MODEL_UNAVAILABLE] and recording continues.
  */
 internal fun createLiveTranscriber(modelDirectory: Path, totalRamBytes: Long): LiveTranscriber =
-    AndroidLiveTranscriber { resolveLiveModelPaths(modelDirectory, totalRamBytes) }
+    AndroidLiveTranscriber(resolveModelPaths = { resolveLiveModelPaths(modelDirectory, totalRamBytes) })
 
 internal data class LiveModelPaths(val encoder: String, val decoder: String, val tokens: String)
 
@@ -64,6 +64,7 @@ private fun resolveLiveModelPaths(modelDirectory: Path, totalRamBytes: Long): Li
  */
 internal class AndroidLiveTranscriber(
     private val resolveModelPaths: () -> LiveModelPaths?,
+    private val previousTeardownTimeoutMs: Long = PREVIOUS_TEARDOWN_TIMEOUT_MS,
 ) : LiveTranscriber {
     private val lock = Any()
     private var session: Session? = null
@@ -127,8 +128,21 @@ internal class AndroidLiveTranscriber(
         fun run(onPartial: (String) -> Unit) {
             var recognizer: OfflineRecognizer? = null
             var decoder: ExecutorService? = null
+            var finishHandedOff = false
             try {
-                previousFinished?.await()
+                if (previousFinished != null && !previousFinished.await(previousTeardownTimeoutMs, TimeUnit.MILLISECONDS)) {
+                    // The previous recognizer may still be inside native inference. Opening another engine now could run
+                    // two at once, so this session gives up. Later sessions must keep waiting for the stuck one.
+                    Log.w(LOG_TAG, "Previous live transcription did not finish in time; not starting a new engine")
+                    report(LiveTranscriptionFailure.ENGINE_FAILED)
+                    finishHandedOff = true
+                    val previous = previousFinished
+                    Thread({
+                        previous.await()
+                        finished.countDown()
+                    }, "live-transcriber-release").apply { isDaemon = true }.start()
+                    return
+                }
                 if (!isActive()) return
                 val paths = try {
                     resolveModelPaths()
@@ -191,7 +205,7 @@ internal class AndroidLiveTranscriber(
                 val pendingRecognizer = recognizer
                 if (pendingDecoder == null) {
                     runCatching { pendingRecognizer?.release() }
-                    finished.countDown()
+                    if (!finishHandedOff) finished.countDown()
                 } else {
                     // Native inference may still be using the recognizer. Wait off this thread for the decoder to stop
                     // before releasing it, and only then let the next session start.
@@ -315,6 +329,7 @@ internal class AndroidLiveTranscriber(
         const val DECODE_INTERVAL_SAMPLES = SAMPLE_RATE
         const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 2
         const val WINDOW_SAMPLES = SAMPLE_RATE * 30
+        const val PREVIOUS_TEARDOWN_TIMEOUT_MS = 10_000L
     }
 }
 
