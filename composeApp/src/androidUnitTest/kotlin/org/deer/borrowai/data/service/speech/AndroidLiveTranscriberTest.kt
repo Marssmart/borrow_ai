@@ -98,6 +98,51 @@ class AndroidLiveTranscriberTest {
         }
     }
 
+    @Test
+    fun releasedTeardownUnblocksRestartsQueuedBehindIt() {
+        val resolveCalls = AtomicInteger(0)
+        val firstEntered = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val failures = CopyOnWriteArrayList<LiveTranscriptionFailure>()
+        val transcriber = AndroidLiveTranscriber(
+            resolveModelPaths = {
+                if (resolveCalls.incrementAndGet() == 1) {
+                    firstEntered.countDown()
+                    releaseFirst.await(waitMs, TimeUnit.MILLISECONDS)
+                }
+                null
+            },
+            previousTeardownTimeoutMs = 500L,
+        )
+
+        try {
+            transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+            assertTrue(firstEntered.await(waitMs, TimeUnit.MILLISECONDS))
+
+            // Several restarts give up behind the stuck teardown and share one queued handoff.
+            repeat(3) {
+                transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+                awaitCount(failures, it + 1)
+            }
+
+            releaseFirst.countDown()
+            // Give the shared handoff a moment to release the queued sessions before the next restart waits on them.
+            Thread.sleep(100)
+
+            transcriber.start(onPartial = {}, onFailure = { failures.add(it) })
+            awaitCount(failures, 4)
+            assertEquals(
+                LiveTranscriptionFailure.MODEL_UNAVAILABLE,
+                failures.last(),
+                "A restart after the stuck teardown finished must open a new engine attempt",
+            )
+            assertEquals(2, resolveCalls.get(), "Exactly one new model resolution once the teardown completed")
+        } finally {
+            transcriber.stop()
+            releaseFirst.countDown()
+        }
+    }
+
     private fun awaitCount(list: List<*>, expected: Int) {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMs)
         while (list.size < expected && System.nanoTime() < deadline) Thread.sleep(10)

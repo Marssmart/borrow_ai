@@ -78,6 +78,28 @@ internal class AndroidLiveTranscriber(
         Executors.newSingleThreadExecutor { task -> Thread(task, "live-transcriber-handoff").apply { isDaemon = true } }
     }
 
+    // Guarded by [lock]. Sessions that gave up behind a stuck teardown. They share one queued handoff task, so repeated
+    // restarts cannot pile up tasks while the native teardown never completes.
+    private val giveUpLatches = mutableListOf<CountDownLatch>()
+    private var giveUpHandoffQueued = false
+
+    /** Releases [finished] once [previous] completes, sharing a single queued task among all give-ups. */
+    private fun handOffAfter(previous: CountDownLatch, finished: CountDownLatch) {
+        synchronized(lock) {
+            giveUpLatches += finished
+            if (giveUpHandoffQueued) return
+            giveUpHandoffQueued = true
+            handoffExecutor.execute {
+                previous.await()
+                synchronized(lock) {
+                    giveUpLatches.forEach { it.countDown() }
+                    giveUpLatches.clear()
+                    giveUpHandoffQueued = false
+                }
+            }
+        }
+    }
+
     override fun start(onPartial: (String) -> Unit, onFailure: (LiveTranscriptionFailure) -> Unit) {
         val next: Session
         synchronized(lock) {
@@ -142,11 +164,7 @@ internal class AndroidLiveTranscriber(
                     Log.w(LOG_TAG, "Previous live transcription did not finish in time; not starting a new engine")
                     report(LiveTranscriptionFailure.ENGINE_FAILED)
                     finishHandedOff = true
-                    val previous = previousFinished
-                    handoffExecutor.execute {
-                        previous.await()
-                        finished.countDown()
-                    }
+                    handOffAfter(previousFinished, finished)
                     return
                 }
                 if (!isActive()) return
