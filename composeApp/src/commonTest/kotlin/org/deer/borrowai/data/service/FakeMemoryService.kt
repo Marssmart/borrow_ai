@@ -15,6 +15,8 @@ import org.deer.borrowai.data.domain.afterFinishedAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.requeuedForTranscription
+import org.deer.borrowai.data.domain.summaryStatusFor
+import org.deer.borrowai.data.domain.withEditedSummary
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
@@ -51,6 +53,7 @@ class FakeMemoryService(
             createdAtEpochMillis = epochClock.nowEpochMillis(),
             title = draft.title,
             summary = draft.summary,
+            summaryStatus = summaryStatusFor(draft.summary),
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
@@ -62,9 +65,8 @@ class FakeMemoryService(
 
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
-        val updated = existing.copy(
+        val updated = existing.withEditedSummary(draft.summary).copy(
             title = draft.title,
-            summary = draft.summary,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
         )

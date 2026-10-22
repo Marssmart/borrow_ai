@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.2]
+
+- Simplified memory summary tracking to use `SummaryStatus` as the single source of truth. The redundant stored `summarized` boolean was removed. `summarized` is now a computed property derived from `summaryStatus`, so existing callers still compile and the value cannot drift.
+- Updated Android and iOS versioning to 1.4.2 (build 33).
+
 ## [1.4.1]
 
 - Added a `native-developer` custom agent in `.github/agents/`. It implements native Android and iOS changes using current platform practices. It plans first, checks the iOS deployment target and minSdk before using newer APIs, and follows the MR and version rules in `AGENTS.md`. It runs a review loop with `native-reviewer` (3 rounds maximum).

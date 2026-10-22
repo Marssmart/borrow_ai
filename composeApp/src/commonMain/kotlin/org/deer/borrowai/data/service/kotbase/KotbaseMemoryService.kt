@@ -32,6 +32,8 @@ import org.deer.borrowai.data.domain.afterFinishedAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.migrateLegacySummaryState
+import org.deer.borrowai.data.domain.summaryStatusFor
+import org.deer.borrowai.data.domain.withEditedSummary
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
@@ -67,6 +69,7 @@ class KotbaseMemoryService private constructor(
             createdAtEpochMillis = epochClock.nowEpochMillis(),
             title = draft.title,
             summary = draft.summary,
+            summaryStatus = summaryStatusFor(draft.summary),
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
@@ -118,9 +121,8 @@ class KotbaseMemoryService private constructor(
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-            val updated = existing.copy(
+            val updated = existing.withEditedSummary(draft.summary).copy(
                 title = draft.title,
-                summary = draft.summary,
                 transcription = draft.transcription,
                 recordingPath = draft.recordingPath,
             )
@@ -237,7 +239,6 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_TRANSCRIPTION_DONE),
             SelectResult.property(COLUMN_TRANSCRIPTION_ATTEMPTS),
             SelectResult.property(COLUMN_LAST_TRANSCRIPTION_ERROR),
-            SelectResult.property(COLUMN_SUMMARIZED),
             SelectResult.property(COLUMN_SUMMARY_STATUS),
             SelectResult.property(COLUMN_SUMMARY_ATTEMPTS),
         )
@@ -249,7 +250,8 @@ class KotbaseMemoryService private constructor(
 
     /**
      * Gives memories saved before summary tracking existed their summary state, using
-     * [migrateLegacySummaryState]. Documents that already have a status are skipped.
+     * [migrateLegacySummaryState], and removes the legacy `summarized` key from every memory document.
+     * Documents that already have a status keep it.
      */
     private fun migrateSummaryState(): Either<MemoryError, Unit> = persisting {
         val ids = QueryBuilder
@@ -263,19 +265,23 @@ class KotbaseMemoryService private constructor(
         database.inBatch {
             for (id in ids) {
                 val document = database.getDocument(id) ?: continue
-                if (document.contains(COLUMN_SUMMARY_STATUS)) continue
-                val state = migrateLegacySummaryState(
-                    summary = document.getString(COLUMN_SUMMARY).orEmpty(),
-                    transcription = document.getString(COLUMN_TRANSCRIPTION).orEmpty(),
-                    hasRecording = document.getString(COLUMN_RECORDING_PATH) != null,
-                    legacyAttempts = document.getInt(COLUMN_SUMMARY_ATTEMPTS),
-                )
-                database.save(
-                    document.toMutable()
-                        .setBoolean(COLUMN_SUMMARIZED, state.summarized)
+                val needsStatus = !document.contains(COLUMN_SUMMARY_STATUS)
+                val hasLegacyBoolean = document.contains(COLUMN_SUMMARIZED)
+                if (!needsStatus && !hasLegacyBoolean) continue
+                val mutable = document.toMutable()
+                if (needsStatus) {
+                    val state = migrateLegacySummaryState(
+                        summary = document.getString(COLUMN_SUMMARY).orEmpty(),
+                        transcription = document.getString(COLUMN_TRANSCRIPTION).orEmpty(),
+                        hasRecording = document.getString(COLUMN_RECORDING_PATH) != null,
+                        legacyAttempts = document.getInt(COLUMN_SUMMARY_ATTEMPTS),
+                    )
+                    mutable
                         .setString(COLUMN_SUMMARY_STATUS, state.summaryStatus.name)
-                        .setInt(COLUMN_SUMMARY_ATTEMPTS, state.summaryAttempts),
-                )
+                        .setInt(COLUMN_SUMMARY_ATTEMPTS, state.summaryAttempts)
+                }
+                mutable.remove(COLUMN_SUMMARIZED)
+                database.save(mutable)
             }
         }
     }
@@ -299,7 +305,6 @@ class KotbaseMemoryService private constructor(
                 ),
                 transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
                 lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
-                summarized = getBoolean(COLUMN_SUMMARIZED),
                 summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
                 summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
             )
@@ -317,7 +322,6 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_TRANSCRIPTION_STATUS, transcriptionStatus.name)
         setLong(COLUMN_TRANSCRIPTION_ATTEMPTS, transcriptionAttempts.toLong())
         setString(COLUMN_LAST_TRANSCRIPTION_ERROR, lastTranscriptionError)
-        setBoolean(COLUMN_SUMMARIZED, summarized)
         setString(COLUMN_SUMMARY_STATUS, summaryStatus.name)
         setInt(COLUMN_SUMMARY_ATTEMPTS, summaryAttempts)
     }
@@ -340,7 +344,6 @@ class KotbaseMemoryService private constructor(
             ),
             transcriptionAttempts = getLong(COLUMN_TRANSCRIPTION_ATTEMPTS).toInt(),
             lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
-            summarized = getBoolean(COLUMN_SUMMARIZED),
             summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
             summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
         )
@@ -382,9 +385,11 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_TRANSCRIPTION_DONE = "transcriptionDone"
         private const val COLUMN_TRANSCRIPTION_ATTEMPTS = "transcriptionAttempts"
         private const val COLUMN_LAST_TRANSCRIPTION_ERROR = "lastTranscriptionError"
-        private const val COLUMN_SUMMARIZED = "summarized"
         private const val COLUMN_SUMMARY_STATUS = "summaryStatus"
         private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
+
+        /** The pre-1.4.2 stored boolean. Only the migration reads or removes it. */
+        private const val COLUMN_SUMMARIZED = "summarized"
 
         /**
          * Opens the memory store on [database]. Existing memories are migrated to the summary

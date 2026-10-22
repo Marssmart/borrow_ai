@@ -11,8 +11,8 @@ package org.deer.borrowai.data.domain
  * A [deleted] memory is hidden from the UI. Its audio file and record are removed later by a purge
  * job, so the reconciler does not mistake the leftover recording for an unsaved one.
  *
- * [summarized] is true only when a non-blank summary is stored, and it always equals
- * `summaryStatus == SUMMARIZED`. [summaryAttempts] counts finished summarization attempts. Once it
+ * [summaryStatus] is the single source of truth for summary state. A non-blank summary is stored as
+ * [SummaryStatus.SUMMARIZED]. [summaryAttempts] counts finished summarization attempts. Once it
  * reaches [MAX_SUMMARY_ATTEMPTS] the memory is [SummaryStatus.GAVE_UP] and the recovery job stops.
  *
  * [transcriptionStatus] tracks the transcript pipeline the same way [summaryStatus] tracks summaries.
@@ -27,7 +27,6 @@ data class Memory(
     val transcription: String,
     val recordingPath: String? = null,
     val deleted: Boolean = false,
-    val summarized: Boolean = false,
     val summaryStatus: SummaryStatus = SummaryStatus.PENDING,
     val summaryAttempts: Int = 0,
     val transcriptionStatus: TranscriptionStatus = TranscriptionStatus.DONE,
@@ -38,10 +37,11 @@ data class Memory(
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
         require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
-        require(summarized == (summaryStatus == SummaryStatus.SUMMARIZED)) {
-            "summarized must match summaryStatus SUMMARIZED."
-        }
     }
+
+    /** True when a summary is stored. Derived from [summaryStatus]. */
+    val summarized: Boolean
+        get() = summaryStatus == SummaryStatus.SUMMARIZED
 
     /** True when the recovery job may still try to summarize this memory. */
     val isSummaryRetryable: Boolean
@@ -75,9 +75,26 @@ fun Memory.withTranscription(transcription: String): Memory = copy(
 
 fun Memory.withSummary(summary: String): Memory = copy(
     summary = summary,
-    summarized = true,
     summaryStatus = SummaryStatus.SUMMARIZED,
 )
+
+/** The summary status for a memory created with [summary]. A non-blank summary is already summarized. */
+fun summaryStatusFor(summary: String): SummaryStatus =
+    if (summary.isNotBlank()) SummaryStatus.SUMMARIZED else SummaryStatus.PENDING
+
+/**
+ * The memory with its summary text replaced by an edit. A blank edit to a summarized memory makes it pending
+ * again with fresh attempts, so the recovery job generates a new summary.
+ */
+fun Memory.withEditedSummary(summary: String): Memory = when {
+    summary.isNotBlank() -> copy(summary = summary, summaryStatus = SummaryStatus.SUMMARIZED)
+    summaryStatus == SummaryStatus.SUMMARIZED -> copy(
+        summary = summary,
+        summaryStatus = SummaryStatus.PENDING,
+        summaryAttempts = 0,
+    )
+    else -> copy(summary = summary)
+}
 
 fun Memory.withGaveUp(): Memory = copy(
     summaryAttempts = MAX_SUMMARY_ATTEMPTS,
@@ -104,7 +121,6 @@ fun Memory.afterFinishedAttempt(error: String?, empty: Boolean): Memory {
 
 /** Summary state derived for a memory saved before summary tracking existed. */
 data class SummaryState(
-    val summarized: Boolean,
     val summaryStatus: SummaryStatus,
     val summaryAttempts: Int,
 )
@@ -120,17 +136,17 @@ fun migrateLegacySummaryState(
     hasRecording: Boolean,
     legacyAttempts: Int,
 ): SummaryState = when {
-    summary.isNotBlank() -> SummaryState(true, SummaryStatus.SUMMARIZED, legacyAttempts)
+    summary.isNotBlank() -> SummaryState(SummaryStatus.SUMMARIZED, legacyAttempts)
     transcription.isNotBlank() -> pending(legacyAttempts)
     hasRecording -> pending(legacyAttempts)
-    else -> SummaryState(false, SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
+    else -> SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
 }
 
 private fun pending(attempts: Int): SummaryState =
     if (attempts >= MAX_SUMMARY_ATTEMPTS) {
-        SummaryState(false, SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
+        SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
     } else {
-        SummaryState(false, SummaryStatus.PENDING, attempts)
+        SummaryState(SummaryStatus.PENDING, attempts)
     }
 
 /**
