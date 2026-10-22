@@ -4,12 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.4.3]
+## [1.4.4]
 
 - Recording failures are now shown to the user. If the microphone cannot start, or a finished recording cannot be saved, a dialog explains what happened. The partial file is discarded and no memory is created.
 - A failed microphone start no longer hides its original error when the foreground service also fails to stop. The original error is kept and the secondary error is attached to it.
 - Android audio playback no longer keeps a stale audio focus request after focus is denied.
-- Updated Android and iOS versioning to 1.4.3 (build 34).
+- Updated Android and iOS versioning to 1.4.4 (build 35).
 
 ## [1.4.2]
 
