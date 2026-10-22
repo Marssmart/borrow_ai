@@ -245,4 +245,51 @@ class MemorySummaryRecoveryJobTest {
 
         assertEquals(1, service.get("a").summaryAttempts)
     }
+
+    @Test
+    fun missingModelStopsRunAfterFirstCallAndDoesNotCount() = runTest {
+        val service = service(memory("a"), memory("b"), memory("c"))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+
+        assertEquals(0, recovery.recover())
+
+        assertEquals(1, summarizer.calls, "A missing model is not retried for every memory in the same run")
+        assertTrue(recovery.summaryModelMissing.value)
+        listOf("a", "b", "c").forEach { id ->
+            val unchanged = service.get(id)
+            assertEquals(0, unchanged.summaryAttempts)
+            assertEquals(SummaryStatus.PENDING, unchanged.summaryStatus)
+        }
+    }
+
+    @Test
+    fun missingModelFlagClearsWhenModelBecomesAvailable() = runTest {
+        val service = service(memory("a"))
+        var modelPresent = false
+        val summarizer = ScriptedSummarizer {
+            if (modelPresent) SummaryResult.Summary("A short summary") else SummaryResult.ModelMissing
+        }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+        assertTrue(recovery.summaryModelMissing.value)
+
+        modelPresent = true
+        assertEquals(1, recovery.recover())
+        assertFalse(recovery.summaryModelMissing.value)
+        assertEquals(SummaryStatus.SUMMARIZED, service.get("a").summaryStatus)
+    }
+
+    @Test
+    fun modelMissingFlagStaysFalseWithoutEligibleMemories() = runTest {
+        val service = service(memory("summarized", summary = "done", summaryStatus = SummaryStatus.SUMMARIZED))
+        val summarizer = ScriptedSummarizer { SummaryResult.ModelMissing }
+        val recovery = job(service, summarizer)
+
+        recovery.recover()
+
+        assertEquals(0, summarizer.calls)
+        assertFalse(recovery.summaryModelMissing.value)
+    }
 }

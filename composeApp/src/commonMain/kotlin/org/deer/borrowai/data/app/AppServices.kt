@@ -9,6 +9,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotbase.Database
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.MediaSessionService
@@ -48,6 +50,8 @@ class AppServices internal constructor(
     /** Parent of summary recoveries launched from transcription callbacks. Completed children detach themselves. */
     private val callbackGroup: Job = Job(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+    /** True while the summary model file is missing, so recovery cannot summarize anything. */
+    val summaryModelMissing: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow(),
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -221,6 +225,7 @@ class AppServices internal constructor(
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
                     callbackGroup = callbackGroup,
                     summarizer = summarizer,
+                    summaryModelMissing = summaryRecovery.summaryModelMissing,
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

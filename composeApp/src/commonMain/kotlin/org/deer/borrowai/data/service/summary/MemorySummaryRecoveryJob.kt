@@ -5,6 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -23,6 +26,11 @@ class MemorySummaryRecoveryJob(
     private val isRecording: () -> Boolean,
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
 ) {
+    private val modelMissing = MutableStateFlow(false)
+
+    /** True when the last [recover] run stopped because the summary model file is not on the device. */
+    val summaryModelMissing: StateFlow<Boolean> = modelMissing.asStateFlow()
+
     /** Processes eligible memories once. Returns how many summaries were stored. */
     suspend fun recover(): Int {
         if (isRecording()) return 0
@@ -30,6 +38,7 @@ class MemorySummaryRecoveryJob(
             ifLeft = { return 0 },
             ifRight = { it },
         )
+        modelMissing.value = false
         var stored = 0
         for (memory in memories.filter(::isEligible)) {
             if (isRecording()) break
@@ -40,6 +49,8 @@ class MemorySummaryRecoveryJob(
             } catch (exception: Exception) {
                 // The memory keeps its count and is retried on the next run.
             }
+            // A missing model will be missing for every memory, so stop instead of repeating the same result.
+            if (modelMissing.value) break
         }
         return stored
     }
@@ -62,6 +73,10 @@ class MemorySummaryRecoveryJob(
                 false
             }
             SummaryResult.Unavailable -> false
+            SummaryResult.ModelMissing -> {
+                modelMissing.value = true
+                false
+            }
             is SummaryResult.Failed -> {
                 memoryService.recordFinishedAttempt(memory.id, result.cause.describeForStorage())
                 false

@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
@@ -29,11 +30,13 @@ internal data class SavedMemoriesUiState(
     val detailSwipeEnabled: Boolean = false,
     val hasOpenedDetail: Boolean = false,
     val playbackError: PlaybackError? = null,
+    val summaryModelMissing: Boolean = false,
 )
 
 internal class SavedMemoriesStateHolder(
     private val memoryService: MemoryService,
     private val mediaSessionService: MediaSessionService,
+    summaryModelMissing: StateFlow<Boolean>,
     val pagerState: PagerState,
     val memoriesScrollState: ScrollState,
     val detailScrollState: ScrollState,
@@ -55,6 +58,11 @@ internal class SavedMemoriesStateHolder(
         scope.launch {
             mediaSessionService.state.collect { mediaSessionState ->
                 mutableUiState.update { it.copy(mediaSessionState = mediaSessionState) }
+            }
+        }
+        scope.launch {
+            summaryModelMissing.collect { missing ->
+                mutableUiState.update { it.copy(summaryModelMissing = missing) }
             }
         }
     }

@@ -90,6 +90,7 @@ import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_audio_playing
+import borrowai.composeapp.generated.resources.memory_summary_model_missing
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -119,6 +120,7 @@ internal fun SavedMemoriesScreen(
             memoriesScrollState = memoriesScrollState,
             detailScrollState = detailScrollState,
             scope = scope,
+            summaryModelMissing = services.summaryModelMissing,
         )
     }
     val uiState by stateHolder.uiState.collectAsState()
@@ -147,6 +149,7 @@ internal fun SavedMemoriesScreen(
         when (page) {
             SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
                 memories = uiState.memories,
+                summaryModelMissing = uiState.summaryModelMissing,
                 scrollState = stateHolder.memoriesScrollState,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
                 onOpenMemory = stateHolder::openMemory,
@@ -231,6 +234,7 @@ internal fun SavedMemoriesScreen(
 @Composable
 private fun MemoryListScreen(
     memories: List<Memory>,
+    summaryModelMissing: Boolean,
     scrollState: ScrollState,
     playingTarget: PlaybackTarget?,
     onOpenMemory: (String) -> Unit,
@@ -253,6 +257,14 @@ private fun MemoryListScreen(
                 .padding(SavedMemoriesStateHolder.MEMORY_LIST_CONTENT_PADDING),
             verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_LIST_ITEM_SPACING),
         ) {
+            if (summaryModelMissing) {
+                Text(
+                    stringResource(Res.string.memory_summary_model_missing),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             memories.forEach { memory ->
                 MemoryCard(
                     memory = memory,
