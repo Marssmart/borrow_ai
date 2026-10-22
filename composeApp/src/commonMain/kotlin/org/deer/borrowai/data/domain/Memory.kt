@@ -15,9 +15,9 @@ package org.deer.borrowai.data.domain
  * [SummaryStatus.SUMMARIZED]. [summaryAttempts] counts finished summarization attempts. Once it
  * reaches [MAX_SUMMARY_ATTEMPTS] the memory is [SummaryStatus.GAVE_UP] and the recovery job stops.
  *
- * [transcriptionDone] is true once the transcriber has finished, even when the text is blank. It tells
- * "not transcribed yet" apart from "transcribed and blank". [lastTranscriptionError] holds
- * `"<exception class>: <message>"` from the most recent failure. It is cleared on success.
+ * [transcriptionStatus] tracks the transcript pipeline the same way [summaryStatus] tracks summaries.
+ * [transcriptionAttempts] counts finished transcription attempts. [lastTranscriptionError] holds
+ * `"<exception class>: <message>"` from the most recent failure, and is cleared on success.
  */
 data class Memory(
     val id: String,
@@ -29,13 +29,19 @@ data class Memory(
     val deleted: Boolean = false,
     val summaryStatus: SummaryStatus = SummaryStatus.PENDING,
     val summaryAttempts: Int = 0,
-    val transcriptionDone: Boolean = false,
+    val transcriptionStatus: TranscriptionStatus = TranscriptionStatus.DONE,
+    val transcriptionAttempts: Int = 0,
     val lastTranscriptionError: String? = null,
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
+        require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
     }
+
+    /** True when a summary is stored. Derived from [summaryStatus]. */
+    val summarized: Boolean
+        get() = summaryStatus == SummaryStatus.SUMMARIZED
 
     /** True when the recovery job may still try to summarize this memory. */
     val isSummaryRetryable: Boolean
@@ -61,16 +67,11 @@ enum class SummaryStatus {
 /** How many finished summarization attempts a memory gets before the recovery job gives up on it. */
 const val MAX_SUMMARY_ATTEMPTS = 10
 
-/** Stored in [Memory.lastTranscriptionError] while a recording has not been transcribed yet. */
-const val TRANSCRIPTION_PENDING_ERROR = "TranscriptionPending: not transcribed yet"
-
 fun Memory.withTranscription(transcription: String): Memory = copy(
     transcription = transcription,
-    transcriptionDone = true,
+    transcriptionStatus = TranscriptionStatus.DONE,
     lastTranscriptionError = null,
 )
-
-fun Memory.withTranscriptionFailure(error: String): Memory = copy(lastTranscriptionError = error)
 
 fun Memory.withSummary(summary: String): Memory = copy(
     summary = summary,
@@ -104,14 +105,12 @@ fun Memory.afterFinishedAttempt(error: String?, empty: Boolean): Memory {
 data class SummaryState(
     val summaryStatus: SummaryStatus,
     val summaryAttempts: Int,
-    val transcriptionDone: Boolean,
 )
 
 /**
  * Maps a memory stored before summary tracking onto the new fields. A non-blank summary is summarized.
- * A non-blank transcript is done and waits for summarization. A blank transcript with a recording is not
- * transcribed yet, so it stays retryable. A blank memory with no recording can never change and gives up.
- * Existing attempts are kept.
+ * A memory with a transcript waits for summarization. A blank transcript with a recording stays retryable.
+ * A blank memory with no recording can never change and gives up. Existing attempts are kept.
  */
 fun migrateLegacySummaryState(
     summary: String,
@@ -119,18 +118,65 @@ fun migrateLegacySummaryState(
     hasRecording: Boolean,
     legacyAttempts: Int,
 ): SummaryState = when {
-    summary.isNotBlank() -> SummaryState(SummaryStatus.SUMMARIZED, legacyAttempts, true)
-    transcription.isNotBlank() -> pending(legacyAttempts, transcriptionDone = true)
-    hasRecording -> pending(legacyAttempts, transcriptionDone = false)
-    else -> SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, true)
+    summary.isNotBlank() -> SummaryState(SummaryStatus.SUMMARIZED, legacyAttempts)
+    transcription.isNotBlank() -> pending(legacyAttempts)
+    hasRecording -> pending(legacyAttempts)
+    else -> SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
 }
 
-private fun pending(attempts: Int, transcriptionDone: Boolean): SummaryState =
+private fun pending(attempts: Int): SummaryState =
     if (attempts >= MAX_SUMMARY_ATTEMPTS) {
-        SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS, transcriptionDone)
+        SummaryState(SummaryStatus.GAVE_UP, MAX_SUMMARY_ATTEMPTS)
     } else {
-        SummaryState(SummaryStatus.PENDING, attempts, transcriptionDone)
+        SummaryState(SummaryStatus.PENDING, attempts)
     }
+
+/**
+ * Where a memory's transcript is in the recovery pipeline. [PENDING] means the transcript still has to be
+ * generated, [IN_PROGRESS] means a worker has claimed it, [DONE] means the transcript is final, and [FAILED]
+ * means it was attempted [MAX_TRANSCRIPTION_ATTEMPTS] times without success and will not be retried.
+ */
+enum class TranscriptionStatus { PENDING, IN_PROGRESS, DONE, FAILED }
+
+const val MAX_TRANSCRIPTION_ATTEMPTS = 5
+
+fun Memory.claimedForTranscription(): Memory = copy(
+    transcriptionStatus = TranscriptionStatus.IN_PROGRESS,
+    transcriptionAttempts = transcriptionAttempts + 1,
+)
+
+fun Memory.withFinishedTranscription(text: String): Memory = withTranscription(text)
+
+fun Memory.withFailedTranscription(error: String?): Memory = copy(
+    transcriptionStatus = if (transcriptionAttempts >= MAX_TRANSCRIPTION_ATTEMPTS) {
+        TranscriptionStatus.FAILED
+    } else {
+        TranscriptionStatus.PENDING
+    },
+    lastTranscriptionError = error ?: lastTranscriptionError,
+)
+
+/**
+ * A claim interrupted by a crash is requeued without refunding its attempt, so a crashing recording still stops.
+ * If the interrupted claim used the last attempt, the memory is FAILED instead of being claimed again.
+ */
+fun Memory.requeuedForTranscription(): Memory = copy(
+    transcriptionStatus = if (transcriptionAttempts >= MAX_TRANSCRIPTION_ATTEMPTS) {
+        TranscriptionStatus.FAILED
+    } else {
+        TranscriptionStatus.PENDING
+    },
+)
+
+/**
+ * True when an active memory has a recording but no transcript and is waiting to be transcribed. Legacy memories
+ * whose batch transcription finished (even with a blank result) decode as DONE, so they are not picked up here.
+ */
+fun Memory.isMissingTranscription(): Boolean =
+    !deleted &&
+        recordingPath != null &&
+        transcription.isBlank() &&
+        transcriptionStatus == TranscriptionStatus.PENDING
 
 data class MemoryDraft(
     val title: String,

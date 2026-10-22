@@ -30,6 +30,8 @@ import org.deer.borrowai.data.service.recording.LiveTranscriber
 import org.deer.borrowai.data.service.recording.MicrophonePermission
 import org.deer.borrowai.data.service.recording.RecordingMediaSessionService
 import org.deer.borrowai.data.service.recording.RecordingReconciler
+import org.deer.borrowai.data.service.recording.TranscriptionScheduler
+import org.deer.borrowai.data.service.recording.TranscriptionWorkRunner
 import org.deer.borrowai.data.service.summary.MemorySummaryRecoveryJob
 import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.UnavailableMemorySummarizer
@@ -38,9 +40,13 @@ class AppServices private constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val mediaSession: MediaSessionService,
+    /** Runs the transcription jobs. Android's WorkManager workers reach it through a holder. */
+    val transcriptionRunner: TranscriptionWorkRunner,
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
+    /** Parent of summary recoveries launched from transcription callbacks. Completed children detach themselves. */
+    private val callbackGroup: Job = Job(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
     private val onClose: () -> Unit = {},
 ) {
@@ -53,23 +59,24 @@ class AppServices private constructor(
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
 
-        try {
-            mediaSession.close()
-        } catch (failure: Throwable) {
-            finishClose()
-            throw failure
-        }
+        val failure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {
             try {
-                mediaSession.awaitPendingWork()
-                // Periodic sweeps must finish before the database closes under them.
+                // A failed media close has no pending save to wait for, but workers still need stopping before the database closes.
+                if (failure == null) mediaSession.awaitPendingWork()
+                // Transcription workers may still hold the runner, so stop it before the database closes under them.
+                transcriptionRunner.shutdown()
+                // Periodic sweeps and summary recoveries must finish before the database closes under them.
                 backgroundJobs.forEach { it.cancel() }
                 backgroundJobs.forEach { it.join() }
+                callbackGroup.cancel()
+                callbackGroup.join()
                 summarizer.close()
             } finally {
                 finishClose()
             }
         }
+        failure?.let { throw it }
     }
 
     private fun finishClose() {
@@ -94,6 +101,7 @@ class AppServices private constructor(
             databaseName: String = DATABASE_NAME,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices = createReal(
             database = Database(databaseName),
@@ -105,6 +113,7 @@ class AppServices private constructor(
             epochClock = epochClock,
             liveTranscriber = liveTranscriber,
             batchTranscriber = batchTranscriber,
+            transcriptionScheduler = transcriptionScheduler,
             summarizer = summarizer,
         )
 
@@ -124,6 +133,7 @@ class AppServices private constructor(
             mediaSessionDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
             liveTranscriber: LiveTranscriber? = null,
             batchTranscriber: BatchTranscriber? = null,
+            transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
         ): AppServices {
             val graphJob = SupervisorJob()
@@ -144,8 +154,16 @@ class AppServices private constructor(
                     network = modelDevice.network,
                     scope = graphScope,
                 )
-                // The summary job is built after the media session, so the callback reaches it through this holder.
+                // The summary job is built after the media session, so the drain reaches it through this holder.
+                val callbackGroup = Job(graphJob)
                 var runSummaryRecovery: () -> Unit = {}
+                val transcriptionRunner = TranscriptionWorkRunner(
+                    memoryService = memories,
+                    recordingsRoot = recordingsRoot,
+                    batchTranscriber = batchTranscriber,
+                    scheduler = transcriptionScheduler,
+                    onTranscriptionFinished = { runSummaryRecovery() },
+                )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
                     recorder = recorder,
@@ -155,34 +173,38 @@ class AppServices private constructor(
                     scope = mediaScope,
                     epochClock = epochClock,
                     liveTranscriber = liveTranscriber,
-                    batchTranscriber = batchTranscriber,
-                    onTranscriptionFinished = { runSummaryRecovery() },
+                    transcriptionScheduler = transcriptionScheduler,
                 )
                 val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     epochClock = epochClock,
+                    transcriptionScheduler = transcriptionScheduler,
                 ).start(scope = graphScope)
                 val purgerJob = DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                 ).start(scope = graphScope)
+                // Recovers transcriptions left unfinished by an earlier run, such as a crash or a failed attempt.
+                transcriptionScheduler.enqueueSweep()
                 val summaryRecovery = MemorySummaryRecoveryJob(
                     memoryService = memories,
                     summarizer = summarizer,
                     isRecording = { mediaSession.isBusy },
                 )
                 val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
-                runSummaryRecovery = { graphScope.launch { summaryRecovery.recover() } }
+                runSummaryRecovery = { graphScope.launch(callbackGroup) { summaryRecovery.recover() } }
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
                     mediaSession = mediaSession,
+                    transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
                     closeScope = graphScope,
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
+                    callbackGroup = callbackGroup,
                     summarizer = summarizer,
                     onClose = { database.close() },
                 )

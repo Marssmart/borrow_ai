@@ -10,6 +10,7 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SummaryStatus
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 
 class MemorySummaryRecoveryJobTest {
@@ -204,7 +205,7 @@ class MemorySummaryRecoveryJobTest {
 
     @Test
     fun blankTranscriptAlreadyDoneIsSkippedWithoutGivingUp() = runTest {
-        val service = service(memory("a", transcription = "", recordingPath = "a.m4a").copy(transcriptionDone = true))
+        val service = service(memory("a", transcription = "", recordingPath = "a.m4a").copy(transcriptionStatus = TranscriptionStatus.DONE))
         val summarizer = ScriptedSummarizer { SummaryResult.Summary("unused") }
 
         job(service, summarizer).recover()

@@ -10,6 +10,7 @@ import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 
@@ -24,13 +25,14 @@ class RecordingReconciler(
     private val isRecording: () -> Boolean,
     private val epochClock: EpochClock,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
 ) {
     /** Creates memories for orphaned recordings. Returns how many were created. */
     suspend fun reconcile(): Int {
         if (isRecording()) return 0
         val recordingsDirectory = recordingsRoot / RECORDINGS_DIRECTORY
         return try {
-            sweep(recordingsDirectory)
+            sweep(recordingsDirectory).also { if (it > 0) transcriptionScheduler.enqueueTranscription() }
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
@@ -81,6 +83,7 @@ class RecordingReconciler(
                         recordingPath = relativePath,
                     ),
                     id = id,
+                    transcriptionStatus = TranscriptionStatus.PENDING,
                 )
                 if (result.isRight()) created++
             } catch (exception: CancellationException) {

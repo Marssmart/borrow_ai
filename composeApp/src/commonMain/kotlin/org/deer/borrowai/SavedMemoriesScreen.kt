@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
@@ -70,7 +71,6 @@ import borrowai.composeapp.generated.resources.memory_capture
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_open_details
 import borrowai.composeapp.generated.resources.memory_original_transcription
-import borrowai.composeapp.generated.resources.memory_play_original
 import borrowai.composeapp.generated.resources.memory_play_summary
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_cancel
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_confirm
@@ -84,9 +84,9 @@ import borrowai.composeapp.generated.resources.memory_play_recording
 import borrowai.composeapp.generated.resources.memory_recording_audio_playing
 import borrowai.composeapp.generated.resources.memory_return_to_recording
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
-import borrowai.composeapp.generated.resources.memory_stop_original
 import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_stop_summary
+import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_audio_playing
@@ -150,7 +150,6 @@ internal fun SavedMemoriesScreen(
                 scrollState = stateHolder.memoriesScrollState,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
                 onOpenMemory = stateHolder::openMemory,
-                onPlayOriginal = { stateHolder.togglePlayback(it, PlaybackContent.TRANSCRIPTION) },
                 onPlaySummary = { stateHolder.togglePlayback(it, PlaybackContent.SUMMARY) },
                 onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
             )
@@ -164,9 +163,6 @@ internal fun SavedMemoriesScreen(
                         ?.target
                         ?.content,
                     onBack = stateHolder::backToList,
-                    onPlayOriginal = {
-                        stateHolder.togglePlayback(memory.id, PlaybackContent.TRANSCRIPTION)
-                    },
                     onPlaySummary = {
                         stateHolder.togglePlayback(memory.id, PlaybackContent.SUMMARY)
                     },
@@ -238,7 +234,6 @@ private fun MemoryListScreen(
     scrollState: ScrollState,
     playingTarget: PlaybackTarget?,
     onOpenMemory: (String) -> Unit,
-    onPlayOriginal: (String) -> Unit,
     onPlaySummary: (String) -> Unit,
     onPlayRecording: (String) -> Unit,
 ) {
@@ -263,7 +258,6 @@ private fun MemoryListScreen(
                     memory = memory,
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
                     onOpen = { onOpenMemory(memory.id) },
-                    onPlayOriginal = { onPlayOriginal(memory.id) },
                     onPlaySummary = { onPlaySummary(memory.id) },
                     onPlayRecording = { onPlayRecording(memory.id) },
                 )
@@ -286,11 +280,15 @@ private fun MemoryCard(
     memory: Memory,
     playingContent: PlaybackContent?,
     onOpen: () -> Unit,
-    onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
     onPlayRecording: () -> Unit,
 ) {
-    val isPending = memory.transcription.isBlank()
+    val hasTranscript = memory.transcription.isNotBlank()
+    val isFailed = !hasTranscript && memory.transcriptionStatus == TranscriptionStatus.FAILED
+    val isPending = !hasTranscript && (
+        memory.transcriptionStatus == TranscriptionStatus.PENDING ||
+            memory.transcriptionStatus == TranscriptionStatus.IN_PROGRESS
+        )
     Card(
         modifier = Modifier.fillMaxWidth()
             .then(
@@ -347,6 +345,15 @@ private fun MemoryCard(
                 }
             }
 
+            if (isFailed) {
+                Text(
+                    stringResource(Res.string.memory_transcription_failed),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+
             if (isPending) {
                 Text(
                     stringResource(Res.string.memory_waiting_transcription),
@@ -376,16 +383,9 @@ private fun MemoryCard(
             }
             AudioPlaybackButtons(
                 playingContent = playingContent,
-                hasTranscription = true,
                 hasSummary = !isPending && memory.summary.isNotBlank(),
                 onPlayRecording = onPlayRecording,
-                onPlayOriginal = if (isPending) onPlayRecording else onPlayOriginal,
                 onPlaySummary = onPlaySummary,
-                originalPlaying = if (isPending) {
-                    playingContent == PlaybackContent.RECORDING
-                } else {
-                    playingContent == PlaybackContent.TRANSCRIPTION
-                },
             )
         }
     }
@@ -397,7 +397,6 @@ private fun MemoryDetailScreen(
     scrollState: ScrollState,
     playingContent: PlaybackContent?,
     onBack: () -> Unit,
-    onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
     onPlayRecording: () -> Unit,
     onReturnToCapture: () -> Unit,
@@ -454,10 +453,8 @@ private fun MemoryDetailScreen(
             ) {
                 AudioPlaybackButtons(
                     playingContent = playingContent,
-                    hasTranscription = memory.transcription.isNotBlank(),
                     hasSummary = memory.summary.isNotBlank(),
                     onPlayRecording = onPlayRecording,
-                    onPlayOriginal = onPlayOriginal,
                     onPlaySummary = onPlaySummary,
                 )
             }
@@ -570,12 +567,9 @@ private fun AuroraPanel(
 @Composable
 private fun AudioPlaybackButtons(
     playingContent: PlaybackContent?,
-    hasTranscription: Boolean,
     hasSummary: Boolean,
     onPlayRecording: () -> Unit,
-    onPlayOriginal: () -> Unit,
     onPlaySummary: () -> Unit,
-    originalPlaying: Boolean = playingContent == PlaybackContent.TRANSCRIPTION,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -587,14 +581,6 @@ private fun AudioPlaybackButtons(
             stopLabel = Res.string.memory_stop_recording,
             onClick = onPlayRecording,
         )
-        if (hasTranscription) {
-            PlaybackButton(
-                playing = originalPlaying,
-                playLabel = Res.string.memory_play_original,
-                stopLabel = Res.string.memory_stop_original,
-                onClick = onPlayOriginal,
-            )
-        }
         if (hasSummary) {
             PlaybackButton(
                 playing = playingContent == PlaybackContent.SUMMARY,
