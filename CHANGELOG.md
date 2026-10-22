@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.4]
+
+- Reworked the `native-developer` custom agent into a coordinator model. The coordinator splits work into items and runs each one in its own child session, which also uses `native-developer`. At most 3 worker sessions are active at once, and a worker that merges its MR frees a slot for the next item.
+- Updated Android and iOS versioning to 1.4.4 (build 35).
+
 ## [1.4.3]
 
 - Fixed `AppServices.close()` skipping `awaitPendingWork()` when `mediaSession.close()` threw. A save started before close could then race the database close. Each close step now runs even when an earlier step throws, and the close order is unchanged: media session, pending saves, jobs, database.
