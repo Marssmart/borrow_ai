@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.10]
+
+- Transcription WorkManager jobs now stop retrying. A drain or sweep that has not finished is retried with backoff up to 5 attempts, then reports failure. A job that finds no transcription runner attached gives up after 3 attempts. Previously both retried forever. Memories left pending are picked up by the next recording or app start.
+- Updated Android and iOS versioning to 1.4.10 (build 41).
+
 ## [1.4.9]
 
 - Batch transcription no longer hangs forever when the audio decoder stalls. If the decoder produces no input or output progress for 30 seconds, the stall is logged and the attempt counts as failed. The memory is requeued for another attempt and is marked as failed only after the maximum number of transcription attempts.

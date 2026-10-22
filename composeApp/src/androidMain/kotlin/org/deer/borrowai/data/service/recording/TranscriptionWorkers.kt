@@ -65,6 +65,35 @@ internal class WorkManagerTranscriptionScheduler(context: Context) : Transcripti
     }
 }
 
+/** Attempts allowed for a worker whose runner is attached but reports it did not finish. */
+internal const val MAX_TRANSCRIPTION_RUN_ATTEMPTS = 5
+
+/** Attempts allowed while no runner is attached yet. Shorter, since waiting longer will not attach one. */
+internal const val MAX_UNATTACHED_RUN_ATTEMPTS = 3
+
+internal enum class TranscriptionWorkStep { SUCCEEDED, RETRY, FAILED }
+
+/**
+ * Decides what a worker run should report. [runAttemptCount] is the number of earlier attempts of
+ * the same WorkRequest, so the current attempt is `runAttemptCount + 1`. Retries stop once the cap
+ * is reached, so a permanently failing run cannot back off forever.
+ */
+internal fun transcriptionWorkStep(
+    runnerAttached: Boolean,
+    finished: Boolean,
+    runAttemptCount: Int,
+): TranscriptionWorkStep {
+    if (runnerAttached && finished) return TranscriptionWorkStep.SUCCEEDED
+    val cap = if (runnerAttached) MAX_TRANSCRIPTION_RUN_ATTEMPTS else MAX_UNATTACHED_RUN_ATTEMPTS
+    return if (runAttemptCount + 1 >= cap) TranscriptionWorkStep.FAILED else TranscriptionWorkStep.RETRY
+}
+
+private fun TranscriptionWorkStep.toResult(): ListenableWorker.Result = when (this) {
+    TranscriptionWorkStep.SUCCEEDED -> ListenableWorker.Result.success()
+    TranscriptionWorkStep.RETRY -> ListenableWorker.Result.retry()
+    TranscriptionWorkStep.FAILED -> ListenableWorker.Result.failure()
+}
+
 /** Job 2: transcribes PENDING memories until none remain. */
 internal class TranscriptionDrainWorker(
     context: Context,
@@ -72,8 +101,13 @@ internal class TranscriptionDrainWorker(
     private val runnerProvider: () -> TranscriptionWorkRunner?,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val runner = runnerProvider() ?: return Result.retry()
-        return if (runner.drain()) Result.success() else Result.retry()
+        val runner = runnerProvider()
+        val finished = runner?.drain() ?: false
+        return transcriptionWorkStep(
+            runnerAttached = runner != null,
+            finished = finished,
+            runAttemptCount = runAttemptCount,
+        ).toResult()
     }
 }
 
@@ -84,7 +118,12 @@ internal class TranscriptionSweepWorker(
     private val runnerProvider: () -> TranscriptionWorkRunner?,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val runner = runnerProvider() ?: return Result.retry()
-        return if (runner.sweep()) Result.success() else Result.retry()
+        val runner = runnerProvider()
+        val finished = runner?.sweep() ?: false
+        return transcriptionWorkStep(
+            runnerAttached = runner != null,
+            finished = finished,
+            runAttemptCount = runAttemptCount,
+        ).toResult()
     }
 }
