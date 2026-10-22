@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.speech
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -96,8 +97,8 @@ internal class AndroidBatchTranscriber(
             } catch (failure: CancellationException) {
                 throw failure
             } catch (failure: TranscriptionStalledException) {
-                // Surfaced so the caller records why the attempt failed instead of a silent missing transcript.
-                throw failure
+                Log.w(LOG_TAG, "Batch transcription stalled; the attempt is returned as failed", failure)
+                null
             } catch (_: Throwable) {
                 // Batch transcription is best-effort; the saved recording stays without a transcript.
                 null
@@ -230,6 +231,8 @@ internal class AndroidBatchTranscriber(
         const val PCM16_SCALE = 32768f
     }
 }
+
+private const val LOG_TAG = "AndroidBatchTranscriber"
 
 /** Raised when the audio decoder makes no input or output progress for the stall timeout, instead of hanging. */
 internal class TranscriptionStalledException(timeoutMillis: Long) :
