@@ -61,19 +61,33 @@ class AppServices private constructor(
 
         val failure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {
+            val failures = mutableListOf<Throwable>()
+            // Each step records its failure and continues, so the database still closes after any earlier step throws.
+            // Cancellation is recorded like any other failure on purpose.
+            suspend fun step(block: suspend () -> Unit) {
+                runCatching { block() }.onFailure { failures += it }
+            }
             try {
-                // A failed media close has no pending save to wait for, but workers still need stopping before the database closes.
-                if (failure == null) mediaSession.awaitPendingWork()
+                // Saves started before close must finish, even when the media close failed, before the database closes.
+                step { mediaSession.awaitPendingWork() }
                 // Transcription workers may still hold the runner, so stop it before the database closes under them.
-                transcriptionRunner.shutdown()
+                step { transcriptionRunner.shutdown() }
                 // Periodic sweeps and summary recoveries must finish before the database closes under them.
-                backgroundJobs.forEach { it.cancel() }
-                backgroundJobs.forEach { it.join() }
-                callbackGroup.cancel()
-                callbackGroup.join()
-                summarizer.close()
+                step {
+                    backgroundJobs.forEach { it.cancel() }
+                    backgroundJobs.forEach { it.join() }
+                }
+                step {
+                    callbackGroup.cancel()
+                    callbackGroup.join()
+                }
+                step { summarizer.close() }
             } finally {
                 finishClose()
+            }
+            failures.firstOrNull()?.let { first ->
+                failures.drop(1).forEach(first::addSuppressed)
+                throw first
             }
         }
         failure?.let { throw it }
