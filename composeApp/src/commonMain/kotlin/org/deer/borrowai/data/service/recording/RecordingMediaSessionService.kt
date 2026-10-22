@@ -78,6 +78,12 @@ class RecordingMediaSessionService(
     // Playback is decided per file in requestPlayback (missing, empty, or unplayable files return RecordingUnavailable),
     // so the service itself is always able to attempt playback.
     override val playbackAvailable: Boolean = true
+    override val microphoneDenial: StateFlow<MicrophoneDenial?>
+        get() = microphonePermission.denial
+
+    override fun openMicrophoneSettings() {
+        microphonePermission.openSettings()
+    }
 
     override fun startRecording(holdToRecord: Boolean) {
         ensureOpen()

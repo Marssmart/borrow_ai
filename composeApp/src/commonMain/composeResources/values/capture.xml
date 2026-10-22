@@ -30,4 +30,8 @@
     <string name="capture_model_failed_network_detail">The download could not complete because of a network problem. Check Wi-Fi, then relaunch BorrowAI to retry.</string>
     <string name="capture_model_failed_storage_detail">Model files could not be accessed. Check available device storage, then relaunch BorrowAI.</string>
     <string name="capture_model_failed_model_detail">The requested model could not be downloaded or verified. Relaunch BorrowAI to retry.</string>
+    <string name="capture_mic_rationale_body">BorrowAI needs the microphone to record your memories.</string>
+    <string name="capture_mic_rationale_allow">Allow</string>
+    <string name="capture_mic_permanently_denied_body">Microphone access is off. Turn it on in Settings to record.</string>
+    <string name="capture_mic_open_settings">Open Settings</string>
 </resources>

@@ -67,9 +67,14 @@ import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.RecordingError
+import org.deer.borrowai.data.service.recording.MicrophoneDenial
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.capture_download_over_mobile_data
 import borrowai.composeapp.generated.resources.capture_elapsed_duration
+import borrowai.composeapp.generated.resources.capture_mic_open_settings
+import borrowai.composeapp.generated.resources.capture_mic_permanently_denied_body
+import borrowai.composeapp.generated.resources.capture_mic_rationale_allow
+import borrowai.composeapp.generated.resources.capture_mic_rationale_body
 import borrowai.composeapp.generated.resources.capture_model_choosing
 import borrowai.composeapp.generated.resources.capture_model_downloading_live
 import borrowai.composeapp.generated.resources.capture_model_downloading_summarization
@@ -116,6 +121,7 @@ internal fun BorrowCaptureScreen(
     }
     val uiState by stateHolder.uiState.state.collectAsState()
     val setupState by modelSetupService.state.collectAsState()
+    val microphoneDenial by stateHolder.microphoneDenial.collectAsState()
     val canRecord = stateHolder.canRecord
     val mediaState by mediaSessionService.state.collectAsState()
     val recordingError = (mediaState as? MediaSessionState.Failed)?.error
@@ -210,6 +216,13 @@ internal fun BorrowCaptureScreen(
                         else MaterialTheme.colorScheme.onSurface,
                     )
                 }
+                microphoneDenial?.let { denial ->
+                    MicrophoneDenialBanner(
+                        denial = denial,
+                        onAllow = stateHolder::toggleRecording,
+                        onOpenSettings = stateHolder::openMicrophoneSettings,
+                    )
+                }
                 if (setupState.phase == ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK) {
                     Button(onClick = onDownloadOverMobileData) {
                         Text(stringResource(Res.string.capture_download_over_mobile_data))
@@ -232,6 +245,38 @@ internal fun BorrowCaptureScreen(
                         alpha = CaptureUiStateHolder.MEMORY_HINT_ALPHA,
                     ),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MicrophoneDenialBanner(
+    denial: MicrophoneDenial,
+    onAllow: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    when (denial) {
+        MicrophoneDenial.RATIONALE_REQUIRED -> {
+            Text(
+                stringResource(Res.string.capture_mic_rationale_body),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onAllow) {
+                Text(stringResource(Res.string.capture_mic_rationale_allow))
+            }
+        }
+        MicrophoneDenial.PERMANENTLY_DENIED -> {
+            Text(
+                stringResource(Res.string.capture_mic_permanently_denied_body),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onOpenSettings) {
+                Text(stringResource(Res.string.capture_mic_open_settings))
             }
         }
     }
