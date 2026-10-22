@@ -75,6 +75,8 @@ class RecordingMediaSessionService(
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
+    // Playback is decided per file in requestPlayback (missing, empty, or unplayable files return RecordingUnavailable),
+    // so the service itself is always able to attempt playback.
     override val playbackAvailable: Boolean = true
 
     override fun startRecording(holdToRecord: Boolean) {
