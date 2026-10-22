@@ -27,6 +27,14 @@ data class RecordingResult(
     val transcription: String,
 )
 
+sealed interface RecordingError {
+    /** The microphone could not be opened, so no recording was started. */
+    data object MicrophoneUnavailable : RecordingError
+
+    /** The recording was captured but could not be saved, so it was discarded. */
+    data object SaveFailed : RecordingError
+}
+
 sealed interface MediaSessionState {
     data object Idle : MediaSessionState
 
@@ -41,6 +49,11 @@ sealed interface MediaSessionState {
         val target: PlaybackTarget,
         val elapsedMillis: Long,
         val durationMillis: Long,
+    ) : MediaSessionState
+
+    /** A recording could not start or be saved. The UI shows it until [MediaSessionService.dismissRecordingError]. */
+    data class Failed(
+        val error: RecordingError,
     ) : MediaSessionState
 }
 
@@ -84,6 +97,9 @@ interface MediaSessionService {
     fun cancelPendingPlayback(): Boolean
 
     fun stopPlayback()
+
+    /** Clears a [MediaSessionState.Failed] state back to Idle after the user has seen it. */
+    fun dismissRecordingError()
 
     /** Stops accepting work and returns after any save started before [close] has finished. */
     suspend fun awaitPendingWork() {}

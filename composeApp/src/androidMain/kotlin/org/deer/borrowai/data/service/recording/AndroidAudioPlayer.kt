@@ -68,8 +68,10 @@ class AndroidAudioPlayer(context: Context) : AudioPlayer {
                 )
                 .setOnAudioFocusChangeListener(focusListener)
                 .build()
+            if (audioManager.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return false
+            // Keep the request only when it was granted, so abandonFocus() never releases a request that was not held.
             focusRequest = request
-            audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            true
         } else {
             @Suppress("DEPRECATION")
             audioManager.requestAudioFocus(

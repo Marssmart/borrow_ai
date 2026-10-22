@@ -33,6 +33,7 @@ import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
+import org.deer.borrowai.data.service.RecordingError
 import org.deer.borrowai.data.service.RecordingResult
 import org.deer.borrowai.data.service.MutableJob
 
@@ -130,6 +131,10 @@ class RecordingMediaSessionService(
         stopActivePlayback()
     }
 
+    override fun dismissRecordingError() {
+        mutableState.update { if (it is MediaSessionState.Failed) MediaSessionState.Idle else it }
+    }
+
     override suspend fun awaitPendingWork() {
         while (true) {
             val job = pendingSaves.value.firstOrNull() ?: return
@@ -219,10 +224,10 @@ class RecordingMediaSessionService(
             temporaryPath.parent?.let { fileSystem.createDirectories(it, mustCreate = false) }
             recorder.start(temporaryPath.toString())
         } catch (exception: IOException) {
-            fileSystem.delete(temporaryPath, mustExist = false)
+            failRecordingStart(temporaryPath)
             return
         } catch (exception: RecordingUnavailableException) {
-            fileSystem.delete(temporaryPath, mustExist = false)
+            failRecordingStart(temporaryPath)
             return
         }
         // stop or close can run while recorder.start blocks. Roll back the capture instead of publishing it.
@@ -296,15 +301,21 @@ class RecordingMediaSessionService(
             fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
         } catch (exception: RecordingUnavailableException) {
             discardUnfinishedRecording(recording, save)
+            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
             return null
         } catch (exception: IOException) {
             discardUnfinishedRecording(recording, save)
+            mutableState.value = MediaSessionState.Failed(RecordingError.SaveFailed)
             return null
         }
         save.start()
         return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
     }
 
+    private fun failRecordingStart(temporaryPath: Path) {
+        fileSystem.delete(temporaryPath, mustExist = false)
+        mutableState.value = MediaSessionState.Failed(RecordingError.MicrophoneUnavailable)
+    }
 
     private fun discardUnfinishedRecording(recording: ActiveRecording, save: Job) {
         save.cancel()
@@ -312,9 +323,13 @@ class RecordingMediaSessionService(
         fileSystem.delete(recording.absolutePath, mustExist = false)
     }
 
-    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. */
+    /** True while a recording is in progress, being finalized, or waiting to be saved as a memory. A failure is not busy work. */
     val isBusy: Boolean
-        get() = activeRecording != null || pendingSaves.value.isNotEmpty() || mutableState.value !is MediaSessionState.Idle
+        get() {
+            val state = mutableState.value
+            return activeRecording != null || pendingSaves.value.isNotEmpty() ||
+                (state !is MediaSessionState.Idle && state !is MediaSessionState.Failed)
+        }
 
     private fun startTicker() {
         tickerJob.launch {

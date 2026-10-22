@@ -26,10 +26,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,10 +61,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.deer.borrowai.data.service.MediaSessionService
+import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.ModelSetupFailureReason
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.RecordingError
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.capture_download_over_mobile_data
 import borrowai.composeapp.generated.resources.capture_elapsed_duration
@@ -83,6 +87,10 @@ import borrowai.composeapp.generated.resources.capture_model_progress_transcript
 import borrowai.composeapp.generated.resources.capture_model_waiting_for_network
 import borrowai.composeapp.generated.resources.capture_model_waiting_for_unmetered_network
 import borrowai.composeapp.generated.resources.capture_models_unavailable
+import borrowai.composeapp.generated.resources.capture_recording_error_dismiss
+import borrowai.composeapp.generated.resources.capture_recording_error_microphone
+import borrowai.composeapp.generated.resources.capture_recording_error_save
+import borrowai.composeapp.generated.resources.capture_recording_error_title
 import borrowai.composeapp.generated.resources.capture_recording_label
 import borrowai.composeapp.generated.resources.capture_release_to_stop
 import borrowai.composeapp.generated.resources.capture_start_recording_description
@@ -91,6 +99,7 @@ import borrowai.composeapp.generated.resources.capture_swipe_saved_memories
 import borrowai.composeapp.generated.resources.capture_tap_or_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_record_hold
 import borrowai.composeapp.generated.resources.capture_tap_to_stop
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 
@@ -108,11 +117,26 @@ internal fun BorrowCaptureScreen(
     val uiState by stateHolder.uiState.state.collectAsState()
     val setupState by modelSetupService.state.collectAsState()
     val canRecord = stateHolder.canRecord
+    val mediaState by mediaSessionService.state.collectAsState()
+    val recordingError = (mediaState as? MediaSessionState.Failed)?.error
     val modelStatus = modelSetupStatus(setupState)
     val modelFailureDetail = modelSetupFailureDetail(setupState)
 
     LaunchedEffect(stateHolder) {
         stateHolder.observeMediaSession()
+    }
+
+    recordingError?.let { error ->
+        AlertDialog(
+            onDismissRequest = stateHolder::dismissRecordingError,
+            title = { Text(stringResource(Res.string.capture_recording_error_title)) },
+            text = { Text(stringResource(recordingErrorMessage(error))) },
+            confirmButton = {
+                TextButton(onClick = stateHolder::dismissRecordingError) {
+                    Text(stringResource(Res.string.capture_recording_error_dismiss))
+                }
+            },
+        )
     }
 
     BoxWithConstraints(
@@ -494,6 +518,11 @@ private val DOWNLOAD_PHASES = setOf(
     ModelSetupPhase.DOWNLOADING_VOICE,
     ModelSetupPhase.DOWNLOADING_LLM,
 )
+
+private fun recordingErrorMessage(error: RecordingError): StringResource = when (error) {
+    RecordingError.MicrophoneUnavailable -> Res.string.capture_recording_error_microphone
+    RecordingError.SaveFailed -> Res.string.capture_recording_error_save
+}
 
 @Composable
 private fun modelSetupStatus(state: ModelSetupState): String? = when (state.phase) {

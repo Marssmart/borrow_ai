@@ -35,6 +35,7 @@ import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
+import org.deer.borrowai.data.service.RecordingError
 import org.deer.borrowai.data.service.FakeMemoryService
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -217,12 +218,13 @@ class RecordingMediaSessionServiceTest {
     @Test
     fun livePartialTextIsShownWhileRecordingAndClearedOnStop() = runTest {
         val transcriber = FakeLiveTranscriber()
-        val recorder = FakeRecorder()
+        val fileSystem = FakeFileSystem()
+        val recorder = FakeRecorder(fileSystem = fileSystem)
         val service = service(
             recorder,
             FakePermission(CompletableDeferred(true)),
             memories(),
-            FakeFileSystem(),
+            fileSystem,
             backgroundScope,
             liveTranscriber = transcriber,
         )
@@ -282,7 +284,7 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertTrue(recorder.startedPaths.isEmpty())
-        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertEquals(MediaSessionState.Failed(RecordingError.MicrophoneUnavailable), service.state.value)
         assertNull(service.stopRecording())
     }
 
@@ -349,7 +351,7 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
-    fun recorderStartFailureLeavesServiceIdleWithoutSavingMemory() = runTest {
+    fun recorderStartFailureReportsMicrophoneErrorWithoutSavingMemory() = runTest {
         val memories = memories()
         val fs = FakeFileSystem()
         val service = service(
@@ -363,13 +365,13 @@ class RecordingMediaSessionServiceTest {
         service.startRecording()
         runCurrent()
 
-        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertEquals(MediaSessionState.Failed(RecordingError.MicrophoneUnavailable), service.state.value)
         assertTrue(memories.getState().value.isEmpty())
         assertFalse(fs.exists(recordingFile))
     }
 
     @Test
-    fun finalizeFailureDiscardsPartialFileAndSavesNothing() = runTest {
+    fun finalizeFailureDiscardsPartialFileAndReportsSaveError() = runTest {
         val memories = memories()
         val fs = FakeFileSystem()
         val service = service(
@@ -386,9 +388,31 @@ class RecordingMediaSessionServiceTest {
         assertNull(service.stopRecording())
         runCurrent()
 
-        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
         assertTrue(memories.getState().value.isEmpty())
         assertFalse(fs.exists(recordingFile))
+    }
+
+    @Test
+    fun dismissRecordingErrorReturnsToIdleAndIsNotBusy() = runTest {
+        val memories = memories()
+        val fs = FakeFileSystem()
+        val service = service(
+            FakeRecorder(failOnStart = true),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+        )
+
+        service.startRecording()
+        runCurrent()
+        assertFalse(service.isBusy)
+
+        service.dismissRecordingError()
+
+        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertFalse(service.isBusy)
     }
 
     @Test

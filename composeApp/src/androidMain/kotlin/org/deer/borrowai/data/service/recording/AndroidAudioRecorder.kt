@@ -27,8 +27,9 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
             mediaRecorder.start()
         } catch (exception: Exception) {
             mediaRecorder.release()
-            MicrophoneForegroundService.stop(context)
-            throw RecordingUnavailableException("Could not start microphone capture", exception)
+            val unavailable = RecordingUnavailableException("Could not start microphone capture", exception)
+            stopForegroundService(unavailable)
+            throw unavailable
         }
         recorder = mediaRecorder
     }
@@ -36,14 +37,23 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
     override fun stop() {
         val mediaRecorder = recorder ?: return
         recorder = null
+        var failure: RecordingUnavailableException? = null
         try {
             mediaRecorder.stop()
         } catch (exception: RuntimeException) {
             // MediaRecorder.stop() throws when no audio was captured. The file is unusable, so report it.
-            throw RecordingUnavailableException("Could not finalize recording", exception)
+            failure = RecordingUnavailableException("Could not finalize recording", exception)
         } finally {
             mediaRecorder.release()
-            MicrophoneForegroundService.stop(context)
+            stopForegroundService(failure)
+        }
+        failure?.let { throw it }
+    }
+
+    /** A failure to stop the service must not replace the recorder's own result, so it is attached to that failure. */
+    private fun stopForegroundService(primary: Throwable?) {
+        runCatching { MicrophoneForegroundService.stop(context) }.exceptionOrNull()?.let { secondary ->
+            primary?.addSuppressed(secondary)
         }
     }
 
