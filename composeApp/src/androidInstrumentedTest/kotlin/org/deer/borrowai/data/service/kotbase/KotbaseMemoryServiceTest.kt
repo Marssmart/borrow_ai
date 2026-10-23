@@ -200,7 +200,102 @@ class KotbaseMemoryServiceTest {
         assertEquals("IllegalStateException: boom", found.lastTranscriptionError)
     }
 
-    private fun saveRawMemory(id: String, recordingPath: String) {
+    @Test
+    fun categoriesRoundTripAndReplaceOnUpdate() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Tagged", "", "", categories = listOf(2, 5, 9))).getOrNull()!!
+
+        assertEquals(listOf(2, 5, 9), service.findById(created.id).getOrNull()?.categories)
+
+        service.update(created.id, MemoryDraft("Tagged", "", "", categories = listOf(7)))
+        assertEquals(listOf(7), service.findById(created.id).getOrNull()?.categories)
+
+        service.update(created.id, MemoryDraft("Tagged", "", "", categories = emptyList()))
+        assertEquals(emptyList(), service.findById(created.id).getOrNull()?.categories)
+    }
+
+    @Test
+    fun categoriesSurviveReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Reopen", "", "", categories = listOf(1, 3))).getOrNull()!!
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(listOf(1, 3), reopened.findById(created.id).getOrNull()?.categories)
+    }
+
+    @Test
+    fun legacyMemoryWithoutCategoriesKeyReadsAsEmpty() = runTest {
+        openService()
+        saveRawMemory(id = "legacy-cat", recordingPath = "recordings/legacy-cat.m4a")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(emptyList(), reopened.findById("legacy-cat").getOrNull()?.categories)
+    }
+
+    @Test
+    fun storedRowOverWriteLimitReadsEveryCategoryId() = runTest {
+        openService()
+        saveRawMemory(id = "wide", recordingPath = "recordings/wide.m4a", categories = "1|2|3|4")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(listOf(1, 2, 3, 4), reopened.findById("wide").getOrNull()?.categories)
+    }
+
+    @Test
+    fun danglingCategoryIdIsKeptAsStored() = runTest {
+        openService()
+        saveRawMemory(id = "dangling", recordingPath = "recordings/dangling.m4a", categories = "42|7")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(listOf(42, 7), reopened.findById("dangling").getOrNull()?.categories)
+    }
+
+    @Test
+    fun createCategoryAssignsSequentialIdsFromOne() = runTest {
+        val service = openService()
+        assertEquals(emptyList(), service.findCategories().getOrNull())
+
+        val first = service.createCategory("Work", "Job related").getOrNull()!!
+        val second = service.createCategory("Health", "Body and mind").getOrNull()!!
+
+        assertEquals(1, first.id)
+        assertEquals(2, second.id)
+        assertEquals(listOf(first, second), service.findCategories().getOrNull())
+    }
+
+    @Test
+    fun createCategoryRejectsOverlongName() = runTest {
+        val service = openService()
+
+        val failure = service.createCategory("A".repeat(16), "ok").errorOrNull()
+
+        assertIs<MemoryError.InvalidInput>(failure)
+        assertEquals(emptyList(), service.findCategories().getOrNull())
+    }
+
+    @Test
+    fun categoryRowsAreExcludedFromMemoryLists() = runTest {
+        val service = openService()
+        service.createCategory("Work", "Job related")
+        val created = service.create(MemoryDraft("Only memory", "", "")).getOrNull()!!
+
+        assertEquals(listOf(created), service.getState().value)
+        assertEquals(listOf(created), service.findAll().getOrNull())
+    }
+
+    private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {
         requireNotNull(database).save(
             MutableDocument(id).apply {
                 setString("type", "memory")
@@ -210,6 +305,7 @@ class KotbaseMemoryServiceTest {
                 setString("transcription", "")
                 setString("recordingPath", recordingPath)
                 setBoolean("deleted", false)
+                if (categories != null) setString("categories", categories)
             },
         )
     }

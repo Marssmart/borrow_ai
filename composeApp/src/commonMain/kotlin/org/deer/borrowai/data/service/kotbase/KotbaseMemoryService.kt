@@ -23,9 +23,12 @@ import kotbase.Result
 import kotbase.SelectResult
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.parseCategoriesString
+import org.deer.borrowai.data.domain.toCategoriesString
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
@@ -73,6 +76,7 @@ class KotbaseMemoryService private constructor(
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
+            categories = draft.categories,
         )
         writeAndPublish { database.save(memory.toDocument()) }.map { memory }
     }
@@ -125,6 +129,7 @@ class KotbaseMemoryService private constructor(
                 title = draft.title,
                 transcription = draft.transcription,
                 recordingPath = draft.recordingPath,
+                categories = draft.categories,
             )
             writeAndPublish { database.save(updated.toDocument()) }.bind()
         }
@@ -154,6 +159,30 @@ class KotbaseMemoryService private constructor(
     override suspend fun findAll(): Either<MemoryError, List<Memory>> = withContext(Dispatchers.Default) {
         readAll()
     }
+
+    override suspend fun findCategories(): Either<MemoryError, List<Category>> = withContext(Dispatchers.Default) {
+        readCategories()
+    }
+
+    override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> =
+        mutex.withLock {
+            either {
+                val existing = withContext(Dispatchers.Default) { readCategories() }.bind()
+                val category = try {
+                    Category(
+                        id = (existing.maxOfOrNull(Category::id) ?: 0) + 1,
+                        name = name,
+                        description = description,
+                    )
+                } catch (e: IllegalArgumentException) {
+                    raise(MemoryError.InvalidInput(e.message.orEmpty()))
+                }
+                withContext(NonCancellable) {
+                    withContext(Dispatchers.Default) { persisting { database.save(category.toDocument()) } }
+                }.bind()
+                category
+            }
+        }
 
     override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> =
         updateActive(id) { it.afterFinishedAttempt(error = error, empty = false) }
@@ -226,6 +255,40 @@ class KotbaseMemoryService private constructor(
         rows.map { row -> row.toListedMemory().bind() }
     }
 
+    /** Reads every category master row ordered by id. A malformed row fails the whole read. */
+    private fun readCategories(): Either<MemoryError, List<Category>> = either {
+        val rows = persisting {
+            QueryBuilder
+                .select(
+                    SelectResult.property(COLUMN_CATEGORY_ID),
+                    SelectResult.property(COLUMN_CATEGORY_NAME),
+                    SelectResult.property(COLUMN_CATEGORY_DESCRIPTION),
+                )
+                .from(DataSource.database(database))
+                .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_CATEGORY)))
+                .orderBy(Ordering.property(COLUMN_CATEGORY_ID).ascending())
+                .execute()
+                .allResults()
+        }.bind()
+        rows.map { row ->
+            val id = row.getInt(COLUMN_CATEGORY_ID)
+            decoding(id.toString()) {
+                Category(
+                    id = id,
+                    name = row.getString(COLUMN_CATEGORY_NAME).orEmpty(),
+                    description = row.getString(COLUMN_CATEGORY_DESCRIPTION).orEmpty(),
+                )
+            }.bind()
+        }
+    }
+
+    private fun Category.toDocument(): MutableDocument = MutableDocument(categoryDocumentId(id)).apply {
+        setString(KEY_TYPE, TYPE_CATEGORY)
+        setInt(COLUMN_CATEGORY_ID, this@toDocument.id)
+        setString(COLUMN_CATEGORY_NAME, this@toDocument.name)
+        setString(COLUMN_CATEGORY_DESCRIPTION, this@toDocument.description)
+    }
+
     private fun queryRows(): List<Result> = QueryBuilder
         .select(
             SelectResult.expression(Meta.id).`as`(COLUMN_ID),
@@ -241,6 +304,7 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_LAST_TRANSCRIPTION_ERROR),
             SelectResult.property(COLUMN_SUMMARY_STATUS),
             SelectResult.property(COLUMN_SUMMARY_ATTEMPTS),
+            SelectResult.property(COLUMN_CATEGORIES),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
@@ -307,6 +371,7 @@ class KotbaseMemoryService private constructor(
                 lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
                 summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
                 summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
+                categories = parseCategoriesString(getString(COLUMN_CATEGORIES)),
             )
         }
     }
@@ -324,6 +389,7 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_LAST_TRANSCRIPTION_ERROR, lastTranscriptionError)
         setString(COLUMN_SUMMARY_STATUS, summaryStatus.name)
         setInt(COLUMN_SUMMARY_ATTEMPTS, summaryAttempts)
+        setString(COLUMN_CATEGORIES, categories.toCategoriesString())
     }
 
     private fun Document.toMemory(): Memory? {
@@ -346,6 +412,7 @@ class KotbaseMemoryService private constructor(
             lastTranscriptionError = getString(COLUMN_LAST_TRANSCRIPTION_ERROR),
             summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
             summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
+            categories = parseCategoriesString(getString(COLUMN_CATEGORIES)),
         )
     }
 
@@ -374,7 +441,12 @@ class KotbaseMemoryService private constructor(
     companion object {
         private const val KEY_TYPE = "type"
         private const val TYPE_MEMORY = "memory"
+        private const val TYPE_CATEGORY = "category"
+        private const val COLUMN_CATEGORY_ID = "id"
+        private const val COLUMN_CATEGORY_NAME = "name"
+        private const val COLUMN_CATEGORY_DESCRIPTION = "description"
         private const val COLUMN_ID = "id"
+        private const val COLUMN_CATEGORIES = "categories"
         private const val COLUMN_CREATED_AT = "createdAtEpochMillis"
         private const val COLUMN_TITLE = "title"
         private const val COLUMN_SUMMARY = "summary"
@@ -387,6 +459,8 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_LAST_TRANSCRIPTION_ERROR = "lastTranscriptionError"
         private const val COLUMN_SUMMARY_STATUS = "summaryStatus"
         private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
+
+        private fun categoryDocumentId(id: Int): String = "category:$id"
 
         /** The pre-1.4.2 stored boolean. Only the migration reads or removes it. */
         private const val COLUMN_SUMMARIZED = "summarized"

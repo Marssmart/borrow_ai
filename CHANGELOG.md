@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.5.0]
+
+- Memories can now store up to 3 category ids in a new `categories` field, saved as `{id1}|{id2}|{id3}`. Ids must be distinct and start at 1.
+- Added a category master table. Each category has a numeric id, a name of up to 15 characters, and a description of up to 100 characters. The table starts empty. Categories can be listed and created through the memory service.
+- Updating a memory replaces its categories. Memories saved before this change read as having no categories.
+- Updated Android and iOS versioning to 1.5.0 (build 45).
+
 ## [1.4.13]
 
 - Design guide: the note category section now shows only the chosen "Tinted chips" style. Each note shows up to 3 categories, and category names are limited to 12 characters, and longer names are cut at that length.
