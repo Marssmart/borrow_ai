@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.llm
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -40,10 +41,11 @@ internal class LocalLlmRuntime(
     private val store: ModelFileStore,
     private val spec: ModelSpec,
     private val cacheDirectory: String,
+    private val engineFactory: LlmEngineFactory = LiteRtLlmEngineFactory(),
 ) {
     // Also guards engine use and close, so close waits for any running inference.
     private val gate = Mutex()
-    private var engine: Engine? = null
+    private var engine: LlmEngine? = null
 
     suspend fun generate(systemInstruction: String, userMessage: String, timeoutMillis: Long): LlmOutcome = gate.withLock {
         val present = withContext(Dispatchers.IO) { store.isPresent(spec) }
@@ -51,15 +53,11 @@ internal class LocalLlmRuntime(
         try {
             withTimeout(timeoutMillis) {
                 withContext(Dispatchers.Default) {
-                    val loaded = engine ?: loadEngine().also { engine = it }
-                    val conversation = loaded.createConversation(
-                        ConversationConfig(
-                            systemInstruction = Contents.of(systemInstruction),
-                            samplerConfig = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.3, seed = 0),
-                        ),
-                    )
+                    val loaded = engine ?: engineFactory.create(store.finalPath(spec).toString(), cacheDirectory)
+                        .also { engine = it }
+                    val conversation = loaded.startConversation(systemInstruction)
                     try {
-                        LlmOutcome.Text(conversation.sendMessage(Message.user(userMessage)).text())
+                        LlmOutcome.Text(conversation.reply(userMessage))
                     } finally {
                         runCatching { conversation.close() }
                     }
@@ -78,17 +76,53 @@ internal class LocalLlmRuntime(
         runCatching { engine?.close() }
         engine = null
     }
+}
 
-    private fun loadEngine(): Engine {
-        val created = Engine(
-            EngineConfig(
-                modelPath = store.finalPath(spec).toString(),
-                backend = Backend.CPU(),
-                cacheDir = cacheDirectory,
-            ),
-        )
+/** Seam over LiteRT-LM so the runtime lifecycle can be tested without a real model. */
+internal fun interface LlmEngineFactory {
+    fun create(modelPath: String, cacheDirectory: String): LlmEngine
+}
+
+internal interface LlmEngine {
+    fun startConversation(systemInstruction: String): LlmConversation
+
+    fun close()
+}
+
+internal interface LlmConversation {
+    fun reply(userMessage: String): String
+
+    fun close()
+}
+
+internal class LiteRtLlmEngineFactory : LlmEngineFactory {
+    override fun create(modelPath: String, cacheDirectory: String): LlmEngine {
+        val created = Engine(EngineConfig(modelPath = modelPath, backend = Backend.CPU(), cacheDir = cacheDirectory))
         created.initialize()
-        return created
+        return LiteRtLlmEngine(created)
+    }
+}
+
+private class LiteRtLlmEngine(private val engine: Engine) : LlmEngine {
+    override fun startConversation(systemInstruction: String): LlmConversation = LiteRtLlmConversation(
+        engine.createConversation(
+            ConversationConfig(
+                systemInstruction = Contents.of(systemInstruction),
+                samplerConfig = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.3, seed = 0),
+            ),
+        ),
+    )
+
+    override fun close() {
+        engine.close()
+    }
+}
+
+private class LiteRtLlmConversation(private val conversation: Conversation) : LlmConversation {
+    override fun reply(userMessage: String): String = conversation.sendMessage(Message.user(userMessage)).text()
+
+    override fun close() {
+        conversation.close()
     }
 }
 
