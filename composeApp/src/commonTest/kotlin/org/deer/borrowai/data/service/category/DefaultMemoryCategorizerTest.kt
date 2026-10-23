@@ -293,4 +293,49 @@ class DefaultMemoryCategorizerTest {
         assertIs<CategorizationResult.Failed>(result)
         assertTrue(model.backfillCalls.isEmpty())
     }
+
+    @Test
+    fun `retries a scoring batch that skipped categories and uses the complete reply`() = runTest {
+        var replies = 0
+        val model = ScriptedModel { _, user ->
+            replies++
+            val ids = scoredIds(user)
+            val covered = if (replies == 1) ids.take(1) else ids
+            CategoryModelReply.Text(covered.joinToString("\n") { "$it|90" })
+        }
+
+        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+
+        assertEquals(CategorizationResult.Categories(listOf(1, 2, 3)), result)
+        assertEquals(2, model.scoringCalls.size)
+        assertTrue(model.backfillCalls.isEmpty())
+    }
+
+    @Test
+    fun `fails when a scoring batch is still incomplete after the retry`() = runTest {
+        val model = ScriptedModel { _, user ->
+            CategoryModelReply.Text("${scoredIds(user).first()}|90")
+        }
+
+        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+
+        assertIs<CategorizationResult.Failed>(result)
+        assertEquals(DefaultMemoryCategorizer.MAX_SCORING_ATTEMPTS, model.scoringCalls.size)
+        assertTrue(model.backfillCalls.isEmpty())
+    }
+
+    @Test
+    fun `backfill prompt lists at most the capped number of existing category names`() = runTest {
+        val model = model(backfill = CategoryModelReply.Text(""))
+
+        DefaultMemoryCategorizer(service(CategoryPrompt.MAX_EXISTING_NAMES_IN_BACKFILL + 50), model)
+            .categorize("note")
+
+        val listed = model.backfillCalls.single().lines()
+            .single { it.startsWith("Existing categories: ") }
+            .removePrefix("Existing categories: ")
+            .split(", ")
+        assertEquals(CategoryPrompt.MAX_EXISTING_NAMES_IN_BACKFILL, listed.size)
+    }
 }
+

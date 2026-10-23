@@ -80,20 +80,26 @@ class DefaultMemoryCategorizer(
         val scores = linkedMapOf<Int, Int>()
         for (batch in masters.chunked(batchSize)) {
             val batchIds = batch.mapTo(mutableSetOf()) { it.id }
-            val reply = model.generate(SCORING_SYSTEM_INSTRUCTION, CategoryPrompt.scoringMessage(transcription, batch))
-            when (reply) {
-                is CategoryModelReply.Text -> {
-                    val parsed = CategoryPrompt.parseScores(reply.text, batchIds)
-                    if (parsed.isEmpty()) {
-                        return ScoringOutcome.Stopped(
-                            CategorizationResult.Failed(IllegalStateException("Scoring reply contained no scores.")),
-                        )
+            var batchScores: Map<Int, Int> = emptyMap()
+            for (attempt in 1..MAX_SCORING_ATTEMPTS) {
+                val reply = model.generate(SCORING_SYSTEM_INSTRUCTION, CategoryPrompt.scoringMessage(transcription, batch))
+                when (reply) {
+                    is CategoryModelReply.Text -> {
+                        batchScores = CategoryPrompt.parseScores(reply.text, batchIds)
+                        if (batchScores.keys == batchIds) break
                     }
-                    scores.putAll(parsed)
+                    CategoryModelReply.ModelMissing -> return ScoringOutcome.Stopped(CategorizationResult.ModelMissing)
+                    is CategoryModelReply.Failed -> return ScoringOutcome.Stopped(CategorizationResult.Failed(reply.cause))
                 }
-                CategoryModelReply.ModelMissing -> return ScoringOutcome.Stopped(CategorizationResult.ModelMissing)
-                is CategoryModelReply.Failed -> return ScoringOutcome.Stopped(CategorizationResult.Failed(reply.cause))
             }
+            if (batchScores.keys != batchIds) {
+                return ScoringOutcome.Stopped(
+                    CategorizationResult.Failed(
+                        IllegalStateException("Scoring reply covered ${batchScores.size} of ${batchIds.size} categories."),
+                    ),
+                )
+            }
+            scores.putAll(batchScores)
         }
         return ScoringOutcome.Scored(scores)
     }
@@ -158,5 +164,8 @@ class DefaultMemoryCategorizer(
 
     companion object {
         const val DEFAULT_BATCH_SIZE = 10
+
+        /** A batch whose reply does not score every category is asked again once before failing. */
+        const val MAX_SCORING_ATTEMPTS = 2
     }
 }

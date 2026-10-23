@@ -15,6 +15,8 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - The on-device model runtime is shared between the summarizer and the categorizer, and is closed once by the app. When app services fail to start, the runtime is closed in the failure path, and a close error no longer hides the original startup failure.
 - Added instrumented tests for `updateCategories` and summary updates, covering persistence across reopen, missing, deleted, and malformed memories.
 - Added unit tests for the shared on-device LLM runtime, covering a missing model, replies, fresh conversations per call, load and reply failures with retry, timeouts, and close behavior during inference.
+- A scoring batch whose reply does not score every category is asked again once. If it is still incomplete, categorization fails instead of silently leaving those categories unscored.
+- The backfill prompt lists at most 100 existing category names. Proposals that duplicate any existing category are still dropped.
 - Updated Android and iOS versioning to 1.6.0 (build 46).
 
 ## [1.5.0]

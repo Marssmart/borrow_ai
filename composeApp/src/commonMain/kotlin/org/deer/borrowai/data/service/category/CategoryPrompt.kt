@@ -11,6 +11,7 @@ data class ProposedCategory(val name: String, val description: String)
 object CategoryPrompt {
     const val MATCH_THRESHOLD = 75
     const val MAX_TRANSCRIPTION_CHARS = 8_000
+    const val MAX_EXISTING_NAMES_IN_BACKFILL = 100
 
     const val SCORING_SYSTEM_INSTRUCTION =
         "You score how well each category matches a personal voice note. " +
@@ -32,7 +33,7 @@ object CategoryPrompt {
             "Categories:\n" + batch.joinToString("\n") { "${it.id}. ${it.name}: ${it.description}" }
 
     fun backfillMessage(transcription: String, existing: List<Category>, count: Int): String {
-        val names = existing.joinToString(", ") { it.name }.ifBlank { "none" }
+        val names = existing.take(MAX_EXISTING_NAMES_IN_BACKFILL).joinToString(", ") { it.name }.ifBlank { "none" }
         return "Voice note:\n${transcription.trim().take(MAX_TRANSCRIPTION_CHARS)}\n\n" +
             "Existing categories: $names\n" +
             "Suggest up to $count new categories."
