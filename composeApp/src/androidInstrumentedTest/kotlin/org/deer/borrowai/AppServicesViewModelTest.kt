@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okio.FileSystem
+import okio.Path.Companion.toPath
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -123,7 +124,10 @@ class AppServicesViewModelTest {
     }
 
     private class FakeRecorder : AudioRecorder {
-        override fun start(absolutePath: String) = Unit
+        // Like the real recorder, create the output file so finishing the recording can promote it.
+        override fun start(absolutePath: String) {
+            FileSystem.SYSTEM.sink(absolutePath.toPath()).use { }
+        }
         override fun stop() = Unit
     }
 
