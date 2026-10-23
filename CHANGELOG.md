@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.4]
+
+- Category score parsing now accepts indented score lines.
+- The app services startup failure path closes the summarizer before the shared model runtime, matching the normal close order.
+- Updated Android and iOS versioning to 1.6.4 (build 50).
+
 ## [1.6.3]
 
 - Category score parsing now reads only lines that start with a `<id>|<score>` pair, so digits in prose from the model are no longer taken as scores.

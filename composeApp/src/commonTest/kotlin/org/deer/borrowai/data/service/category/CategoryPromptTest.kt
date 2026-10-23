@@ -48,6 +48,14 @@ class CategoryPromptTest {
     }
 
     @Test
+    fun `reads indented score lines`() {
+        assertEquals(
+            mapOf(1 to 80, 2 to 40),
+            CategoryPrompt.parseScores("  1|80\n\t2 : 40", setOf(1, 2)),
+        )
+    }
+
+    @Test
     fun `parses name and description and keeps pipes in the description`() {
         assertEquals(
             listOf(ProposedCategory("Ocean", "Waves | sea")),

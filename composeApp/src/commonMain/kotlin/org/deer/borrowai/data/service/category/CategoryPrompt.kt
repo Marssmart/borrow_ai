@@ -24,7 +24,7 @@ object CategoryPrompt {
             "$CATEGORY_DESCRIPTION_MAX_LENGTH characters. Do not repeat the existing categories. " +
             "Reply with only these lines, no preamble or markdown."
 
-    private val scoreLine = Regex("^(\\d+)\\s*[|:=,]\\s*(\\d+)")
+    private val scoreLine = Regex("^\\s*(\\d+)\\s*[|:=,]\\s*(\\d+)")
     private val listMarker = Regex("^\\s*(?:[-*•]|\\d+[.)])\\s*")
 
     fun scoringMessage(transcription: String, batch: List<Category>): String =

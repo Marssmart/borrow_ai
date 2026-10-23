@@ -253,6 +253,12 @@ class AppServices internal constructor(
             } catch (failure: Throwable) {
                 graphJob.cancel()
                 database.close()
+                // Same order as close(): the summarizer stops before the shared runtime it uses is released.
+                try {
+                    summarizer.close()
+                } catch (closeFailure: Throwable) {
+                    failure.addSuppressed(closeFailure)
+                }
                 try {
                     closeModelRuntime()
                 } catch (closeFailure: Throwable) {
