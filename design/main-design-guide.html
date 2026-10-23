@@ -498,6 +498,81 @@
       box-shadow: 0 14px 29px rgb(23 75 83 / 13%), inset 0 1px 0 #fff;
     }
 
+    .category-gallery { margin-top: 56px; }
+    .category-gallery-head { margin-bottom: 22px; }
+    .category-gallery-head h2 {
+      margin: 0;
+      color: #17201d;
+      font-size: clamp(22px, 3vw, 30px);
+      letter-spacing: -.035em;
+      line-height: 1.05;
+    }
+    .category-rules {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .category-rules li {
+      padding: 5px 11px;
+      border: 1px solid #d2d9d4;
+      border-radius: 999px;
+      background: #fff;
+      color: #253b31;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .variant-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 22px;
+    }
+    .variant-stage {
+      margin: 0;
+      padding: 16px 14px 12px;
+      border: 1px solid rgb(255 255 255 / 80%);
+      border-radius: 28px;
+      background:
+        radial-gradient(ellipse at 91% 6%, rgb(88 181 174 / 36%), transparent 37%),
+        #dcecef;
+      box-shadow: 0 14px 30px rgb(20 30 26 / 9%);
+    }
+    .variant-stage-cards {
+      display: flex;
+      width: min(100%, 300px);
+      margin: 0 auto;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .variant-stage .memory-card { width: 100%; cursor: default; }
+    .variant-stage .screen-caption { margin-top: 12px; }
+
+    .cat-tags {
+      display: flex;
+      min-width: 0;
+      gap: 4px;
+      margin-top: 7px;
+      overflow: hidden;
+    }
+    .cat-chip {
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      flex: 0 1 auto;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--c) 18%, #fff);
+      color: color-mix(in srgb, var(--c) 62%, #000);
+      white-space: nowrap;
+      font-size: 7.5px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .cat-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
     @keyframes mic-pulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); }
@@ -620,6 +695,20 @@
         <figcaption class="screen-caption">Detail</figcaption>
       </figure>
     </div>
+
+    <section class="category-gallery" aria-labelledby="category-gallery-title">
+      <header class="category-gallery-head">
+        <p class="eyebrow">Categories · Variants</p>
+        <h2 id="category-gallery-title">Note categories</h2>
+        <p class="workspace-description">Chosen style: Tinted chips. Each card shows a note with three categories and a note with one.</p>
+        <ul class="category-rules">
+          <li>Max 3 categories per note</li>
+          <li>Max 12 characters per name</li>
+          <li>Longer names are cut to 12 characters</li>
+        </ul>
+      </header>
+      <div class="variant-grid" data-category-grid></div>
+    </section>
   </main>
 
   <script>
@@ -793,6 +882,49 @@
       renderMemoryCard(memory, index, floatingPanelsDesign)
     ).join("");
 
+    const MAX_CATEGORIES = 3;
+    const MAX_CATEGORY_LENGTH = 12;
+    const categoryPalette = ["#14757b", "#3b6fd1", "#c2672b", "#8a5cc7", "#2f8f4e", "#c23f6a", "#9a7a12", "#4a7f9e"];
+    const categoryColor = (index) => categoryPalette[index % categoryPalette.length];
+    const categoryNotes = [
+      { ...memories[0], categories: ["Productivity", "Ideas", "Work"] },
+      { ...memories[1], categories: ["Travel"] },
+    ];
+    function noteCategories(note) {
+      return note.categories
+        .slice(0, MAX_CATEGORIES)
+        .map((name) => name.slice(0, MAX_CATEGORY_LENGTH));
+    }
+
+    function categoryTags(categories) {
+      const chips = categories.map((name, index) =>
+        `<span class="cat-chip" style="--c: ${categoryColor(index)}"><span class="cat-label">${escapeHtml(name)}</span></span>`
+      ).join("");
+      return `<div class="cat-tags">${chips}</div>`;
+    }
+
+    function renderCategoryCard(note) {
+      const categories = noteCategories(note);
+      return `<article class="memory-card" style="--c: ${categoryColor(0)}">
+        <div class="memory-card-head">
+          <span class="audio-glyph" aria-hidden="true">▶</span>
+          <div class="memory-meta">
+            <div class="memory-title">${escapeHtml(note.title)}</div>
+            <div class="memory-date">${escapeHtml(note.date)}</div>
+          </div>
+        </div>
+        ${categoryTags(categories)}
+        <section class="memory-section summary"><p>${escapeHtml(preview(note.summary))}</p></section>
+        ${audioButtons()}
+      </article>`;
+    }
+
+    document.querySelector("[data-category-grid]").innerHTML = `
+      <figure class="variant-stage">
+        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note)).join("")}</div>
+        <figcaption class="screen-caption">Tinted chips</figcaption>
+      </figure>`;
+
     const detailMemory = memories[0];
     document.querySelector("[data-detail-date]").textContent = detailMemory.date;
     document.querySelector("[data-detail-title]").textContent = detailMemory.title;
@@ -845,7 +977,7 @@
 
     function updatePlayback() {
       const track = playbackPhases[playbackPhaseIndex].track;
-      document.querySelectorAll(".memory-card").forEach((card, index) => {
+      document.querySelectorAll("[data-memory-list] .memory-card").forEach((card, index) => {
         const activeTrack = index === 0 ? track : null;
         card.classList.toggle("is-playing", activeTrack !== null);
         card.querySelector("[data-audio-glyph]").textContent = activeTrack === "recording" ? "Ⅱ" : "▶";
