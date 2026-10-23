@@ -1,6 +1,8 @@
 package org.deer.borrowai.data.service.category
 
 import arrow.core.Either
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.MAX_MEMORY_CATEGORIES
 import org.deer.borrowai.data.service.MemoryError
@@ -20,6 +22,8 @@ class DefaultMemoryCategorizer(
     private val model: CategoryModel,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
 ) : MemoryCategorizer {
+    private val backfillLock = Mutex()
+
     init {
         require(batchSize > 0) { "Batch size must be positive." }
     }
@@ -94,15 +98,21 @@ class DefaultMemoryCategorizer(
             is CategoryModelReply.Failed -> return BackfillOutcome.Stopped(CategorizationResult.Failed(reply.cause))
         }
 
-        val ids = mutableListOf<Int>()
-        val proposals = CategoryPrompt.parseProposals(text, masters.mapTo(mutableSetOf()) { it.name })
-        for (proposal in proposals.take(count)) {
-            when (val created = memoryService.createCategory(proposal.name, proposal.description)) {
-                is Either.Left -> Unit
-                is Either.Right -> ids += created.value.id
+        return backfillLock.withLock {
+            val current = memoryService.findCategories().fold(
+                ifLeft = { return@withLock BackfillOutcome.Stopped(failure(it)) },
+                ifRight = { it },
+            )
+            val ids = mutableListOf<Int>()
+            val proposals = CategoryPrompt.parseProposals(text, current.mapTo(mutableSetOf()) { it.name })
+            for (proposal in proposals.take(count)) {
+                when (val created = memoryService.createCategory(proposal.name, proposal.description)) {
+                    is Either.Left -> Unit
+                    is Either.Right -> ids += created.value.id
+                }
             }
+            BackfillOutcome.Created(ids)
         }
-        return BackfillOutcome.Created(ids)
     }
 
     private fun failure(error: MemoryError): CategorizationResult.Failed =

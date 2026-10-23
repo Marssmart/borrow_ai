@@ -1,5 +1,8 @@
 package org.deer.borrowai.data.service.category
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -143,6 +146,29 @@ class DefaultMemoryCategorizerTest {
         val result = DefaultMemoryCategorizer(service(2), model).categorize("note")
 
         assertEquals(CategorizationResult.Categories(listOf(1)), result)
+    }
+
+    @Test
+    fun `concurrent backfills do not create the same category twice`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val model = ScriptedModel { _, _ ->
+            gate.await()
+            CategoryModelReply.Text("Ada|Pioneer of computing")
+        }
+        val service = service(0)
+        val categorizer = DefaultMemoryCategorizer(service, model)
+
+        val first = async { categorizer.categorize("note") }
+        val second = async { categorizer.categorize("note") }
+        advanceUntilIdle()
+        assertEquals(2, model.backfillCalls.size)
+
+        gate.complete(Unit)
+        val firstResult = first.await()
+        second.await()
+
+        assertIs<CategorizationResult.Categories>(firstResult)
+        assertEquals(listOf("Ada"), service.findCategories().getOrNull()!!.map { it.name })
     }
 
     @Test

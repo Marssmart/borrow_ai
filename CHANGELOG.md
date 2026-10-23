@@ -8,6 +8,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - `updateCategories` now rejects more than 3 category ids, duplicate ids, and ids below 1 by returning an error, instead of saving them.
 - The categorizer result now enforces the same category id rules.
+- Category backfill now runs under a lock and re-reads the master list, so concurrent categorizations cannot create duplicate category names.
 
 - Updated Android and iOS versioning to 1.6.1 (build 47).
 
