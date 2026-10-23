@@ -239,6 +239,30 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
+    fun storedRowOverWriteLimitReadsEveryCategoryId() = runTest {
+        openService()
+        saveRawMemory(id = "wide", recordingPath = "recordings/wide.m4a", categories = "1|2|3|4")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(listOf(1, 2, 3, 4), reopened.findById("wide").getOrNull()?.categories)
+    }
+
+    @Test
+    fun danglingCategoryIdIsKeptAsStored() = runTest {
+        openService()
+        saveRawMemory(id = "dangling", recordingPath = "recordings/dangling.m4a", categories = "42|7")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        assertEquals(listOf(42, 7), reopened.findById("dangling").getOrNull()?.categories)
+    }
+
+    @Test
     fun createCategoryAssignsSequentialIdsFromOne() = runTest {
         val service = openService()
         assertEquals(emptyList(), service.findCategories().getOrNull())
@@ -271,7 +295,7 @@ class KotbaseMemoryServiceTest {
         assertEquals(listOf(created), service.findAll().getOrNull())
     }
 
-    private fun saveRawMemory(id: String, recordingPath: String) {
+    private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {
         requireNotNull(database).save(
             MutableDocument(id).apply {
                 setString("type", "memory")
@@ -281,6 +305,7 @@ class KotbaseMemoryServiceTest {
                 setString("transcription", "")
                 setString("recordingPath", recordingPath)
                 setBoolean("deleted", false)
+                if (categories != null) setString("categories", categories)
             },
         )
     }

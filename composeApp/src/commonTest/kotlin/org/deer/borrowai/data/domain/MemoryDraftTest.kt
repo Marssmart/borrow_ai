@@ -68,8 +68,24 @@ class MemoryDraftTest {
     }
 
     @Test
+    fun parsesEveryStoredCategoryIdEvenOverTheWriteLimit() {
+        assertEquals(listOf(1, 2, 3, 4, 5), parseCategoriesString("1|2|3|4|5"))
+        assertEquals(
+            listOf(1, 2, 3, 4),
+            Memory(
+                id = "m",
+                createdAtEpochMillis = 0L,
+                title = "",
+                summary = "",
+                transcription = "",
+                categories = listOf(1, 2, 3, 4),
+            ).categories,
+        )
+    }
+
+    @Test
     fun rejectsMalformedStoredCategories() {
-        listOf("1||2", "a|2", "1|2|3|4", "0").forEach { raw ->
+        listOf("1||2", "a|2", "0", "1|1", "-1").forEach { raw ->
             assertFailsWith<IllegalArgumentException>(raw) { parseCategoriesString(raw) }
         }
     }

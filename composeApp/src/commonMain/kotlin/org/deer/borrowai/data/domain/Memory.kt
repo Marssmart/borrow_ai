@@ -19,8 +19,9 @@ package org.deer.borrowai.data.domain
  * [transcriptionAttempts] counts finished transcription attempts. [lastTranscriptionError] holds
  * `"<exception class>: <message>"` from the most recent failure, and is cleared on success.
  *
- * [categories] holds up to [MAX_MEMORY_CATEGORIES] distinct ids from the category master table, stored as
- * a pipe-separated string (see [toCategoriesString]).
+ * [categories] holds distinct ids from the category master table, stored as a pipe-separated string
+ * (see [toCategoriesString]). New drafts are limited to [MAX_MEMORY_CATEGORIES]. Stored rows are read
+ * in full, whatever their count.
  */
 data class Memory(
     val id: String,
@@ -41,7 +42,7 @@ data class Memory(
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
         require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
-        requireCategoryIds(categories)
+        requireCategoryIdRules(categories)
     }
 
     /** True when a summary is stored. Derived from [summaryStatus]. */
@@ -243,19 +244,25 @@ fun List<Int>.toCategoriesString(): String = joinToString(CATEGORY_SEPARATOR.toS
 
 /**
  * Parses a stored `{id1}|{id2}|{id3}` string. A null or empty string is no categories.
- * Throws [IllegalArgumentException] for a non-numeric part or for ids that break the category rules.
+ * Every stored id is kept, with no count limit. Throws [IllegalArgumentException] for a non-numeric part
+ * or for ids that break the id rules.
  */
 fun parseCategoriesString(raw: String?): List<Int> {
     if (raw.isNullOrEmpty()) return emptyList()
     val ids = raw.split(CATEGORY_SEPARATOR).map { part ->
         requireNotNull(part.toIntOrNull()) { "Category id is not a number: $part" }
     }
-    requireCategoryIds(ids)
+    requireCategoryIdRules(ids)
     return ids
 }
 
+/** Write-side check for new categories: the id rules plus the [MAX_MEMORY_CATEGORIES] limit. */
 private fun requireCategoryIds(ids: List<Int>) {
     require(ids.size <= MAX_MEMORY_CATEGORIES) { "A memory can have at most $MAX_MEMORY_CATEGORIES categories." }
+    requireCategoryIdRules(ids)
+}
+
+private fun requireCategoryIdRules(ids: List<Int>) {
     require(ids.all { it >= 1 }) { "Category ids start at 1." }
     require(ids.distinct().size == ids.size) { "A memory cannot repeat a category." }
 }
