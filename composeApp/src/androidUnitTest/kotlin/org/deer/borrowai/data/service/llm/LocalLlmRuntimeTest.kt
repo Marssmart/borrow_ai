@@ -115,13 +115,46 @@ class LocalLlmRuntimeTest {
     }
 
     @Test
-    fun replyPastTheTimeLimitReturnsTimedOut() {
+    fun replyPastTheTimeLimitReturnsTimedOutWithoutWaitingForNativeInference() {
         writeModel()
-        val factory = FakeEngineFactory(onReply = { Thread.sleep(300); "late" })
+        val release = CountDownLatch(1)
+        val factory = FakeEngineFactory(onReply = { release.await(10, TimeUnit.SECONDS); "late" })
+        val runtime = runtime(factory)
+        try {
+            val startedAt = System.nanoTime()
+            val result = runBlocking { runtime.generate("system", "hello", timeoutMillis = 50) }
+            val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
 
-        val result = runBlocking { runtime(factory).generate("system", "hello", timeoutMillis = 20) }
+            assertEquals(LlmOutcome.TimedOut, result)
+            assertTrue(elapsedMillis < 5_000, "caller waited $elapsedMillis ms on blocked native inference")
+        } finally {
+            release.countDown()
+            runBlocking { runtime.close() }
+        }
+    }
 
-        assertEquals(LlmOutcome.TimedOut, result)
+    @Test
+    fun callAfterATimeoutWaitsForTheRunningReplyInsteadOfStartingAnother() {
+        writeModel()
+        val release = CountDownLatch(1)
+        val factory = FakeEngineFactory(onReply = { release.await(10, TimeUnit.SECONDS); "late" })
+        val runtime = runtime(factory)
+        try {
+            runBlocking {
+                assertEquals(LlmOutcome.TimedOut, runtime.generate("system", "first", timeoutMillis = 50))
+                assertEquals(LlmOutcome.TimedOut, runtime.generate("system", "second", timeoutMillis = 50))
+            }
+            assertEquals(1, factory.created.single().conversations.size)
+
+            release.countDown()
+
+            val recovered = runBlocking { runtime.generate("system", "third", TIMEOUT_MILLIS) }
+            assertEquals(LlmOutcome.Text("late"), recovered)
+            assertEquals(2, factory.created.single().conversations.size)
+        } finally {
+            release.countDown()
+            runBlocking { runtime.close() }
+        }
     }
 
     @Test

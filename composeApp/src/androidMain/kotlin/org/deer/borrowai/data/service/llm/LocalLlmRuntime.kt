@@ -9,13 +9,15 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okio.Path
 import org.deer.borrowai.data.service.model.ModelCatalog
 import org.deer.borrowai.data.service.model.ModelFileStore
@@ -42,39 +44,44 @@ internal class LocalLlmRuntime(
     private val spec: ModelSpec,
     private val cacheDirectory: String,
     private val engineFactory: LlmEngineFactory = LiteRtLlmEngineFactory(),
+    // Native inference cannot be interrupted, so it runs here and may outlive a timed-out call.
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-    // Also guards engine use and close, so close waits for any running inference.
+    // Guards engine use and close. Calls and close are serialized through it.
     private val gate = Mutex()
     private var engine: LlmEngine? = null
+    private var inFlight: Deferred<LlmOutcome>? = null
 
     suspend fun generate(systemInstruction: String, userMessage: String, timeoutMillis: Long): LlmOutcome = gate.withLock {
         val present = withContext(Dispatchers.IO) { store.isPresent(spec) }
         if (!present) return@withLock LlmOutcome.ModelMissing
-        try {
-            withTimeout(timeoutMillis) {
-                withContext(Dispatchers.Default) {
-                    val loaded = engine ?: engineFactory.create(store.finalPath(spec).toString(), cacheDirectory)
-                        .also { engine = it }
-                    val conversation = loaded.startConversation(systemInstruction)
-                    try {
-                        LlmOutcome.Text(conversation.reply(userMessage))
-                    } finally {
-                        runCatching { conversation.close() }
-                    }
-                }
-            }
-        } catch (failure: TimeoutCancellationException) {
-            LlmOutcome.TimedOut
-        } catch (failure: CancellationException) {
-            throw failure
-        } catch (failure: Throwable) {
-            LlmOutcome.Failed(failure)
-        }
+        withTimeoutOrNull(timeoutMillis) {
+            // A previous call that timed out may still be running on the engine. Wait for it before starting another.
+            inFlight?.join()
+            val work = scope.async(Dispatchers.Default) { infer(systemInstruction, userMessage) }
+            inFlight = work
+            work.await()
+        } ?: LlmOutcome.TimedOut
     }
 
     suspend fun close() = gate.withLock {
+        // Never close the engine under a running reply.
+        inFlight?.join()
         runCatching { engine?.close() }
         engine = null
+    }
+
+    private fun infer(systemInstruction: String, userMessage: String): LlmOutcome = try {
+        val loaded = engine ?: engineFactory.create(store.finalPath(spec).toString(), cacheDirectory)
+            .also { engine = it }
+        val conversation = loaded.startConversation(systemInstruction)
+        try {
+            LlmOutcome.Text(conversation.reply(userMessage))
+        } finally {
+            runCatching { conversation.close() }
+        }
+    } catch (failure: Throwable) {
+        LlmOutcome.Failed(failure)
     }
 }
 
