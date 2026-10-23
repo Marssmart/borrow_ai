@@ -14,6 +14,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,36 +38,68 @@ internal fun createLocalLlm(modelDirectory: Path, totalRamBytes: Long, cacheDire
 /**
  * Owns one LiteRT-LM [Engine] shared by every on-device LLM feature. The engine loads on the first call. Calls run one
  * at a time, and each call gets a fresh conversation so earlier replies do not leak into later ones. [close] is
- * idempotent.
+ * idempotent. It stops new calls, waits briefly for a running reply, cancels the owned scope, and closes the engine
+ * once no reply is running.
  */
 internal class LocalLlmRuntime(
     private val store: ModelFileStore,
     private val spec: ModelSpec,
     private val cacheDirectory: String,
     private val engineFactory: LlmEngineFactory = LiteRtLlmEngineFactory(),
-    // Native inference cannot be interrupted, so it runs here and may outlive a timed-out call.
+    // Native inference cannot be interrupted, so it runs here and may outlive a timed-out call. close() cancels it.
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    // How long close() waits for a running reply before giving up and closing the engine once the reply returns.
+    private val closeTimeoutMillis: Long = DEFAULT_CLOSE_TIMEOUT_MILLIS,
 ) {
-    // Guards engine use and close. Calls and close are serialized through it.
+    // Serializes calls so only one reply runs on the engine at a time. Held for the whole call, so close() never takes it.
     private val gate = Mutex()
+    // Guards closed and the in-flight handoff. Held briefly and never across a reply, so close() can always get in.
+    private val stateLock = Mutex()
     private var engine: LlmEngine? = null
     private var inFlight: Deferred<LlmOutcome>? = null
+    private var closed = false
 
     suspend fun generate(systemInstruction: String, userMessage: String, timeoutMillis: Long): LlmOutcome = gate.withLock {
+        if (stateLock.withLock { closed }) return@withLock closedOutcome
         val present = withContext(Dispatchers.IO) { store.isPresent(spec) }
         if (!present) return@withLock LlmOutcome.ModelMissing
         withTimeoutOrNull(timeoutMillis) {
             // A previous call that timed out may still be running on the engine. Wait for it before starting another.
             inFlight?.join()
-            val work = scope.async(Dispatchers.Default) { infer(systemInstruction, userMessage) }
-            inFlight = work
-            work.await()
+            val work = stateLock.withLock {
+                if (closed) {
+                    null
+                } else {
+                    scope.async(Dispatchers.Default) { infer(systemInstruction, userMessage) }.also { inFlight = it }
+                }
+            }
+            if (work == null) {
+                closedOutcome
+            } else {
+                work.join()
+                // close() cancels the scope. A reply cancelled that way has no result to return.
+                if (work.isCancelled) closedOutcome else work.getCompleted()
+            }
         } ?: LlmOutcome.TimedOut
     }
 
-    suspend fun close() = gate.withLock {
-        // Never close the engine under a running reply.
-        inFlight?.join()
+    suspend fun close() {
+        val pending = stateLock.withLock {
+            if (closed) return
+            closed = true
+            inFlight
+        }
+        // Never close the engine under a running reply, but never let a hung reply block teardown either.
+        val finished = pending == null || withTimeoutOrNull(closeTimeoutMillis) { pending.join() } != null
+        if (finished) {
+            closeEngine()
+        } else {
+            pending?.invokeOnCompletion { closeEngine() }
+        }
+        scope.cancel()
+    }
+
+    private fun closeEngine() {
         runCatching { engine?.close() }
         engine = null
     }
@@ -84,6 +117,10 @@ internal class LocalLlmRuntime(
         LlmOutcome.Failed(failure)
     }
 }
+
+private const val DEFAULT_CLOSE_TIMEOUT_MILLIS = 5_000L
+
+private val closedOutcome = LlmOutcome.Failed(IllegalStateException("LLM runtime is closed"))
 
 /** Seam over LiteRT-LM so the runtime lifecycle can be tested without a real model. */
 internal fun interface LlmEngineFactory {

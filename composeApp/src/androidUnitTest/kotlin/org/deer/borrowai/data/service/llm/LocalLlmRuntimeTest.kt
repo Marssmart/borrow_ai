@@ -1,6 +1,8 @@
 package org.deer.borrowai.data.service.llm
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -16,6 +18,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -214,12 +217,88 @@ class LocalLlmRuntimeTest {
         assertEquals(1, factory.created.single().closeCount)
     }
 
-    private fun runtime(factory: LlmEngineFactory) = LocalLlmRuntime(
+    @Test
+    fun closeReturnsWhileReplyIsBlockedAndClosesTheEngineOnceTheReplyReturns() {
+        writeModel()
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val factory = FakeEngineFactory(onReply = {
+            started.countDown()
+            release.await(10, TimeUnit.SECONDS)
+            "done"
+        })
+        val runtime = runtime(factory, closeTimeoutMillis = 50)
+        try {
+            runBlocking {
+                val inference = async(Dispatchers.Default) { runtime.generate("system", "hello", 10_000) }
+                assertTrue(started.await(5, TimeUnit.SECONDS))
+
+                val startedAt = System.nanoTime()
+                runtime.close()
+                val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
+
+                assertTrue(elapsedMillis < 5_000, "close waited $elapsedMillis ms on a blocked reply")
+                assertEquals(0, factory.created.single().closeCount)
+
+                release.countDown()
+                assertIs<LlmOutcome.Failed>(inference.await())
+            }
+            awaitTrue(timeoutMillis = 5_000) { factory.created.single().closeCount == 1 }
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun closeCancelsTheOwnedScope() {
+        writeModel()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val runtime = runtime(FakeEngineFactory(), scope = scope)
+
+        runBlocking {
+            runtime.generate("system", "hello", TIMEOUT_MILLIS)
+            runtime.close()
+        }
+
+        assertFalse(scope.coroutineContext[kotlinx.coroutines.Job]!!.isActive)
+    }
+
+    @Test
+    fun generateAfterCloseFailsAndDoesNotReloadTheEngine() {
+        writeModel()
+        val factory = FakeEngineFactory()
+        val runtime = runtime(factory)
+
+        val result = runBlocking {
+            runtime.generate("system", "hello", TIMEOUT_MILLIS)
+            runtime.close()
+            runtime.generate("system", "again", TIMEOUT_MILLIS)
+        }
+
+        assertIs<LlmOutcome.Failed>(result)
+        assertEquals(1, factory.created.size)
+    }
+
+    private fun runtime(
+        factory: LlmEngineFactory,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        closeTimeoutMillis: Long = 5_000L,
+    ) = LocalLlmRuntime(
         store = ModelFileStore(modelDirectory.toString().toPath(), FileSystem.SYSTEM) { spec.sha256 },
         spec = spec,
         cacheDirectory = modelDirectory.toString(),
         engineFactory = factory,
+        scope = scope,
+        closeTimeoutMillis = closeTimeoutMillis,
     )
+
+    private fun awaitTrue(timeoutMillis: Long, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (!condition()) {
+            if (System.nanoTime() > deadline) throw AssertionError("condition not met within $timeoutMillis ms")
+            Thread.sleep(10)
+        }
+    }
 
     private fun writeModel() {
         Files.write(modelDirectory.resolve(spec.fileName), ByteArray(spec.sizeBytes.toInt()))

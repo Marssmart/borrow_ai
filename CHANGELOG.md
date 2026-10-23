@@ -16,6 +16,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added instrumented tests for `updateCategories` and summary updates, covering persistence across reopen, missing, deleted, and malformed memories.
 - Added unit tests for the shared on-device LLM runtime, covering a missing model, replies, fresh conversations per call, load and reply failures with retry, timeouts, and close behavior during inference.
 - The on-device model timeout returns to the caller on time, even while native inference is still running. The native call cannot be interrupted, so a hung inference still blocks later calls and close until it returns.
+- Closing the on-device model waits up to 5 seconds for a running inference, then closes the engine once the inference returns. Close cancels the runtime's own scope, and calls made after close fail without reloading the model. A hung native inference still delays engine close until it returns.
 - A scoring batch whose reply does not score every category is asked again once. If it is still incomplete, categorization fails instead of silently leaving those categories unscored.
 - The backfill prompt lists at most 100 existing category names. Proposals that duplicate any existing category are still dropped.
 - Updated Android and iOS versioning to 1.6.0 (build 46).
