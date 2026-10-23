@@ -103,9 +103,18 @@ class DefaultMemoryCategorizer(
                 ifLeft = { return@withLock BackfillOutcome.Stopped(failure(it)) },
                 ifRight = { it },
             )
+            val masterNames = masters.mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+            val concurrentByName = current
+                .filter { it.name.trim().lowercase() !in masterNames }
+                .associateBy { it.name.trim().lowercase() }
             val ids = mutableListOf<Int>()
-            val proposals = CategoryPrompt.parseProposals(text, current.mapTo(mutableSetOf()) { it.name })
-            for (proposal in proposals.take(count)) {
+            for (proposal in CategoryPrompt.parseProposals(text, masterNames)) {
+                if (ids.size >= count) break
+                val concurrent = concurrentByName[proposal.name.trim().lowercase()]
+                if (concurrent != null) {
+                    ids += concurrent.id
+                    continue
+                }
                 when (val created = memoryService.createCategory(proposal.name, proposal.description)) {
                     is Either.Left -> Unit
                     is Either.Right -> ids += created.value.id

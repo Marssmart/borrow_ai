@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.2]
+
+- Category backfill now resolves a proposed name that a concurrent categorization already created to that category's id, instead of dropping it. This keeps the at-least-one-category guarantee when the master list starts empty.
+- Added instrumented tests for summary updates (`recordSummary`, `giveUpSummary`, `recordFinishedAttempt`, `recordEmpty`) covering persistence across reopen, missing, deleted, and malformed memories.
+
+- Updated Android and iOS versioning to 1.6.2 (build 48).
+
 ## [1.6.1]
 
 - `updateCategories` now rejects more than 3 category ids, duplicate ids, and ids below 1 by returning an error, instead of saving them.

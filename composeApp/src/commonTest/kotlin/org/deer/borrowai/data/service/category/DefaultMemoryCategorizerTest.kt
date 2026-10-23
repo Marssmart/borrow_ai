@@ -165,10 +165,12 @@ class DefaultMemoryCategorizerTest {
 
         gate.complete(Unit)
         val firstResult = first.await()
-        second.await()
+        val secondResult = second.await()
 
         assertIs<CategorizationResult.Categories>(firstResult)
+        assertIs<CategorizationResult.Categories>(secondResult)
         assertEquals(listOf("Ada"), service.findCategories().getOrNull()!!.map { it.name })
+        assertEquals(firstResult.ids, secondResult.ids)
     }
 
     @Test
