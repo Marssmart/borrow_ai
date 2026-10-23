@@ -7,8 +7,6 @@
     <string name="memory_capture">Capture</string>
     <string name="memory_waiting_transcription">Waiting for transcription…</string>
     <string name="memory_transcription_failed">Transcription failed</string>
-    <string name="memory_play_summary">Play summary</string>
-    <string name="memory_stop_summary">Stop summary</string>
     <string name="memory_audio_playing">Original audio is playing</string>
     <string name="memory_audio_not_playing">Audio is not playing</string>
     <string name="memory_summary_audio_playing">Summary audio is playing</string>

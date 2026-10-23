@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.4.12]
+
+- Removed the "Play summary" button from saved memories. Each memory now shows only "Play recording", on both the list cards and the memory detail view. The design guide was updated to match.
+- Updated Android and iOS versioning to 1.4.12 (build 43).
+
 ## [1.4.11]
 
 - Android no longer silently skips memory summaries when the summary model is not downloaded. The saved memories page now shows a notice that summaries are paused, and where to see the model download progress.
