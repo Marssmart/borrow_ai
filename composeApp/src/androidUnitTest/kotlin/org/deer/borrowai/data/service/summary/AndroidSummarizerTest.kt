@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.summary
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import org.deer.borrowai.data.service.llm.LocalLlmRuntime
 import org.deer.borrowai.data.service.model.ModelFileStore
 import org.deer.borrowai.data.service.model.ModelRole
 import org.deer.borrowai.data.service.model.ModelSpec
@@ -37,28 +38,30 @@ class AndroidSummarizerTest {
     }
 
     @Test
-    fun missingModelReturnsModelMissingWithoutLoadingEngine() = runBlocking {
-        val summarizer = summarizer()
+    fun missingModelReturnsModelMissingWithoutLoadingEngine() {
+        runBlocking {
+            val result = summarizer().summarize("Some transcription text")
 
-        val result = summarizer.summarize("Some transcription text")
-
-        assertIs<SummaryResult.ModelMissing>(result)
-        summarizer.close()
+            assertIs<SummaryResult.ModelMissing>(result)
+        }
     }
 
     @Test
-    fun missingModelStaysMissingOnRepeatedCalls() = runBlocking {
-        val summarizer = summarizer()
+    fun missingModelStaysMissingOnRepeatedCalls() {
+        runBlocking {
+            val summarizer = summarizer()
 
-        repeat(3) {
-            assertEquals(SummaryResult.ModelMissing, summarizer.summarize("Some transcription text"))
+            repeat(3) {
+                assertEquals(SummaryResult.ModelMissing, summarizer.summarize("Some transcription text"))
+            }
         }
-        summarizer.close()
     }
 
     private fun summarizer() = AndroidSummarizer(
-        store = ModelFileStore(modelDirectory.toString().toPath(), FileSystem.SYSTEM),
-        spec = spec,
-        cacheDirectory = modelDirectory.toString(),
+        runtime = LocalLlmRuntime(
+            store = ModelFileStore(modelDirectory.toString().toPath(), FileSystem.SYSTEM),
+            spec = spec,
+            cacheDirectory = modelDirectory.toString(),
+        ),
     )
 }

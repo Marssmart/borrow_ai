@@ -135,6 +135,9 @@ class KotbaseMemoryService private constructor(
         }
     }
 
+    override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> =
+        updateActive(id) { it.copy(categories = categories) }
+
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()

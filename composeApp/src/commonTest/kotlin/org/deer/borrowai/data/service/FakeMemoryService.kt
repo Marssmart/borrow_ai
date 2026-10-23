@@ -66,6 +66,9 @@ class FakeMemoryService(
         memory.right()
     }
 
+    override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> =
+        updateActive(id) { it.copy(categories = categories) }
+
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
         val updated = existing.withEditedSummary(draft.summary).copy(

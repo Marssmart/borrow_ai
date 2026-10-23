@@ -64,6 +64,8 @@ class AppServices internal constructor(
     /** Parent of summary recoveries launched from transcription callbacks. Completed children detach themselves. */
     private val callbackGroup: Job = Job(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+    /** Releases the model runtime that the summarizer and categorizer share. Runs after both have stopped. */
+    private val closeModelRuntime: suspend () -> Unit = {},
     /** True while the summary model file is missing, so recovery cannot summarize anything. */
     val summaryModelMissing: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow(),
     private val onClose: () -> Unit = {},
@@ -102,6 +104,7 @@ class AppServices internal constructor(
                     callbackGroup.join()
                 }
                 step { summarizer.close() }
+                step { closeModelRuntime() }
             } finally {
                 finishClose()
             }
@@ -136,6 +139,7 @@ class AppServices internal constructor(
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+            closeModelRuntime: suspend () -> Unit = {},
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -148,6 +152,7 @@ class AppServices internal constructor(
             batchTranscriber = batchTranscriber,
             transcriptionScheduler = transcriptionScheduler,
             summarizer = summarizer,
+            closeModelRuntime = closeModelRuntime,
         )
 
         /**
@@ -168,6 +173,7 @@ class AppServices internal constructor(
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+            closeModelRuntime: suspend () -> Unit = {},
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -239,6 +245,7 @@ class AppServices internal constructor(
                     backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
                     callbackGroup = callbackGroup,
                     summarizer = summarizer,
+                    closeModelRuntime = closeModelRuntime,
                     summaryModelMissing = summaryModelMissingNotice(summaryRecovery.summaryModelMissing, modelSetup.state)
                         .stateIn(graphScope, SharingStarted.Eagerly, false),
                     onClose = { database.close() },
@@ -246,6 +253,7 @@ class AppServices internal constructor(
             } catch (failure: Throwable) {
                 graphJob.cancel()
                 database.close()
+                runCatching { closeModelRuntime() }.exceptionOrNull()?.let(failure::addSuppressed)
                 throw failure
             }
         }

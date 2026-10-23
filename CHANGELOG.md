@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.0]
+
+- Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.
+- Each memory ends with at least one category. If no category qualifies and no new one is proposed, the highest-scoring master category is used.
+- Added `updateCategories` to the memory service, which replaces only a memory's categories and leaves its summary status unchanged.
+- The on-device model runtime is shared between the summarizer and the categorizer, and is closed once by the app.
+- Updated Android and iOS versioning to 1.6.0 (build 46).
+
 ## [1.5.0]
 
 - Memories can now store up to 3 category ids in a new `categories` field, saved as `{id1}|{id2}|{id3}`. Ids must be distinct and start at 1.

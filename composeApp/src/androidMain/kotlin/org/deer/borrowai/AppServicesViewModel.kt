@@ -12,6 +12,7 @@ import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
+import org.deer.borrowai.data.service.llm.createLocalLlm
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
 import org.deer.borrowai.data.service.speech.createLiveTranscriber
@@ -38,6 +39,11 @@ internal class AppServicesViewModel(
             modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
             totalRamBytes = modelDevice.totalRamBytes,
         )
+        val runtime = createLocalLlm(
+            modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
+            totalRamBytes = modelDevice.totalRamBytes,
+            cacheDirectory = modelDirectoryUnder(recordingsRoot.toString()).toString(),
+        )
         AppServices.create(
             modelDevice = modelDevice,
             epochClock = epochClock,
@@ -48,11 +54,8 @@ internal class AppServicesViewModel(
             liveTranscriber = liveTranscriber,
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
             transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
-            summarizer = createSummarizer(
-                modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
-                totalRamBytes = modelDevice.totalRamBytes,
-                cacheDirectory = modelDirectoryUnder(recordingsRoot.toString()).toString(),
-            ),
+            summarizer = createSummarizer(runtime = runtime),
+            closeModelRuntime = runtime::close,
         )
     },
 ) : ViewModel() {
