@@ -40,6 +40,14 @@ class CategoryPromptTest {
     }
 
     @Test
+    fun `does not read digits inside prose lines as scores`() {
+        assertEquals(
+            mapOf(1 to 80),
+            CategoryPrompt.parseScores("Note 2: 3 things to mention\n1|80", setOf(1, 2)),
+        )
+    }
+
+    @Test
     fun `parses name and description and keeps pipes in the description`() {
         assertEquals(
             listOf(ProposedCategory("Ocean", "Waves | sea")),

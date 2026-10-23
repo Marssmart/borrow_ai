@@ -377,6 +377,74 @@ class KotbaseMemoryServiceTest {
         assertEquals(MemoryError.Malformed("bad-2"), service.giveUpSummary("bad-2").errorOrNull())
     }
 
+    @Test
+    fun updateCategoriesPreservesSummarizedStatusAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/c1.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), first.recordSummary(created.id, "Short summary"))
+
+        assertEquals(Either.Right(Unit), first.updateCategories(created.id, listOf(4)))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+        assertEquals(listOf(4), found.categories)
+        assertEquals("Short summary", found.summary)
+        assertEquals(SummaryStatus.SUMMARIZED, found.summaryStatus)
+    }
+
+    @Test
+    fun updateCategoriesPreservesGaveUpStatusAndAttemptsAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/c2.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), first.giveUpSummary(created.id))
+
+        assertEquals(Either.Right(Unit), first.updateCategories(created.id, listOf(2, 3)))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+        assertEquals(listOf(2, 3), found.categories)
+        assertEquals(SummaryStatus.GAVE_UP, found.summaryStatus)
+        assertEquals(MAX_SUMMARY_ATTEMPTS, found.summaryAttempts)
+    }
+
+    @Test
+    fun updateCategoriesRejectsInvalidIdsAndKeepsStoredCategories() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Tagged", "", "", categories = listOf(6))).getOrNull()!!
+
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(1, 1)).errorOrNull())
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(0)).errorOrNull())
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(1, 2, 3, 4)).errorOrNull())
+
+        assertEquals(listOf(6), service.findById(created.id).getOrNull()?.categories)
+    }
+
+    @Test
+    fun updateCategoriesOnMissingMemoryReturnsNotFound() = runTest {
+        val service = openService()
+
+        assertEquals(MemoryError.NotFound("missing"), service.updateCategories("missing", listOf(1)).errorOrNull())
+    }
+
+    @Test
+    fun updateCategoriesOnDeletedMemoryReturnsNotFound() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Gone", "", "", "recordings/c3.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), service.delete(created.id))
+
+        assertEquals(MemoryError.NotFound(created.id), service.updateCategories(created.id, listOf(1)).errorOrNull())
+    }
+
+    @Test
+    fun updateCategoriesOnMalformedMemoryReturnsMalformed() = runTest {
+        val service = openService()
+        saveRawMemory(id = "bad-3", recordingPath = "/absolute/recording.m4a")
+
+        assertEquals(MemoryError.Malformed("bad-3"), service.updateCategories("bad-3", listOf(1)).errorOrNull())
+    }
+
     private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {
         requireNotNull(database).save(
             MutableDocument(id).apply {

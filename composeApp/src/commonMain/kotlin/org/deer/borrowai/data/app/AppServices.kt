@@ -253,7 +253,11 @@ class AppServices internal constructor(
             } catch (failure: Throwable) {
                 graphJob.cancel()
                 database.close()
-                runCatching { closeModelRuntime() }.exceptionOrNull()?.let(failure::addSuppressed)
+                try {
+                    closeModelRuntime()
+                } catch (closeFailure: Throwable) {
+                    failure.addSuppressed(closeFailure)
+                }
                 throw failure
             }
         }

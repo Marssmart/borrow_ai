@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.3]
+
+- Category score parsing now reads only lines that start with a `<id>|<score>` pair, so digits in prose from the model are no longer taken as scores.
+- When app services fail to start, the model runtime is now closed in the failure path, and a close error no longer hides the original startup failure.
+- Added instrumented tests for `updateCategories`, covering persistence across reopen, invalid ids, missing, deleted, and malformed memories.
+
+- Updated Android and iOS versioning to 1.6.3 (build 49).
+
 ## [1.6.2]
 
 - Category backfill now resolves a proposed name that a concurrent categorization already created to that category's id, instead of dropping it. This keeps the at-least-one-category guarantee when the master list starts empty.
