@@ -30,6 +30,12 @@ interface MemoryService {
     /** Replaces the content of an active memory. Returns [MemoryError.NotFound] when it is missing or deleted. */
     suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit>
 
+    /**
+     * Replaces only the category ids of an active memory. Every other field, including the summary status, is kept.
+     * Returns [MemoryError.NotFound] when it is missing or deleted.
+     */
+    suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit>
+
     /** Marks the memory as deleted. Returns [MemoryError.NotFound] when it is missing or already deleted. */
     suspend fun delete(id: String): Either<MemoryError, Unit>
 

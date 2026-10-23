@@ -12,8 +12,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
 
@@ -293,6 +295,154 @@ class KotbaseMemoryServiceTest {
 
         assertEquals(listOf(created), service.getState().value)
         assertEquals(listOf(created), service.findAll().getOrNull())
+    }
+
+    @Test
+    fun recordSummaryPersistsSummarizedStatusAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/s.m4a")).getOrNull()!!
+
+        assertEquals(Either.Right(Unit), first.recordSummary(created.id, "Short summary"))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertEquals("Short summary", found.summary)
+        assertEquals(SummaryStatus.SUMMARIZED, found.summaryStatus)
+        assertTrue(found.summarized)
+        assertEquals(listOf(found), reopened.getState().value)
+    }
+
+    @Test
+    fun giveUpSummaryPersistsGaveUpStatusAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/g.m4a")).getOrNull()!!
+
+        assertEquals(Either.Right(Unit), first.giveUpSummary(created.id))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertEquals(SummaryStatus.GAVE_UP, found.summaryStatus)
+        assertEquals(MAX_SUMMARY_ATTEMPTS, found.summaryAttempts)
+        assertFalse(found.summarized)
+    }
+
+    @Test
+    fun recordFinishedAttemptKeepsPendingStatusAndErrorAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/f.m4a")).getOrNull()!!
+
+        assertEquals(Either.Right(Unit), first.recordFinishedAttempt(created.id, "IllegalStateException: boom"))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertEquals(SummaryStatus.PENDING, found.summaryStatus)
+        assertEquals(1, found.summaryAttempts)
+        assertEquals("IllegalStateException: boom", found.lastTranscriptionError)
+    }
+
+    @Test
+    fun summaryUpdateOnMissingMemoryReturnsNotFound() = runTest {
+        val service = openService()
+
+        assertEquals(MemoryError.NotFound("missing"), service.recordSummary("missing", "x").errorOrNull())
+        assertEquals(MemoryError.NotFound("missing"), service.giveUpSummary("missing").errorOrNull())
+        assertEquals(MemoryError.NotFound("missing"), service.recordEmpty("missing").errorOrNull())
+    }
+
+    @Test
+    fun summaryUpdateOnDeletedMemoryReturnsNotFound() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Gone", "", "", "recordings/d.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), service.delete(created.id))
+
+        assertEquals(MemoryError.NotFound(created.id), service.recordSummary(created.id, "x").errorOrNull())
+        assertEquals(MemoryError.NotFound(created.id), service.giveUpSummary(created.id).errorOrNull())
+    }
+
+    @Test
+    fun summaryUpdateOnMalformedMemoryReturnsMalformed() = runTest {
+        val service = openService()
+        saveRawMemory(id = "bad-2", recordingPath = "/absolute/recording.m4a")
+
+        assertEquals(MemoryError.Malformed("bad-2"), service.recordSummary("bad-2", "x").errorOrNull())
+        assertEquals(MemoryError.Malformed("bad-2"), service.giveUpSummary("bad-2").errorOrNull())
+    }
+
+    @Test
+    fun updateCategoriesPreservesSummarizedStatusAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/c1.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), first.recordSummary(created.id, "Short summary"))
+
+        assertEquals(Either.Right(Unit), first.updateCategories(created.id, listOf(4)))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+        assertEquals(listOf(4), found.categories)
+        assertEquals("Short summary", found.summary)
+        assertEquals(SummaryStatus.SUMMARIZED, found.summaryStatus)
+    }
+
+    @Test
+    fun updateCategoriesPreservesGaveUpStatusAndAttemptsAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript", "recordings/c2.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), first.giveUpSummary(created.id))
+
+        assertEquals(Either.Right(Unit), first.updateCategories(created.id, listOf(2, 3)))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+        assertEquals(listOf(2, 3), found.categories)
+        assertEquals(SummaryStatus.GAVE_UP, found.summaryStatus)
+        assertEquals(MAX_SUMMARY_ATTEMPTS, found.summaryAttempts)
+    }
+
+    @Test
+    fun updateCategoriesRejectsInvalidIdsAndKeepsStoredCategories() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Tagged", "", "", categories = listOf(6))).getOrNull()!!
+
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(1, 1)).errorOrNull())
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(0)).errorOrNull())
+        assertIs<MemoryError.InvalidInput>(service.updateCategories(created.id, listOf(1, 2, 3, 4)).errorOrNull())
+
+        assertEquals(listOf(6), service.findById(created.id).getOrNull()?.categories)
+    }
+
+    @Test
+    fun updateCategoriesOnMissingMemoryReturnsNotFound() = runTest {
+        val service = openService()
+
+        assertEquals(MemoryError.NotFound("missing"), service.updateCategories("missing", listOf(1)).errorOrNull())
+    }
+
+    @Test
+    fun updateCategoriesOnDeletedMemoryReturnsNotFound() = runTest {
+        val service = openService()
+        val created = service.create(MemoryDraft("Gone", "", "", "recordings/c3.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), service.delete(created.id))
+
+        assertEquals(MemoryError.NotFound(created.id), service.updateCategories(created.id, listOf(1)).errorOrNull())
+    }
+
+    @Test
+    fun updateCategoriesOnMalformedMemoryReturnsMalformed() = runTest {
+        val service = openService()
+        saveRawMemory(id = "bad-3", recordingPath = "/absolute/recording.m4a")
+
+        assertEquals(MemoryError.Malformed("bad-3"), service.updateCategories("bad-3", listOf(1)).errorOrNull())
     }
 
     private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {
