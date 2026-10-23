@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.5]
+
+- Backfill persistence failures are now reported on the categorization result instead of being discarded. Categories that were already matched or created are kept.
+- Updated Android and iOS versioning to 1.6.5 (build 51).
+
 ## [1.6.4]
 
 - Category score parsing now accepts indented score lines.

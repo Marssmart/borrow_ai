@@ -1,5 +1,7 @@
 package org.deer.borrowai.data.service.category
 
+import arrow.core.Either
+import arrow.core.left
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -8,8 +10,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.MemoryError
+import org.deer.borrowai.data.service.MemoryService
 
 class DefaultMemoryCategorizerTest {
     private class ScriptedModel(
@@ -50,6 +55,19 @@ class DefaultMemoryCategorizerTest {
         val service = FakeMemoryService(epochClock = EpochClock { 1_800_000_000_000L })
         repeat(count) { service.createCategory("Cat${it + 1}", "Description ${it + 1}") }
         return service
+    }
+
+    /** Delegates to [inner] but rejects creating the category named [rejectedName]. */
+    private class RejectingCreateMemoryService(
+        private val inner: MemoryService,
+        private val rejectedName: String,
+    ) : MemoryService by inner {
+        override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> =
+            if (name == rejectedName) {
+                MemoryError.InvalidInput("Rejected $name").left()
+            } else {
+                inner.createCategory(name, description)
+            }
     }
 
     @Test
@@ -137,7 +155,7 @@ class DefaultMemoryCategorizerTest {
     }
 
     @Test
-    fun `keeps matched categories when backfill fails`() = runTest {
+    fun `keeps matched categories when backfill fails and reports the failure`() = runTest {
         val model = model(
             score = { if (it == 1) 80 else 0 },
             backfill = CategoryModelReply.Failed(IllegalStateException("boom")),
@@ -145,7 +163,70 @@ class DefaultMemoryCategorizerTest {
 
         val result = DefaultMemoryCategorizer(service(2), model).categorize("note")
 
-        assertEquals(CategorizationResult.Categories(listOf(1)), result)
+        val categories = assertIs<CategorizationResult.Categories>(result)
+        assertEquals(listOf(1), categories.ids)
+        assertEquals("boom", categories.backfillFailure?.message)
+    }
+
+    @Test
+    fun `keeps matched categories when backfill model is missing and reports the failure`() = runTest {
+        val model = model(
+            score = { if (it == 1) 80 else 0 },
+            backfill = CategoryModelReply.ModelMissing,
+        )
+
+        val result = DefaultMemoryCategorizer(service(2), model).categorize("note")
+
+        val categories = assertIs<CategorizationResult.Categories>(result)
+        assertEquals(listOf(1), categories.ids)
+        assertEquals("Categorizer model is missing.", categories.backfillFailure?.message)
+    }
+
+    @Test
+    fun `keeps backfilled categories and reports a category that could not be created`() = runTest {
+        val model = model(
+            score = { if (it == 1) 80 else 0 },
+            backfill = CategoryModelReply.Text("Ocean|Waves and sea\nForest|Trees and leaves"),
+        )
+        val service = RejectingCreateMemoryService(service(2), rejectedName = "Ocean")
+
+        val result = DefaultMemoryCategorizer(service, model).categorize("note")
+
+        val categories = assertIs<CategorizationResult.Categories>(result)
+        assertEquals(listOf(1, 3), categories.ids)
+        assertEquals(
+            "Category create failed: InvalidInput(reason=Rejected Ocean)",
+            categories.backfillFailure?.message,
+        )
+    }
+
+    @Test
+    fun `falls back to the best master and reports a create failure when nothing else is assigned`() = runTest {
+        val model = model(
+            score = { if (it == 1) 40 else 60 },
+            backfill = CategoryModelReply.Text("Ocean|Waves and sea"),
+        )
+        val service = RejectingCreateMemoryService(service(2), rejectedName = "Ocean")
+
+        val result = DefaultMemoryCategorizer(service, model).categorize("note")
+
+        val categories = assertIs<CategorizationResult.Categories>(result)
+        assertEquals(listOf(2), categories.ids)
+        assertEquals(
+            "Category create failed: InvalidInput(reason=Rejected Ocean)",
+            categories.backfillFailure?.message,
+        )
+    }
+
+    @Test
+    fun `fails with the create error when no master exists and every backfill create is rejected`() = runTest {
+        val model = model(backfill = CategoryModelReply.Text("Ocean|Waves and sea"))
+        val service = RejectingCreateMemoryService(service(0), rejectedName = "Ocean")
+
+        val result = DefaultMemoryCategorizer(service, model).categorize("note")
+
+        val failed = assertIs<CategorizationResult.Failed>(result)
+        assertEquals("Category create failed: InvalidInput(reason=Rejected Ocean)", failed.cause.message)
     }
 
     @Test

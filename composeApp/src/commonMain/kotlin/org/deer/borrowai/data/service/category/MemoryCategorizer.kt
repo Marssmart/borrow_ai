@@ -9,8 +9,11 @@ interface MemoryCategorizer {
 }
 
 sealed interface CategorizationResult {
-    /** One to [MAX_MEMORY_CATEGORIES] distinct master category ids. */
-    data class Categories(val ids: List<Int>) : CategorizationResult {
+    /**
+     * One to [MAX_MEMORY_CATEGORIES] distinct master category ids. [backfillFailure] is set when backfilling new
+     * categories failed after some categories were already assigned, so the failure is still reported.
+     */
+    data class Categories(val ids: List<Int>, val backfillFailure: Throwable? = null) : CategorizationResult {
         init {
             require(ids.isNotEmpty()) { "A categorization must assign at least one category." }
             categoryIdsViolation(ids)?.let { throw IllegalArgumentException(it) }

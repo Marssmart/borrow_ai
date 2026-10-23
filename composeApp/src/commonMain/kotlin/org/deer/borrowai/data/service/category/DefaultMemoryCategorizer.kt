@@ -48,11 +48,17 @@ class DefaultMemoryCategorizer(
             .map { it.key }
             .toMutableList()
 
+        var backfillFailure: Throwable? = null
         if (chosen.size < MAX_MEMORY_CATEGORIES) {
             when (val backfill = backfill(transcription, masters, MAX_MEMORY_CATEGORIES - chosen.size)) {
-                is BackfillOutcome.Created -> chosen += backfill.ids
-                is BackfillOutcome.Stopped ->
+                is BackfillOutcome.Created -> {
+                    chosen += backfill.ids
+                    backfillFailure = backfill.failure
+                }
+                is BackfillOutcome.Stopped -> {
                     if (chosen.isEmpty()) return backfill.result
+                    backfillFailure = backfill.result.asCause()
+                }
             }
         }
 
@@ -61,11 +67,13 @@ class DefaultMemoryCategorizer(
                 .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key })
                 .firstOrNull()
                 ?.key
-                ?: return CategorizationResult.Failed(IllegalStateException("No category could be assigned."))
+                ?: return CategorizationResult.Failed(
+                    backfillFailure ?: IllegalStateException("No category could be assigned."),
+                )
             chosen += best
         }
 
-        return CategorizationResult.Categories(chosen)
+        return CategorizationResult.Categories(chosen, backfillFailure)
     }
 
     private suspend fun scoreAll(transcription: String, masters: List<Category>): ScoringOutcome {
@@ -108,6 +116,7 @@ class DefaultMemoryCategorizer(
                 .filter { it.name.trim().lowercase() !in masterNames }
                 .associateBy { it.name.trim().lowercase() }
             val ids = mutableListOf<Int>()
+            var persistenceFailure: Throwable? = null
             for (proposal in CategoryPrompt.parseProposals(text, masterNames)) {
                 if (ids.size >= count) break
                 val concurrent = concurrentByName[proposal.name.trim().lowercase()]
@@ -116,16 +125,25 @@ class DefaultMemoryCategorizer(
                     continue
                 }
                 when (val created = memoryService.createCategory(proposal.name, proposal.description)) {
-                    is Either.Left -> Unit
+                    is Either.Left -> {
+                        persistenceFailure = persistenceFailure
+                            ?: IllegalStateException("Category create failed: ${created.value}")
+                    }
                     is Either.Right -> ids += created.value.id
                 }
             }
-            BackfillOutcome.Created(ids)
+            BackfillOutcome.Created(ids, persistenceFailure)
         }
     }
 
     private fun failure(error: MemoryError): CategorizationResult.Failed =
         CategorizationResult.Failed(IllegalStateException("Category lookup failed: $error"))
+
+    private fun CategorizationResult.asCause(): Throwable = when (this) {
+        is CategorizationResult.Failed -> cause
+        CategorizationResult.ModelMissing -> IllegalStateException("Categorizer model is missing.")
+        else -> IllegalStateException("Backfill did not complete: $this")
+    }
 
     private sealed interface ScoringOutcome {
         data class Scored(val scores: Map<Int, Int>) : ScoringOutcome
@@ -133,7 +151,8 @@ class DefaultMemoryCategorizer(
     }
 
     private sealed interface BackfillOutcome {
-        data class Created(val ids: List<Int>) : BackfillOutcome
+        /** [failure] is the first persistence error, if any proposed category could not be created. */
+        data class Created(val ids: List<Int>, val failure: Throwable?) : BackfillOutcome
         data class Stopped(val result: CategorizationResult) : BackfillOutcome
     }
 
