@@ -19,6 +19,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Closing the on-device model waits up to 5 seconds for a running inference, then closes the engine once the inference returns. Close cancels the runtime's own scope, and calls made after close fail without reloading the model. A hung native inference still delays engine close until it returns.
 - A scoring batch whose reply does not score every category is asked again once. If it is still incomplete, categorization fails instead of silently leaving those categories unscored.
 - The backfill prompt lists at most 100 existing category names. Proposals that duplicate any existing category are still dropped.
+- A failure while checking whether the on-device model is present is reported as a failed summary or categorization instead of crashing the runtime. Cancellation is still propagated.
 - Updated Android and iOS versioning to 1.6.0 (build 46).
 
 ## [1.5.0]

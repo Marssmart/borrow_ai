@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +62,13 @@ internal class LocalLlmRuntime(
 
     suspend fun generate(systemInstruction: String, userMessage: String, timeoutMillis: Long): LlmOutcome = gate.withLock {
         if (stateLock.withLock { closed }) return@withLock closedOutcome
-        val present = withContext(Dispatchers.IO) { store.isPresent(spec) }
+        val present = try {
+            withContext(Dispatchers.IO) { store.isPresent(spec) }
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Throwable) {
+            return@withLock LlmOutcome.Failed(failure)
+        }
         if (!present) return@withLock LlmOutcome.ModelMissing
         withTimeoutOrNull(timeoutMillis) {
             // A previous call that timed out may still be running on the engine. Wait for it before starting another.
@@ -78,7 +85,7 @@ internal class LocalLlmRuntime(
             } else {
                 work.join()
                 // close() cancels the scope. A reply cancelled that way has no result to return.
-                if (work.isCancelled) closedOutcome else work.getCompleted()
+                if (work.isCancelled) closedOutcome else work.await()
             }
         } ?: LlmOutcome.TimedOut
     }
