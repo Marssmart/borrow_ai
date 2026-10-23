@@ -2,6 +2,7 @@ package org.deer.borrowai.data.service
 
 import arrow.core.Either
 import kotlinx.coroutines.flow.StateFlow
+import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
@@ -67,6 +68,15 @@ interface MemoryService {
 
     /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
     suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
+
+    /** Every row of the category master table, ordered by id. */
+    suspend fun findCategories(): Either<MemoryError, List<Category>>
+
+    /**
+     * Adds a row to the category master table with the next id (the highest existing id plus one, starting at 1).
+     * Returns [MemoryError.InvalidInput] when [name] or [description] break the [Category] rules.
+     */
+    suspend fun createCategory(name: String, description: String): Either<MemoryError, Category>
 }
 
 /**

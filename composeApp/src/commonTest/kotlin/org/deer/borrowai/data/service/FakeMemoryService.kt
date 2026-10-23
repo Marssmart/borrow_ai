@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -28,6 +29,7 @@ class FakeMemoryService(
 ) : MemoryService {
     private val mutex = Mutex()
     private val records = initialMemories.associateByTo(mutableMapOf(), Memory::id)
+    private val categories = mutableMapOf<Int, Category>()
     private var nextGeneratedId = 1L
     private val memories = MutableStateFlow(
         records.values.filterNot(Memory::deleted).sortedByDescending(Memory::createdAtEpochMillis),
@@ -57,6 +59,7 @@ class FakeMemoryService(
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
+            categories = draft.categories,
         )
         records[memory.id] = memory
         publishMemories()
@@ -69,11 +72,31 @@ class FakeMemoryService(
             title = draft.title,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
+            categories = draft.categories,
         )
         records[id] = updated
         publishMemories()
         Unit.right()
     }
+
+    override suspend fun findCategories(): Either<MemoryError, List<Category>> = mutex.withLock {
+        categories.values.sortedBy(Category::id).right()
+    }
+
+    override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> =
+        mutex.withLock {
+            try {
+                val category = Category(
+                    id = (categories.keys.maxOrNull() ?: 0) + 1,
+                    name = name,
+                    description = description,
+                )
+                categories[category.id] = category
+                category.right()
+            } catch (e: IllegalArgumentException) {
+                MemoryError.InvalidInput(e.message.orEmpty()).left()
+            }
+        }
 
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()

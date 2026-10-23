@@ -10,4 +10,7 @@ sealed interface MemoryError {
 
     /** The underlying database failed. */
     data class Persistence(val cause: Throwable) : MemoryError
+
+    /** A caller-supplied value breaks a domain rule, such as a category name over its length limit. */
+    data class InvalidInput(val reason: String) : MemoryError
 }

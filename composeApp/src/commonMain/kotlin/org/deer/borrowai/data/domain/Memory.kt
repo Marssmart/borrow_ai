@@ -18,6 +18,9 @@ package org.deer.borrowai.data.domain
  * [transcriptionStatus] tracks the transcript pipeline the same way [summaryStatus] tracks summaries.
  * [transcriptionAttempts] counts finished transcription attempts. [lastTranscriptionError] holds
  * `"<exception class>: <message>"` from the most recent failure, and is cleared on success.
+ *
+ * [categories] holds up to [MAX_MEMORY_CATEGORIES] distinct ids from the category master table, stored as
+ * a pipe-separated string (see [toCategoriesString]).
  */
 data class Memory(
     val id: String,
@@ -32,11 +35,13 @@ data class Memory(
     val transcriptionStatus: TranscriptionStatus = TranscriptionStatus.DONE,
     val transcriptionAttempts: Int = 0,
     val lastTranscriptionError: String? = null,
+    val categories: List<Int> = emptyList(),
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
         require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
+        requireCategoryIds(categories)
     }
 
     /** True when a summary is stored. Derived from [summaryStatus]. */
@@ -201,10 +206,58 @@ data class MemoryDraft(
     val summary: String,
     val transcription: String,
     val recordingPath: String? = null,
+    val categories: List<Int> = emptyList(),
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
+        requireCategoryIds(categories)
     }
+}
+
+/** A row of the category master table. [id] starts at 1. */
+data class Category(
+    val id: Int,
+    val name: String,
+    val description: String,
+) {
+    init {
+        require(id >= 1) { "Category ids start at 1." }
+        require(name.isNotBlank()) { "A category name cannot be blank." }
+        require(name.length <= CATEGORY_NAME_MAX_LENGTH) {
+            "A category name cannot be longer than $CATEGORY_NAME_MAX_LENGTH characters."
+        }
+        require(description.length <= CATEGORY_DESCRIPTION_MAX_LENGTH) {
+            "A category description cannot be longer than $CATEGORY_DESCRIPTION_MAX_LENGTH characters."
+        }
+    }
+}
+
+const val MAX_MEMORY_CATEGORIES = 3
+const val CATEGORY_NAME_MAX_LENGTH = 15
+const val CATEGORY_DESCRIPTION_MAX_LENGTH = 100
+
+private const val CATEGORY_SEPARATOR = '|'
+
+/** Serializes category ids as `{id1}|{id2}|{id3}`. An empty list serializes to an empty string. */
+fun List<Int>.toCategoriesString(): String = joinToString(CATEGORY_SEPARATOR.toString())
+
+/**
+ * Parses a stored `{id1}|{id2}|{id3}` string. A null or empty string is no categories.
+ * Throws [IllegalArgumentException] for a non-numeric part or for ids that break the category rules.
+ */
+fun parseCategoriesString(raw: String?): List<Int> {
+    if (raw.isNullOrEmpty()) return emptyList()
+    val ids = raw.split(CATEGORY_SEPARATOR).map { part ->
+        requireNotNull(part.toIntOrNull()) { "Category id is not a number: $part" }
+    }
+    requireCategoryIds(ids)
+    return ids
+}
+
+private fun requireCategoryIds(ids: List<Int>) {
+    require(ids.size <= MAX_MEMORY_CATEGORIES) { "A memory can have at most $MAX_MEMORY_CATEGORIES categories." }
+    require(ids.all { it >= 1 }) { "Category ids start at 1." }
+    require(ids.distinct().size == ids.size) { "A memory cannot repeat a category." }
 }
 
 private fun requireRelativeRecordingPath(path: String) {
