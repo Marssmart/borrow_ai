@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.1]
+
+- `updateCategories` now rejects more than 3 category ids, duplicate ids, and ids below 1 by returning an error, instead of saving them.
+- The categorizer result now enforces the same category id rules.
+
+- Updated Android and iOS versioning to 1.6.1 (build 47).
+
 ## [1.6.0]
 
 - Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.

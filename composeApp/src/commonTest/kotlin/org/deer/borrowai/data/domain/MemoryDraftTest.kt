@@ -1,8 +1,10 @@
 package org.deer.borrowai.data.domain
 
+import org.deer.borrowai.data.service.category.CategorizationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class MemoryDraftTest {
@@ -50,6 +52,27 @@ class MemoryDraftTest {
         ).forEach { ids ->
             assertFailsWith<IllegalArgumentException>(ids.toString()) {
                 MemoryDraft("", "", "", categories = ids)
+            }
+        }
+    }
+
+    @Test
+    fun reportsCategoryIdViolationsForWriteValidation() {
+        assertNull(categoryIdsViolation(listOf(1, 2, 3)))
+        assertNotNull(categoryIdsViolation(listOf(1, 2, 3, 4)))
+        assertNotNull(categoryIdsViolation(listOf(0)))
+        assertNotNull(categoryIdsViolation(listOf(2, 2)))
+    }
+
+    @Test
+    fun categorizationResultRejectsInvalidCategoryIds() {
+        listOf(
+            listOf(1, 2, 3, 4),
+            listOf(0),
+            listOf(2, 2),
+        ).forEach { ids ->
+            assertFailsWith<IllegalArgumentException>(ids.toString()) {
+                CategorizationResult.Categories(ids)
             }
         }
     }

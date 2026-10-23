@@ -9,6 +9,7 @@ import arrow.core.left
 import arrow.core.right
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
@@ -66,8 +67,10 @@ class FakeMemoryService(
         memory.right()
     }
 
-    override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> =
-        updateActive(id) { it.copy(categories = categories) }
+    override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
+        categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
+        return updateActive(id) { it.copy(categories = categories) }
+    }
 
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()

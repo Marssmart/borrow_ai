@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.service.category
 
 import org.deer.borrowai.data.domain.MAX_MEMORY_CATEGORIES
+import org.deer.borrowai.data.domain.categoryIdsViolation
 
 /** Chooses the master categories that describe a memory's transcription. */
 interface MemoryCategorizer {
@@ -12,6 +13,7 @@ sealed interface CategorizationResult {
     data class Categories(val ids: List<Int>) : CategorizationResult {
         init {
             require(ids.isNotEmpty()) { "A categorization must assign at least one category." }
+            categoryIdsViolation(ids)?.let { throw IllegalArgumentException(it) }
         }
     }
 
