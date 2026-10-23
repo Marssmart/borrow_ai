@@ -4,46 +4,16 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.6.5]
-
-- Backfill persistence failures are now reported on the categorization result instead of being discarded. Categories that were already matched or created are kept.
-- Updated Android and iOS versioning to 1.6.5 (build 51).
-
-## [1.6.4]
-
-- Category score parsing now accepts indented score lines.
-- The app services startup failure path closes the summarizer before the shared model runtime, matching the normal close order.
-- Updated Android and iOS versioning to 1.6.4 (build 50).
-
-## [1.6.3]
-
-- Category score parsing now reads only lines that start with a `<id>|<score>` pair, so digits in prose from the model are no longer taken as scores.
-- When app services fail to start, the model runtime is now closed in the failure path, and a close error no longer hides the original startup failure.
-- Added instrumented tests for `updateCategories`, covering persistence across reopen, invalid ids, missing, deleted, and malformed memories.
-
-- Updated Android and iOS versioning to 1.6.3 (build 49).
-
-## [1.6.2]
-
-- Category backfill now resolves a proposed name that a concurrent categorization already created to that category's id, instead of dropping it. This keeps the at-least-one-category guarantee when the master list starts empty.
-- Added instrumented tests for summary updates (`recordSummary`, `giveUpSummary`, `recordFinishedAttempt`, `recordEmpty`) covering persistence across reopen, missing, deleted, and malformed memories.
-
-- Updated Android and iOS versioning to 1.6.2 (build 48).
-
-## [1.6.1]
-
-- `updateCategories` now rejects more than 3 category ids, duplicate ids, and ids below 1 by returning an error, instead of saving them.
-- The categorizer result now enforces the same category id rules.
-- Category backfill now runs under a lock and re-reads the master list, so concurrent categorizations cannot create duplicate category names.
-
-- Updated Android and iOS versioning to 1.6.1 (build 47).
-
 ## [1.6.0]
 
 - Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.
 - Each memory ends with at least one category. If no category qualifies and no new one is proposed, the highest-scoring master category is used.
-- Added `updateCategories` to the memory service, which replaces only a memory's categories and leaves its summary status unchanged.
-- The on-device model runtime is shared between the summarizer and the categorizer, and is closed once by the app.
+- Added `updateCategories` to the memory service, which replaces only a memory's categories and leaves its summary status unchanged. It rejects more than 3 category ids, duplicate ids, and ids below 1 instead of saving them. The categorization result enforces the same rules.
+- Category backfill runs under a lock and re-reads the master list, so concurrent categorizations cannot create duplicate category names. A proposed name that a concurrent categorization already created resolves to that category's id.
+- Backfill persistence failures are reported on the categorization result instead of being discarded. Categories already matched or created are kept.
+- Category score parsing accepts indented score lines and reads only `<id>|<score>` lines, so digits in prose from the model are not taken as scores.
+- The on-device model runtime is shared between the summarizer and the categorizer, and is closed once by the app. When app services fail to start, the runtime is closed in the failure path, and a close error no longer hides the original startup failure.
+- Added instrumented tests for `updateCategories` and summary updates, covering persistence across reopen, missing, deleted, and malformed memories.
 - Updated Android and iOS versioning to 1.6.0 (build 46).
 
 ## [1.5.0]
