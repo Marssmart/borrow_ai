@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.4.13]
 
-- Design guide: the note category section now shows only the chosen "Tinted chips" style. Each note shows up to 3 categories, and category names are limited to 12 characters, with longer names truncated by an ellipsis.
+- Design guide: the note category section now shows only the chosen "Tinted chips" style. Each note shows up to 3 categories, and category names are limited to 12 characters, and longer names are cut at that length.
 - Updated Android and iOS versioning to 1.4.13 (build 44).
 
 ## [1.4.12]
