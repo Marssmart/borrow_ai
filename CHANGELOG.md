@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.2]
+
+- Version bump only: split from 1.7.1 so the memories layout and detail nav changes ship as their own release.
+- Updated Android and iOS versioning to 1.7.2 (build 49).
+
 ## [1.7.1]
 
 - Removed the "Swipe right to return to recording" label from the Memories list.
