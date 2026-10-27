@@ -398,7 +398,7 @@ These were open before implementation. All nine are decided, recorded in the Dec
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| P0 Spike | §11 spike on Android only | Go on S-1 to S-6. Numbers written to this file. |
+| P0 Spike | §11 spike on Android only | Go on S-1 to S-7. Numbers written to this file. |
 | P1 Data and pipeline | Entities, `KotbaseSpeakerService`, clustering and matching in `commonMain`, runner, unit tests, no UI | Unit tests green. Analysis writes occurrences on a test memory. |
 | P2 Read-only UI | Chips on list, speaker cards with sample playback, Settings toggle | US-1, US-2 acceptance criteria met on Android. |
 | P3 Assignment | Assign sheet, speaker library screen (rename, merge, delete), auto-matching, "Not this person", manual links | US-3, US-4 met. Library screen works on Android. |
