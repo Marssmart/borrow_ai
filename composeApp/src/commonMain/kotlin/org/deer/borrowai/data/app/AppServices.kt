@@ -22,6 +22,11 @@ import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.category.CategoryModel
+import org.deer.borrowai.data.service.category.DefaultMemoryCategorizer
+import org.deer.borrowai.data.service.category.MemoryCategorizationRecoveryJob
+import org.deer.borrowai.data.service.category.MemoryCategorizer
+import org.deer.borrowai.data.service.category.UnavailableMemoryCategorizer
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
@@ -139,6 +144,7 @@ class AppServices internal constructor(
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+            categoryModel: CategoryModel? = null,
             closeModelRuntime: suspend () -> Unit = {},
         ): AppServices = createReal(
             database = Database(databaseName),
@@ -152,6 +158,7 @@ class AppServices internal constructor(
             batchTranscriber = batchTranscriber,
             transcriptionScheduler = transcriptionScheduler,
             summarizer = summarizer,
+            categoryModel = categoryModel,
             closeModelRuntime = closeModelRuntime,
         )
 
@@ -173,6 +180,7 @@ class AppServices internal constructor(
             batchTranscriber: BatchTranscriber? = null,
             transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
             summarizer: MemorySummarizer = UnavailableMemorySummarizer,
+            categoryModel: CategoryModel? = null,
             closeModelRuntime: suspend () -> Unit = {},
         ): AppServices {
             val graphJob = SupervisorJob()
@@ -196,12 +204,16 @@ class AppServices internal constructor(
                 // The summary job is built after the media session, so the drain reaches it through this holder.
                 val callbackGroup = Job(graphJob)
                 var runSummaryRecovery: () -> Unit = {}
+                var runCategorizationRecovery: () -> Unit = {}
                 val transcriptionRunner = TranscriptionWorkRunner(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     batchTranscriber = batchTranscriber,
                     scheduler = transcriptionScheduler,
-                    onTranscriptionFinished = { runSummaryRecovery() },
+                    onTranscriptionFinished = {
+                        runSummaryRecovery()
+                        runCategorizationRecovery()
+                    },
                 )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
@@ -235,6 +247,18 @@ class AppServices internal constructor(
                 )
                 val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
                 runSummaryRecovery = { graphScope.launch(callbackGroup) { summaryRecovery.recover() } }
+                val categorizer: MemoryCategorizer = categoryModel
+                    ?.let { DefaultMemoryCategorizer(memoryService = memories, model = it) }
+                    ?: UnavailableMemoryCategorizer
+                val categorizationRecovery = MemoryCategorizationRecoveryJob(
+                    memoryService = memories,
+                    categorizer = categorizer,
+                    isRecording = { mediaSession.isBusy },
+                )
+                val categorizationRecoveryJob = categorizationRecovery.start(scope = graphScope)
+                runCategorizationRecovery = {
+                    graphScope.launch(callbackGroup) { categorizationRecovery.recover() }
+                }
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
@@ -242,7 +266,7 @@ class AppServices internal constructor(
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
                     closeScope = graphScope,
-                    backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob),
+                    backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob, categorizationRecoveryJob),
                     callbackGroup = callbackGroup,
                     summarizer = summarizer,
                     closeModelRuntime = closeModelRuntime,

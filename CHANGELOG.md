@@ -4,24 +4,32 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.3]
+
+- Version bump only: split from 1.7.2 so the memories layout and detail nav changes ship as their own release.
+- Updated Android and iOS versioning to 1.7.3 (build 50).
+
 ## [1.7.2]
-
-- Version bump only: split from 1.7.1 so the memories layout and detail nav changes ship as their own release.
-- Updated Android and iOS versioning to 1.7.2 (build 49).
-
-## [1.7.1]
 
 - Removed the "Swipe right to return to recording" label from the Memories list.
 - The Memories list now extends down to the bottom navigation dock instead of leaving an extra gap above it.
 - The memory detail keeps the bottom dock with two buttons: a highlighted Memories item and a back arrow that returns to the list. The in-screen "Back to memories" and "Capture" buttons were removed.
-- Updated Android and iOS versioning to 1.7.1 (build 48).
+- Updated Android and iOS versioning to 1.7.2 (build 49).
 
-## [1.7.0]
+## [1.7.1]
 
 - Added a bottom navigation dock with three icon tabs: Record (the recording screen), Memories (the saved list and detail), and Settings.
 - Tapping a tab moves to its screen. Swiping between the recording and memories screens still works.
 - The Settings tab is a placeholder that reads "Settings - Coming soon".
 - The dock is hidden while a memory detail is open, so the detail's own back flow is used.
+- Updated Android and iOS versioning to 1.7.1 (build 48).
+
+## [1.7.0]
+
+- Memories are categorized in the background after their transcription finishes. Memories saved before this change are backfilled the same way.
+- A memory is retried for categorization up to 3 times. Background categorization runs in batches of 5 and pauses while a recording is in progress.
+- The on-device model is shared by the summarizer and the categorizer, and is closed once by the app on shutdown.
+- Added an instrumented test that wires a category model into the app services and checks that the graph closes cleanly.
 - Updated Android and iOS versioning to 1.7.0 (build 47).
 
 ## [1.6.0]

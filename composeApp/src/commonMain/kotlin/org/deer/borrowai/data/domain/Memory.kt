@@ -22,6 +22,10 @@ package org.deer.borrowai.data.domain
  * [categories] holds distinct ids from the category master table, stored as a pipe-separated string
  * (see [toCategoriesString]). New drafts are limited to [MAX_MEMORY_CATEGORIES]. Stored rows are read
  * in full, whatever their count.
+ *
+ * [categorizationStatus] tracks categorization the same way [summaryStatus] tracks summaries.
+ * [categorizationAttempts] counts finished attempts. Once it reaches [MAX_CATEGORIZATION_ATTEMPTS] the memory is
+ * [CategorizationStatus.GAVE_UP] and the recovery job stops.
  */
 data class Memory(
     val id: String,
@@ -37,13 +41,22 @@ data class Memory(
     val transcriptionAttempts: Int = 0,
     val lastTranscriptionError: String? = null,
     val categories: List<Int> = emptyList(),
+    val categorizationStatus: CategorizationStatus = CategorizationStatus.PENDING,
+    val categorizationAttempts: Int = 0,
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
         require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
+        require(categorizationAttempts >= 0) { "Categorization attempts cannot be negative." }
         requireCategoryIdRules(categories)
     }
+
+    /** True when the recovery job may still try to categorize this memory. */
+    val isCategorizationRetryable: Boolean
+        get() = !deleted &&
+            categorizationAttempts < MAX_CATEGORIZATION_ATTEMPTS &&
+            (categorizationStatus == CategorizationStatus.PENDING || categorizationStatus == CategorizationStatus.EMPTY)
 
     /** True when a summary is stored. Derived from [summaryStatus]. */
     val summarized: Boolean
@@ -163,6 +176,61 @@ private fun pending(attempts: Int): SummaryState =
 enum class TranscriptionStatus { PENDING, IN_PROGRESS, DONE, FAILED }
 
 const val MAX_TRANSCRIPTION_ATTEMPTS = 5
+
+/**
+ * Where a memory stands in categorization. [CATEGORIZED] means [Memory.categories] is set. [EMPTY] means the
+ * transcription was blank, so the memory is retried if the transcription changes. [GAVE_UP] means the attempt
+ * limit was reached.
+ */
+enum class CategorizationStatus { PENDING, CATEGORIZED, EMPTY, GAVE_UP }
+
+/** How many finished categorization attempts a memory gets before the recovery job gives up on it. */
+const val MAX_CATEGORIZATION_ATTEMPTS = 3
+
+/** The memory with [ids] stored as its categories. */
+fun Memory.withCategories(ids: List<Int>): Memory = copy(
+    categories = ids,
+    categorizationStatus = CategorizationStatus.CATEGORIZED,
+)
+
+/** The status for a memory saved with [categories]. Any category present means it is categorized. */
+fun categorizationStatusFor(categories: List<Int>): CategorizationStatus =
+    if (categories.isEmpty()) CategorizationStatus.PENDING else CategorizationStatus.CATEGORIZED
+
+/**
+ * The memory with categories set by the user. An unchanged list keeps the existing status and attempts. A changed
+ * list resets them to match the new list. Clearing the list makes the memory pending again, so the recovery job
+ * fills it in.
+ */
+fun Memory.withUserCategories(ids: List<Int>): Memory =
+    if (ids == categories) {
+        this
+    } else {
+        copy(
+            categories = ids,
+            categorizationStatus = categorizationStatusFor(ids),
+            categorizationAttempts = 0,
+        )
+    }
+
+/**
+ * The memory after one more finished categorization attempt. [empty] marks a blank transcription. Reaching the
+ * limit gives up.
+ */
+fun Memory.afterFinishedCategorizationAttempt(empty: Boolean): Memory {
+    val attempts = categorizationAttempts + 1
+    val status = when {
+        attempts >= MAX_CATEGORIZATION_ATTEMPTS -> CategorizationStatus.GAVE_UP
+        empty -> CategorizationStatus.EMPTY
+        else -> CategorizationStatus.PENDING
+    }
+    return copy(categorizationAttempts = attempts, categorizationStatus = status)
+}
+
+fun Memory.withCategorizationGaveUp(): Memory = copy(
+    categorizationAttempts = MAX_CATEGORIZATION_ATTEMPTS,
+    categorizationStatus = CategorizationStatus.GAVE_UP,
+)
 
 fun Memory.claimedForTranscription(): Memory = copy(
     transcriptionStatus = TranscriptionStatus.IN_PROGRESS,

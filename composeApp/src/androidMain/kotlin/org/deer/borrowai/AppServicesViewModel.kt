@@ -12,6 +12,7 @@ import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
+import org.deer.borrowai.data.service.category.createCategoryModel
 import org.deer.borrowai.data.service.llm.createLocalLlm
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
@@ -55,6 +56,7 @@ internal class AppServicesViewModel(
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
             transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
             summarizer = createSummarizer(runtime = runtime),
+            categoryModel = createCategoryModel(runtime = runtime),
             closeModelRuntime = runtime::close,
         )
     },

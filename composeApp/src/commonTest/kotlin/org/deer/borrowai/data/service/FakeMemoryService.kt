@@ -9,20 +9,25 @@ import arrow.core.left
 import arrow.core.right
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.categorizationStatusFor
 import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
+import org.deer.borrowai.data.domain.afterFinishedCategorizationAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.summaryStatusFor
+import org.deer.borrowai.data.domain.withCategories
+import org.deer.borrowai.data.domain.withCategorizationGaveUp
 import org.deer.borrowai.data.domain.withEditedSummary
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
+import org.deer.borrowai.data.domain.withUserCategories
 
 class FakeMemoryService(
     initialMemories: List<Memory> = emptyList(),
@@ -61,6 +66,7 @@ class FakeMemoryService(
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
+            categorizationStatus = categorizationStatusFor(draft.categories),
         )
         records[memory.id] = memory
         publishMemories()
@@ -69,7 +75,7 @@ class FakeMemoryService(
 
     override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.copy(categories = categories) }
+        return updateActive(id) { it.withUserCategories(categories) }
     }
 
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
@@ -78,8 +84,7 @@ class FakeMemoryService(
             title = draft.title,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
-            categories = draft.categories,
-        )
+        ).withUserCategories(draft.categories)
         records[id] = updated
         publishMemories()
         Unit.right()
@@ -166,6 +171,17 @@ class FakeMemoryService(
     }
 
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> = updateActive(id) { it.withGaveUp() }
+
+    override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
+        categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
+        return updateActive(id) { it.withCategories(categories) }
+    }
+
+    override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
+        updateActive(id) { it.afterFinishedCategorizationAttempt(empty = empty) }
+
+    override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withCategorizationGaveUp() }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
         mutex.withLock {
