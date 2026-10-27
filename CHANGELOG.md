@@ -9,6 +9,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - The bottom navigation highlight now moves to the destination tab as the screen starts to change, instead of waiting for the transition to finish.
 - Opening a memory now switches to the detail navigation bar as the detail slide starts, instead of after it settles.
 - Swiping back from a memory detail now switches to the list navigation bar as the slide starts, instead of after it settles.
+- Reversing a swipe back into a memory detail now restores the detail navigation bar.
 - Updated Android and iOS versioning to 1.7.4 (build 51).
 
 ## [1.7.3]
