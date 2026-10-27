@@ -608,7 +608,7 @@
     <section class="section">
       <p class="eyebrow">4 · Settings</p>
       <h2>Opt-in and re-analysis</h2>
-      <p class="section-note">Off by default. The privacy line is required copy (see master spec §13). Re-analysis is queued on speaker creation or model upgrade, and drains in the background on app launch. The “Start re-analysis” action is also available here.</p>
+      <p class="section-note">Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -626,8 +626,27 @@
               <div class="setting-note">Runs in the background at low priority. Pauses while recording, when battery saver is on, or when battery is below 20% and not charging (proposed, §7.3).</div>
               <div class="setting-link">Start re-analysis</div>
             </div>
+            <div class="setting">
+              <div class="setting-row"><span>Withdraw consent and delete speaker data</span></div>
+              <div class="setting-note">Stops analysis and deletes all speakers, voice fingerprints and sample clips. Asks for confirmation.</div>
+            </div>
           </div></div>
           <p class="screen-caption">Settings · speakers</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Speaker recognition</div>
+            <div class="setting">
+              <div class="setting-note">BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings.</div>
+              <div class="setting-note">Draft wording. Legal review is required before release (§14).</div>
+            </div>
+            <div class="setting">
+              <div class="setting-link">Agree and turn on</div>
+              <div class="setting-link muted">Not now</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Consent · first enable</p>
         </figure>
 
         <figure class="screen-preview">
