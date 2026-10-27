@@ -82,8 +82,14 @@ internal class SavedMemoriesStateHolder(
         }
     }
 
-    fun onPagerPageSettled(page: Int) {
+    fun onPagerTargetPageChanged(page: Int) {
         if (page == MEMORY_LIST_PAGE && uiState.value.hasOpenedDetail) {
+            mutableUiState.update { it.copy(hasOpenedDetail = false) }
+        }
+    }
+
+    fun onPagerPageSettled(page: Int) {
+        if (page == MEMORY_LIST_PAGE && uiState.value.selectedMemoryId != null) {
             closeDetailState()
         }
     }
