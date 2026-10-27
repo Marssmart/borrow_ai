@@ -2,6 +2,7 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -66,10 +67,13 @@ internal fun BottomNavBar(
             .padding(start = 22.dp, end = 22.dp, bottom = 14.dp),
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth().height(60.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(22.dp)),
             shape = RoundedCornerShape(22.dp),
-            color = Color.White.copy(alpha = 0.86f),
-            shadowElevation = 6.dp,
+            color = Color.White.copy(alpha = 0.96f),
+            shadowElevation = 0.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
