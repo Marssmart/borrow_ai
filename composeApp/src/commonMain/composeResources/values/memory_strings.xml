@@ -4,12 +4,8 @@
     <string name="memory_original_transcription">ORIGINAL TRANSCRIPTION</string>
     <string name="memory_waiting_transcription">Waiting for transcription…</string>
     <string name="memory_transcription_failed">Transcription failed</string>
-    <string name="memory_audio_playing">Original audio is playing</string>
-    <string name="memory_audio_not_playing">Audio is not playing</string>
-    <string name="memory_summary_audio_playing">Summary audio is playing</string>
     <string name="memory_play_recording">Play recording</string>
     <string name="memory_stop_recording">Stop recording playback</string>
-    <string name="memory_recording_audio_playing">Recording is playing</string>
     <string name="memory_open_details">Open memory details</string>
     <string name="memory_dismiss">Dismiss</string>
     <string name="memory_playback_confirmation_title">Stop recording and play?</string>

@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -50,7 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,8 +65,6 @@ import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
-import borrowai.composeapp.generated.resources.memory_audio_not_playing
-import borrowai.composeapp.generated.resources.memory_audio_playing
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_open_details
 import borrowai.composeapp.generated.resources.memory_original_transcription
@@ -81,13 +77,11 @@ import borrowai.composeapp.generated.resources.memory_playback_memory_missing_me
 import borrowai.composeapp.generated.resources.memory_playback_recording_unavailable_message
 import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
 import borrowai.composeapp.generated.resources.memory_play_recording
-import borrowai.composeapp.generated.resources.memory_recording_audio_playing
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
-import borrowai.composeapp.generated.resources.memory_summary_audio_playing
 import borrowai.composeapp.generated.resources.memory_summary_model_missing
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -325,8 +319,6 @@ private fun MemoryCard(
             verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_SPACING),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AudioGlyph(playingContent = playingContent)
-                Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_CARD_GLYPH_SPACING))
                 Column(Modifier.weight(1f)) {
                     Text(
                         memory.title,
@@ -617,33 +609,6 @@ private fun PlaybackButton(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
-    }
-}
-
-@Composable
-private fun AudioGlyph(playingContent: PlaybackContent?) {
-    val description = stringResource(
-        when (playingContent) {
-            PlaybackContent.TRANSCRIPTION -> Res.string.memory_audio_playing
-            PlaybackContent.SUMMARY -> Res.string.memory_summary_audio_playing
-            PlaybackContent.RECORDING -> Res.string.memory_recording_audio_playing
-            null -> Res.string.memory_audio_not_playing
-        },
-    )
-    Box(
-        modifier = Modifier.size(SavedMemoriesStateHolder.MEMORY_AUDIO_GLYPH_SIZE).clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clearAndSetSemantics {
-                contentDescription = description
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            if (playingContent != null) "Ⅱ" else "▶",
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-        )
     }
 }
 
