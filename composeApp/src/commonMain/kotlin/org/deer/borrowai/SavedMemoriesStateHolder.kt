@@ -83,8 +83,12 @@ internal class SavedMemoriesStateHolder(
     }
 
     fun onPagerTargetPageChanged(page: Int) {
-        if (page == MEMORY_LIST_PAGE && uiState.value.hasOpenedDetail) {
-            mutableUiState.update { it.copy(hasOpenedDetail = false) }
+        val state = uiState.value
+        when {
+            page == MEMORY_LIST_PAGE && state.hasOpenedDetail ->
+                mutableUiState.update { it.copy(hasOpenedDetail = false) }
+            page == MEMORY_DETAIL_PAGE && state.selectedMemoryId != null && !state.hasOpenedDetail ->
+                mutableUiState.update { it.copy(hasOpenedDetail = true) }
         }
     }
 
