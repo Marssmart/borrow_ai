@@ -12,6 +12,8 @@ import kotlin.test.assertIs
 import okio.Path
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.service.category.CategoryModel
+import org.deer.borrowai.data.service.category.CategoryModelReply
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.ModelNetworkPolicy
@@ -52,6 +54,31 @@ class AppServicesTest {
             },
             modelDevice = FakeModelDevice(),
             epochClock = EpochClock { 1_800_000_000_000L },
+        )
+
+        assertIs<DownloadingModelSetupService>(services.modelSetup)
+        services.close()
+    }
+
+    @Test
+    fun realGraphWithCategoryModelWiresAndCloses() = runTest {
+        val services = AppServices.createReal(
+            database = requireNotNull(database),
+            recordingsRoot = root,
+            recorder = object : AudioRecorder {
+                override fun start(absolutePath: String) = Unit
+                override fun stop() = Unit
+            },
+            audioPlayer = object : AudioPlayer {
+                override fun play(absolutePath: String): Long = 0L
+                override fun stop() = Unit
+            },
+            microphonePermission = object : MicrophonePermission {
+                override suspend fun request(): Boolean = false
+            },
+            modelDevice = FakeModelDevice(),
+            epochClock = EpochClock { 1_800_000_000_000L },
+            categoryModel = CategoryModel { _, _ -> CategoryModelReply.ModelMissing },
         )
 
         assertIs<DownloadingModelSetupService>(services.modelSetup)

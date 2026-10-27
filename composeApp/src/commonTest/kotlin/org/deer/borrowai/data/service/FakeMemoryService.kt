@@ -14,10 +14,13 @@ import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
+import org.deer.borrowai.data.domain.afterFinishedCategorizationAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.summaryStatusFor
+import org.deer.borrowai.data.domain.withCategories
+import org.deer.borrowai.data.domain.withCategorizationGaveUp
 import org.deer.borrowai.data.domain.withEditedSummary
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
@@ -166,6 +169,17 @@ class FakeMemoryService(
     }
 
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> = updateActive(id) { it.withGaveUp() }
+
+    override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
+        categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
+        return updateActive(id) { it.withCategories(categories) }
+    }
+
+    override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
+        updateActive(id) { it.afterFinishedCategorizationAttempt(empty = empty) }
+
+    override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withCategorizationGaveUp() }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
         mutex.withLock {
