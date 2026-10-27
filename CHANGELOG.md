@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.0]
+
+- Added a bottom navigation dock with three icon tabs: Record (the recording screen), Memories (the saved list and detail), and Settings.
+- Tapping a tab moves to its screen. Swiping between the recording and memories screens still works.
+- The Settings tab is a placeholder that reads "Settings - Coming soon".
+- The dock is hidden while a memory detail is open, so the detail's own back flow is used.
+- Updated Android and iOS versioning to 1.7.0 (build 47).
+
 ## [1.6.0]
 
 - Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.

@@ -25,13 +25,18 @@ internal class AppShellStateHolder(
     }
 
     fun returnToCapture() {
-        scope.launch { mainPagerState.animateScrollToPage(CAPTURE_PAGE) }
+        navigateToPage(CAPTURE_PAGE)
+    }
+
+    fun navigateToPage(page: Int) {
+        scope.launch { mainPagerState.animateScrollToPage(page) }
     }
 
     internal companion object {
-        const val MAIN_PAGE_COUNT = 2
+        const val MAIN_PAGE_COUNT = 3
         const val CAPTURE_PAGE = 0
         const val MEMORIES_PAGE = 1
+        const val SETTINGS_PAGE = 2
         val BACKGROUND_TOP_GLOW_SIZE = 380.dp
         val BACKGROUND_BOTTOM_GLOW_SIZE = 440.dp
     }

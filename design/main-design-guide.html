@@ -596,6 +596,212 @@
       .mock-grid { grid-template-columns: 1fr; gap: 24px; }
       .device { width: min(100%, 340px); }
     }
+    .nav-gallery { margin-top: 56px; padding-top: 32px; border-top: 1px solid #d2d9d4; }
+    .nav-gallery-head { margin-bottom: 28px; }
+    .nav-gallery h2 {
+      margin: 0;
+      color: #17201d;
+      font-size: 28px;
+      letter-spacing: -.035em;
+      line-height: 1.1;
+    }
+    .nav-variant { margin: 0 0 44px; }
+    .nav-variant-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+    .nav-variant-letter {
+      display: grid;
+      flex: 0 0 auto;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 50%;
+      background: #14757b;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .nav-variant-name { margin: 3px 0 0; color: #17201d; font-size: 17px; font-weight: 750; }
+    .nav-variant-note { margin: 3px 0 0; color: #53605b; font-size: 13px; line-height: 1.45; }
+    .nav-variant-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+    .nav-variant-grid .device { width: min(100%, 260px); }
+
+    .nav-screen { color: #123b43; }
+    .nav-body { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; padding: 26px 16px 110px; }
+    .nav-body--centered { align-items: center; justify-content: center; text-align: center; }
+    .nav-screen-title { margin: 0 0 14px; font-size: 20px; font-weight: 800; letter-spacing: -.03em; }
+    .nav-card {
+      margin-bottom: 10px;
+      padding: 13px 14px;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 80%);
+      box-shadow: 0 6px 16px rgb(20 60 66 / 8%);
+    }
+    .nav-card-line { height: 7px; border-radius: 4px; background: #123b43; opacity: .78; }
+    .nav-card-line + .nav-card-line { margin-top: 8px; width: 55%; background: #9fc9cd; opacity: .9; }
+    .nav-mic {
+      display: grid;
+      width: 150px;
+      height: 150px;
+      place-items: center;
+      border: 8px solid #c9e5e7;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #fff, #f3ffff);
+      color: #14757b;
+      box-shadow: 0 0 0 8px rgb(255 255 255 / 58%), 0 14px 34px rgb(25 95 101 / 15%);
+    }
+    .nav-mic svg {
+      width: 52px;
+      height: 52px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .nav-hint { margin: 18px 0 0; color: #66716b; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+    .nav-settings-text {
+      margin: 0;
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 80%);
+      box-shadow: 0 6px 16px rgb(20 60 66 / 8%);
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .nav-bar { position: absolute; z-index: 2; display: flex; align-items: stretch; }
+    .nav-item {
+      display: flex;
+      min-width: 0;
+      flex: 1 1 0;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+      color: #4f6a6e;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .02em;
+    }
+    .nav-item svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .nav-item.is-active { color: #14757b; }
+
+    /* A. Floating glass pill */
+    .nav-bar--pill {
+      right: 14px;
+      bottom: 18px;
+      left: 14px;
+      height: 66px;
+      padding: 6px;
+      border: 1px solid rgb(255 255 255 / 70%);
+      border-radius: 999px;
+      background: rgb(255 255 255 / 72%);
+      box-shadow: 0 14px 30px rgb(20 60 66 / 18%);
+      backdrop-filter: blur(14px);
+    }
+    .nav-bar--pill .nav-item { border-radius: 999px; }
+    .nav-bar--pill .nav-item.is-active {
+      background: #14757b;
+      color: #fff;
+      box-shadow: 0 6px 14px rgb(20 117 123 / 30%);
+    }
+
+    /* B. Flat full-width bar */
+    .nav-bar--flat {
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 72px;
+      padding: 0 6px 10px;
+      border-top: 1px solid #cfe0e3;
+      background: rgb(255 255 255 / 92%);
+    }
+    .nav-bar--flat .nav-item { position: relative; padding-top: 12px; }
+    .nav-bar--flat .nav-item.is-active::before {
+      position: absolute;
+      top: 0;
+      width: 28px;
+      height: 3px;
+      border-radius: 0 0 3px 3px;
+      background: #14757b;
+      content: "";
+    }
+
+    /* C. Raised active bubble (keeps Record, Memories, Settings order) */
+    .nav-bar--raised {
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 78px;
+      padding: 0 8px 10px;
+      border-top: 1px solid #cfe0e3;
+      background: rgb(255 255 255 / 92%);
+    }
+    .nav-bar--raised .nav-item { justify-content: flex-end; }
+    .nav-bar--raised .nav-item.is-active svg {
+      position: absolute;
+      top: -26px;
+      width: 58px;
+      height: 58px;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 6px solid #dcecef;
+      border-radius: 50%;
+      background: #14757b;
+      color: #fff;
+      box-shadow: 0 8px 18px rgb(20 117 123 / 34%);
+    }
+
+    /* D. Icon-only dock */
+    .nav-bar--dock {
+      right: 22px;
+      bottom: 14px;
+      left: 22px;
+      height: 60px;
+      padding: 6px;
+      border-radius: 22px;
+      background: rgb(255 255 255 / 86%);
+      box-shadow: 0 10px 24px rgb(20 60 66 / 16%);
+    }
+    .nav-bar--dock .nav-item { flex: 0 0 44px; border-radius: 16px; flex-direction: row; gap: 0; }
+    .nav-bar--dock .nav-item .nav-label { display: none; }
+    .nav-bar--dock .nav-item.is-active {
+      flex: 1 1 auto;
+      gap: 6px;
+      background: #e4f2f3;
+      font-size: 11px;
+    }
+    .nav-bar--dock .nav-item.is-active .nav-label { display: inline; }
+
+    /* E. Text-only segmented track */
+    .nav-bar--segmented {
+      right: 16px;
+      bottom: 16px;
+      left: 16px;
+      height: 50px;
+      padding: 5px;
+      border: 1px solid rgb(20 117 123 / 14%);
+      border-radius: 20px;
+      background: rgb(20 117 123 / 12%);
+    }
+    .nav-bar--segmented .nav-item { flex: 1 1 0; flex-direction: row; border-radius: 15px; font-size: 12px; letter-spacing: 0; padding: 0; min-width: 0; }
+    .nav-bar--segmented .nav-item svg { display: none; }
+    .nav-bar--segmented .nav-item.is-active {
+      background: #fff;
+      color: #14757b;
+      box-shadow: 0 4px 10px rgb(20 60 66 / 14%);
+    }
+
+    @media (max-width: 760px) {
+      .nav-variant-grid { grid-template-columns: 1fr; }
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         scroll-behavior: auto !important;
@@ -695,6 +901,15 @@
         <figcaption class="screen-caption">Detail</figcaption>
       </figure>
     </div>
+
+    <section class="nav-gallery" aria-labelledby="nav-gallery-title">
+      <header class="nav-gallery-head">
+        <p class="eyebrow">Navigation · Variants</p>
+        <h2 id="nav-gallery-title">Bottom navigation</h2>
+        <p class="workspace-description">Three tabs in fixed order: Record, Memories, Settings. Each style is shown with each tab active.</p>
+      </header>
+      <div data-nav-variants></div>
+    </section>
 
     <section class="category-gallery" aria-labelledby="category-gallery-title">
       <header class="category-gallery-head">
@@ -1065,6 +1280,58 @@
     window.addEventListener("pagehide", () => {
       if (timer !== null) clearInterval(timer);
     });
+  </script>
+  <script>
+    (() => {
+      const icons = {
+        record: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+        memories: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+        settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>'
+      };
+      const tabs = [
+        { key: "record", label: "Record" },
+        { key: "memories", label: "Memories" },
+        { key: "settings", label: "Settings" }
+      ];
+      const variants = [
+        { letter: "A", name: "Floating glass pill", bar: "nav-bar--pill", note: "Centred glass capsule that floats above the content. The active tab fills with teal." },
+        { letter: "B", name: "Flat full-width bar", bar: "nav-bar--flat", note: "Solid edge-to-edge bar with a hairline top border and a short teal indicator." },
+        { letter: "C", name: "Raised active bubble", bar: "nav-bar--raised", note: "The active tab lifts into a teal circle that breaks the bar edge. Order stays Record, Memories, Settings." },
+        { letter: "D", name: "Icon-only dock", bar: "nav-bar--dock", note: "Compact floating dock. Only the active tab shows its label beside the icon." },
+        { letter: "E", name: "Segmented control", bar: "nav-bar--segmented", note: "Text-only segmented track with a white raised highlight on the active segment." }
+      ];
+      const bodies = {
+        record: '<div class="nav-body nav-body--centered"><div class="nav-mic">' + icons.record + '</div><p class="nav-hint">TAP TO RECORD</p></div>',
+        memories: '<div class="nav-body"><h3 class="nav-screen-title">Saved memories</h3>' +
+          '<div class="nav-card"><div class="nav-card-line"></div><div class="nav-card-line"></div></div>' +
+          '<div class="nav-card"><div class="nav-card-line"></div><div class="nav-card-line"></div></div>' +
+          '<div class="nav-card"><div class="nav-card-line"></div><div class="nav-card-line"></div></div></div>',
+        settings: '<div class="nav-body nav-body--centered"><p class="nav-settings-text">Settings - Coming soon</p></div>'
+      };
+
+      const bar = (variant, activeKey) => {
+        const items = tabs.map(tab => {
+          const active = tab.key === activeKey ? " is-active" : "";
+          return '<div class="nav-item' + active + '">' + icons[tab.key] + '<span class="nav-label">' + tab.label + '</span></div>';
+        }).join("");
+        return '<nav class="nav-bar ' + variant.bar + '" aria-label="Main navigation">' + items + '</nav>';
+      };
+
+      const preview = (variant, tab) => (
+        '<figure class="screen-preview"><div class="device"><div class="screen-content">' +
+        '<div class="screen nav-screen">' + bodies[tab.key] + bar(variant, tab.key) + '</div>' +
+        '</div></div><figcaption class="screen-caption">' + tab.label + '</figcaption></figure>'
+      );
+
+      const host = document.querySelector("[data-nav-variants]");
+      host.innerHTML = variants.map(variant => (
+        '<section class="nav-variant" aria-label="' + variant.name + '">' +
+        '<div class="nav-variant-head"><span class="nav-variant-letter">' + variant.letter + '</span>' +
+        '<div><h3 class="nav-variant-name">' + variant.name + '</h3><p class="nav-variant-note">' + variant.note + '</p></div></div>' +
+        '<div class="nav-variant-grid">' + tabs.map(tab => preview(variant, tab)).join("") + '</div>' +
+        '</section>'
+      )).join("");
+    })();
   </script>
 </body>
 </html>
