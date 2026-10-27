@@ -127,6 +127,9 @@ internal fun SavedMemoriesScreen(
         onDetailBackRegistered(stateHolder::backToList)
     }
     androidx.compose.runtime.LaunchedEffect(stateHolder.pagerState) {
+        snapshotFlow { stateHolder.pagerState.targetPage }.collect(stateHolder::onPagerTargetPageChanged)
+    }
+    androidx.compose.runtime.LaunchedEffect(stateHolder.pagerState) {
         snapshotFlow { stateHolder.pagerState.settledPage }.collect(stateHolder::onPagerPageSettled)
     }
     androidx.compose.runtime.LaunchedEffect(stateHolder) {
