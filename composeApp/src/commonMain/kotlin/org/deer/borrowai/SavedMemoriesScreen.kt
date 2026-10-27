@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -49,7 +51,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.flow.collect
@@ -66,8 +67,6 @@ import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.memory_audio_not_playing
 import borrowai.composeapp.generated.resources.memory_audio_playing
-import borrowai.composeapp.generated.resources.memory_back_to_memories
-import borrowai.composeapp.generated.resources.memory_capture
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_open_details
 import borrowai.composeapp.generated.resources.memory_original_transcription
@@ -81,7 +80,6 @@ import borrowai.composeapp.generated.resources.memory_playback_recording_unavail
 import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
 import borrowai.composeapp.generated.resources.memory_play_recording
 import borrowai.composeapp.generated.resources.memory_recording_audio_playing
-import borrowai.composeapp.generated.resources.memory_return_to_recording
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_recording
 import borrowai.composeapp.generated.resources.memory_transcription_failed
@@ -95,7 +93,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun SavedMemoriesScreen(
     services: AppServices,
-    onReturnToCapture: () -> Unit,
+    onDetailBackRegistered: (() -> Unit) -> Unit,
     onDetailVisibilityChanged: (Boolean) -> Unit,
 ) {
     val memoryPagerState = rememberPagerState(
@@ -123,9 +121,11 @@ internal fun SavedMemoriesScreen(
     }
     val uiState by stateHolder.uiState.collectAsState()
     val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
-    val currentOnReturnToCapture by rememberUpdatedState(onReturnToCapture)
     val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
 
+    androidx.compose.runtime.LaunchedEffect(stateHolder) {
+        onDetailBackRegistered(stateHolder::backToList)
+    }
     androidx.compose.runtime.LaunchedEffect(stateHolder.pagerState) {
         snapshotFlow { stateHolder.pagerState.settledPage }.collect(stateHolder::onPagerPageSettled)
     }
@@ -162,12 +162,8 @@ internal fun SavedMemoriesScreen(
                         ?.takeIf { it.target.memoryId == memory.id }
                         ?.target
                         ?.content,
-                    onBack = stateHolder::backToList,
                     onPlayRecording = {
                         stateHolder.togglePlayback(memory.id, PlaybackContent.RECORDING)
-                    },
-                    onReturnToCapture = {
-                        stateHolder.returnToCapture(currentOnReturnToCapture)
                     },
                 )
             }
@@ -236,7 +232,7 @@ private fun MemoryListScreen(
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
         Text(
             stringResource(Res.string.memory_saved_memories_title),
@@ -267,15 +263,6 @@ private fun MemoryListScreen(
                 )
             }
         }
-
-        Text(
-            stringResource(Res.string.memory_return_to_recording),
-            modifier = Modifier.fillMaxWidth()
-                .padding(SavedMemoriesStateHolder.MEMORY_LIST_FOOTER_PADDING),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
@@ -397,28 +384,12 @@ private fun MemoryDetailScreen(
     memory: Memory,
     scrollState: ScrollState,
     playingContent: PlaybackContent?,
-    onBack: () -> Unit,
     onPlayRecording: () -> Unit,
-    onReturnToCapture: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .padding(SavedMemoriesStateHolder.MEMORY_DETAIL_NAVIGATION_PADDING),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onBack) {
-                Text(stringResource(Res.string.memory_back_to_memories))
-            }
-            TextButton(onClick = onReturnToCapture) {
-                Text(stringResource(Res.string.memory_capture))
-            }
-        }
-
         Column(
             modifier = Modifier.weight(1f).verticalScroll(scrollState)
                 .padding(SavedMemoriesStateHolder.MEMORY_DETAIL_CONTENT_PADDING),

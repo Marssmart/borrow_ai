@@ -113,11 +113,7 @@ fun App(services: AppServices) {
                 HorizontalPager(
                     state = appStateHolder.mainPagerState,
                     modifier = Modifier.fillMaxSize().padding(
-                        bottom = if (appUiState.isMemoryDetailVisible) {
-                            0.dp
-                        } else {
-                            BottomNavDockReserve + navBarInset
-                        },
+                        bottom = BottomNavDockReserve + navBarInset,
                     ),
                     userScrollEnabled = !appUiState.isMemoryDetailVisible,
                 ) { page ->
@@ -132,14 +128,19 @@ fun App(services: AppServices) {
 
                         AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
                             services = services,
-                            onReturnToCapture = appStateHolder::returnToCapture,
+                            onDetailBackRegistered = appStateHolder::registerMemoryDetailBack,
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                         )
 
                         AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen()
                     }
                 }
-                if (!appUiState.isMemoryDetailVisible) {
+                if (appUiState.isMemoryDetailVisible) {
+                    MemoryDetailNavBar(
+                        onBack = appStateHolder::backFromMemoryDetail,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                } else {
                     BottomNavBar(
                         selectedPage = appStateHolder.mainPagerState.currentPage,
                         onSelect = appStateHolder::navigateToPage,

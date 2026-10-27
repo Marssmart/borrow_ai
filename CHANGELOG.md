@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.1]
+
+- Removed the "Swipe right to return to recording" label from the Memories list.
+- The Memories list now extends down to the bottom navigation dock instead of leaving an extra gap above it.
+- The memory detail keeps the bottom dock with two buttons: a highlighted Memories item and a back arrow that returns to the list. The in-screen "Back to memories" and "Capture" buttons were removed.
+- Updated Android and iOS versioning to 1.7.1 (build 48).
+
 ## [1.7.0]
 
 - Added a bottom navigation dock with three icon tabs: Record (the recording screen), Memories (the saved list and detail), and Settings.

@@ -17,6 +17,7 @@ internal class AppShellStateHolder(
     private val scope: CoroutineScope,
 ) {
     private val mutableUiState = MutableStateFlow(AppShellUiState())
+    private var memoryDetailBack: () -> Unit = {}
 
     val uiState = mutableUiState.asStateFlow()
 
@@ -24,8 +25,12 @@ internal class AppShellStateHolder(
         mutableUiState.update { it.copy(isMemoryDetailVisible = visible) }
     }
 
-    fun returnToCapture() {
-        navigateToPage(CAPTURE_PAGE)
+    fun registerMemoryDetailBack(action: () -> Unit) {
+        memoryDetailBack = action
+    }
+
+    fun backFromMemoryDetail() {
+        memoryDetailBack()
     }
 
     fun navigateToPage(page: Int) {

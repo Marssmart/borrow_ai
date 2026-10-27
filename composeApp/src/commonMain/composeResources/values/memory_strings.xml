@@ -1,10 +1,7 @@
 <resources>
     <string name="memory_saved_memories_title">Saved memories</string>
-    <string name="memory_return_to_recording">Swipe right to return to recording</string>
     <string name="memory_summary">SUMMARY</string>
     <string name="memory_original_transcription">ORIGINAL TRANSCRIPTION</string>
-    <string name="memory_back_to_memories">← Memories</string>
-    <string name="memory_capture">Capture</string>
     <string name="memory_waiting_transcription">Waiting for transcription…</string>
     <string name="memory_transcription_failed">Transcription failed</string>
     <string name="memory_audio_playing">Original audio is playing</string>

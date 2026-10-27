@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -35,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import borrowai.composeapp.generated.resources.Res
+import borrowai.composeapp.generated.resources.nav_back
 import borrowai.composeapp.generated.resources.nav_memories
 import borrowai.composeapp.generated.resources.nav_record
 import borrowai.composeapp.generated.resources.nav_settings
@@ -60,6 +64,40 @@ internal fun BottomNavBar(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    BottomNavDock(modifier = modifier) {
+        BottomNavItem.entries.forEach { item ->
+            val selected = item.page == selectedPage
+            BottomNavButton(
+                item = item,
+                selected = selected,
+                onClick = { onSelect(item.page) },
+                modifier = if (selected) Modifier.weight(1f) else Modifier.width(44.dp),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun MemoryDetailNavBar(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BottomNavDock(modifier = modifier) {
+        BackButton(onClick = onBack, modifier = Modifier.width(44.dp))
+        BottomNavButton(
+            item = BottomNavItem.MEMORIES,
+            selected = true,
+            onClick = onBack,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun BottomNavDock(
+    modifier: Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -79,17 +117,29 @@ internal fun BottomNavBar(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BottomNavItem.entries.forEach { item ->
-                    val selected = item.page == selectedPage
-                    BottomNavButton(
-                        item = item,
-                        selected = selected,
-                        onClick = { onSelect(item.page) },
-                        modifier = if (selected) Modifier.weight(1f) else Modifier.width(44.dp),
-                    )
-                }
-            }
+                content = content,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(Res.string.nav_back)
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(22.dp)) {
+            drawBackArrow(tint)
         }
     }
 }
@@ -133,6 +183,16 @@ private fun BottomNavButton(
             )
         }
     }
+}
+
+private fun DrawScope.drawBackArrow(color: Color) {
+    val stroke = 1.8f.dp.toPx()
+    val w = size.width
+    val h = size.height
+    val tip = Offset(w * 0.22f, h * 0.5f)
+    drawLine(color, Offset(w * 0.8f, h * 0.5f), tip, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(color, tip, Offset(w * 0.48f, h * 0.24f), strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(color, tip, Offset(w * 0.48f, h * 0.76f), strokeWidth = stroke, cap = StrokeCap.Round)
 }
 
 private fun DrawScope.drawNavIcon(item: BottomNavItem, color: Color) {
