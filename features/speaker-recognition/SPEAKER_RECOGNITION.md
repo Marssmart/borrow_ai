@@ -234,7 +234,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 - Drained by: app launch, in the background at low priority (AC-5.2).
 - Re-analysis recomputes segmentation and clusters, then re-runs matching. It keeps `MANUAL` links where the occurrence's centroid still maps to the same speaker. Otherwise the manual link stays as it was (see AC-5.3). Simple rule for v1: a manual link is never removed by re-analysis.
 - Runs with the same low priority as other background jobs. Pauses while recording.
-- Launch gate (proposed, confirm in S-6): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch.
+- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch.
 - Scope in v1: the drain runs only while the app process is alive. No WorkManager or BGTask job in v1. The queue is persisted, so a killed app loses nothing.
 
 ---
@@ -344,6 +344,7 @@ Before any production code, run a spike on a branch. The spike answers these que
 | S-4 | Different-speaker false match | Same set, cross-speaker pairs | False match ≤ 5%. |
 | S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. |
 | S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. |
+| S-7 | Launch-gate thresholds | Run a background drain on a low-end device and log battery drop, thermal state, and time to finish | Battery threshold (20%) and stop conditions hold, with no visible drain complaints. Tune if not. |
 
 The spike writes its numbers into this file (§11 table, filled in) before implementation starts.
 
