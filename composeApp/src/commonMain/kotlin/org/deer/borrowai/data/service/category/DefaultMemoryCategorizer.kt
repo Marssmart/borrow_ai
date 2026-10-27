@@ -1,8 +1,10 @@
 package org.deer.borrowai.data.service.category
 
 import arrow.core.Either
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.MAX_MEMORY_CATEGORIES
 import org.deer.borrowai.data.service.MemoryError
@@ -21,6 +23,7 @@ class DefaultMemoryCategorizer(
     private val memoryService: MemoryService,
     private val model: CategoryModel,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
+    private val callTimeoutMillis: Long = DEFAULT_CALL_TIMEOUT_MILLIS,
 ) : MemoryCategorizer {
     private val backfillLock = Mutex()
 
@@ -76,13 +79,20 @@ class DefaultMemoryCategorizer(
         return CategorizationResult.Categories(chosen, backfillFailure)
     }
 
+    /** Bounds one model call, so the time allowed grows with the number of calls, not with a whole run. */
+    private suspend fun generate(systemInstruction: String, userMessage: String): CategoryModelReply = try {
+        withTimeout(callTimeoutMillis) { model.generate(systemInstruction, userMessage) }
+    } catch (exception: TimeoutCancellationException) {
+        CategoryModelReply.Failed(IllegalStateException("Model call timed out after $callTimeoutMillis ms."))
+    }
+
     private suspend fun scoreAll(transcription: String, masters: List<Category>): ScoringOutcome {
         val scores = linkedMapOf<Int, Int>()
         for (batch in masters.chunked(batchSize)) {
             val batchIds = batch.mapTo(mutableSetOf()) { it.id }
             var batchScores: Map<Int, Int> = emptyMap()
             for (attempt in 1..MAX_SCORING_ATTEMPTS) {
-                val reply = model.generate(SCORING_SYSTEM_INSTRUCTION, CategoryPrompt.scoringMessage(transcription, batch))
+                val reply = generate(SCORING_SYSTEM_INSTRUCTION, CategoryPrompt.scoringMessage(transcription, batch))
                 when (reply) {
                     is CategoryModelReply.Text -> {
                         batchScores = CategoryPrompt.parseScores(reply.text, batchIds)
@@ -109,7 +119,7 @@ class DefaultMemoryCategorizer(
     }
 
     private suspend fun backfill(transcription: String, masters: List<Category>, count: Int): BackfillOutcome {
-        val reply = model.generate(BACKFILL_SYSTEM_INSTRUCTION, CategoryPrompt.backfillMessage(transcription, masters, count))
+        val reply = generate(BACKFILL_SYSTEM_INSTRUCTION, CategoryPrompt.backfillMessage(transcription, masters, count))
         val text = when (reply) {
             is CategoryModelReply.Text -> reply.text
             CategoryModelReply.ModelMissing -> return BackfillOutcome.Stopped(CategorizationResult.ModelMissing)
@@ -175,6 +185,9 @@ class DefaultMemoryCategorizer(
          * `id|score` line, so every batch failed coverage.
          */
         const val DEFAULT_BATCH_SIZE = 1
+
+        /** Generous for one on-device call, which took about 4 s in testing. */
+        const val DEFAULT_CALL_TIMEOUT_MILLIS = 60 * 1000L
 
         /** A batch whose reply does not score every category is asked again once before failing. */
         const val MAX_SCORING_ATTEMPTS = 2

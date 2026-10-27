@@ -7,7 +7,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.CategorizationStatus
 import org.deer.borrowai.data.domain.EpochClock
@@ -62,13 +61,11 @@ class MemoryCategorizationRecoveryJobTest {
         service: MemoryService,
         categorizer: MemoryCategorizer,
         isRecording: () -> Boolean = { false },
-        timeoutMillis: Long = 60_000L,
         batchSize: Int = 5,
     ) = MemoryCategorizationRecoveryJob(
         memoryService = service,
         categorizer = categorizer,
         isRecording = isRecording,
-        timeoutMillis = timeoutMillis,
         batchSize = batchSize,
     )
 
@@ -228,21 +225,6 @@ class MemoryCategorizationRecoveryJobTest {
 
         assertEquals(0, categorizer.calls)
         assertEquals(CategorizationStatus.PENDING, service.get("a").categorizationStatus)
-    }
-
-    @Test
-    fun timeoutCountsAsFailedAttempt() = runTest {
-        val service = service(memory("a"))
-        val categorizer = ScriptedCategorizer {
-            delay(10_000)
-            CategorizationResult.Categories(listOf(1))
-        }
-
-        assertEquals(0, job(service, categorizer, timeoutMillis = 1_000L).recover())
-
-        val updated = service.get("a")
-        assertEquals(1, updated.categorizationAttempts)
-        assertFalse(updated.categories.isNotEmpty())
     }
 
     @Test

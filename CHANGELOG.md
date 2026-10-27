@@ -11,6 +11,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Fixed categorization producing no categories: the on-device model answered only the first category of each multi-category scoring batch, so every run failed coverage. Each category is now scored in its own request.
 - Memory cards now show their categories as chips.
 - Categorization now logs its outcome and failure cause under the `MemoryCategorization` log tag so failures can be diagnosed from logcat.
+- Each model call now has its own 60-second timeout, so memories with many categories are no longer cut off by a single run-wide timeout.
 - Updated Android and iOS versioning to 1.7.5 (build 52).
 
 ## [1.7.4]

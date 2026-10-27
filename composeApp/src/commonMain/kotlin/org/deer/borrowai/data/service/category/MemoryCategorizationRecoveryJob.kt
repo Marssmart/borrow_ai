@@ -3,13 +3,11 @@ package org.deer.borrowai.data.service.category
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
 
@@ -24,7 +22,6 @@ class MemoryCategorizationRecoveryJob(
     private val memoryService: MemoryService,
     private val categorizer: MemoryCategorizer,
     private val isRecording: () -> Boolean,
-    private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
 ) {
     init {
@@ -110,9 +107,7 @@ class MemoryCategorizationRecoveryJob(
     }
 
     private suspend fun categorize(transcription: String): CategorizationResult = try {
-        withTimeout(timeoutMillis) { categorizer.categorize(transcription) }
-    } catch (exception: TimeoutCancellationException) {
-        CategorizationResult.Failed(IllegalStateException("Categorization timed out after $timeoutMillis ms."))
+        categorizer.categorize(transcription)
     } catch (exception: CancellationException) {
         throw exception
     } catch (exception: Exception) {
@@ -129,7 +124,6 @@ class MemoryCategorizationRecoveryJob(
 
     private companion object {
         const val DEFAULT_INTERVAL_MILLIS = 15 * 60 * 1000L
-        const val DEFAULT_TIMEOUT_MILLIS = 5 * 60 * 1000L
         const val DEFAULT_BATCH_SIZE = 5
     }
 }
