@@ -186,7 +186,6 @@ internal class SavedMemoriesStateHolder(
         val MEMORY_CARD_SHAPE = RoundedCornerShape(23.dp)
         val MEMORY_CARD_CONTENT_PADDING = PaddingValues(14.dp)
         val MEMORY_CARD_CONTENT_SPACING = 8.dp
-        val MEMORY_CARD_GLYPH_SPACING = 10.dp
         val MEMORY_CARD_SURFACE_ALPHA = 0.92f
         val MEMORY_CATEGORY_CHIP_SHAPE = RoundedCornerShape(50)
         val MEMORY_CATEGORY_CHIP_PADDING = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
@@ -242,7 +241,6 @@ internal class SavedMemoriesStateHolder(
         val MEMORY_PENDING_CARD_BORDER_COLOR = Color(0xFFD6AA6E).copy(alpha = 0.45f)
         const val MEMORY_PENDING_TEXT_ALPHA = 0.8f
 
-        val MEMORY_AUDIO_GLYPH_SIZE = 34.dp
         val MEMORY_PLAYBACK_BUTTON_CONTENT_PADDING = PaddingValues(horizontal = 9.dp, vertical = 4.dp)
         val MEMORY_PLAYBACK_BUTTON_ICON_SPACING = 4.dp
         val MEMORY_PLAYBACK_BUTTON_BORDER_WIDTH = 1.dp

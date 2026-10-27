@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.6]
+
+- Removed the play icon from the memory card header in Saved memories, and the memory date is now left-aligned.
+- Updated Android and iOS versioning to 1.7.6 (build 53).
+
 ## [1.7.5]
 
 - Fixed memory categories never being saved: memory writes now update the stored document instead of overwriting it without its current revision, which caused write conflicts.
