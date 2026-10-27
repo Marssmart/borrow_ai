@@ -275,7 +275,8 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 ### 9.1 Memory list row
 
 - Speaker chips sit under the summary line, left-aligned, same height as the category chip.
-- Chip states: recognized (teal fill, name), unknown (outline, "Speaker N"), pending (muted grey, no label, subtle pulse), overflow ("+N").
+- Chip states: recognized (filled with the speaker's colour, name), unknown (outline in the speaker's colour, "Speaker N"), pending (muted grey, no label, subtle pulse), overflow ("+N").
+- Each speaker has a colour from the palette in §9.7. Colour is never the only cue: the state (filled or outline) and the label always carry the same meaning.
 - Chips are tappable. Tapping a chip opens the detail view scrolled to that speaker's card.
 
 ### 9.2 Memory detail
@@ -315,6 +316,14 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 
 All values are proposals until measured in §11.
 
+### 9.7 Speaker colours
+
+- A fixed palette of 8 colours. Each colour is a fill colour that passes WCAG AA (4.5:1) with white text, plus a light tint for backgrounds.
+- A library speaker keeps the same colour in every memory, chip, card, and sheet. The colour is stored with the speaker, not recomputed.
+- An unknown speaker gets the first palette colour not used by another speaker in the same memory, in order of first speech. Colours can repeat across memories.
+- Up to 8 speakers per memory (§9.6), so every speaker in one memory can have a distinct colour.
+- Colour is decorative. State and label carry the meaning, so the palette works in greyscale. The palette is not checked for colour-blind separation yet. Spike S-8 should check it on real device screens.
+
 ---
 
 ## 10. Platform split
@@ -345,6 +354,7 @@ Before any production code, run a spike on a branch. The spike answers these que
 | S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. |
 | S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. |
 | S-7 | Launch-gate thresholds | Run a background drain on a low-end device and log battery drop, thermal state, and time to finish | Battery threshold (20%) and stop conditions hold, with no visible drain complaints. Tune if not. |
+| S-8 | Speaker colour palette | Render the 8 colours on a real device in light and dark mode, and run a colour-blind simulation (protanopia, deuteranopia, tritanopia) on a memory with 4+ speakers | Every pair of speakers in one memory is distinguishable by name or state. If not, swap or drop colours. |
 
 The spike writes its numbers into this file (§11 table, filled in) before implementation starts.
 

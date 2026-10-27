@@ -118,6 +118,16 @@
     .row-meta { margin-top: 3px; font-size: 11px; color: #5d7c80; }
     .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 
+    /* speaker palette: 8 slots, one colour per speaker (see spec §9.5) */
+    .spk-1 { --c: #14757b; --tint: #d7ecee; }
+    .spk-2 { --c: #4338ca; --tint: #e0e0fa; }
+    .spk-3 { --c: #854d0e; --tint: #f3e8d2; }
+    .spk-4 { --c: #be123c; --tint: #f8dde3; }
+    .spk-5 { --c: #7e22ce; --tint: #ecdcf8; }
+    .spk-6 { --c: #15803d; --tint: #d9f0e0; }
+    .spk-7 { --c: #0369a1; --tint: #d6eaf6; }
+    .spk-8 { --c: #9a3412; --tint: #f6e0d4; }
+
     /* chips: the four states */
     .chip {
       display: inline-flex;
@@ -130,8 +140,8 @@
       font-weight: 700;
       white-space: nowrap;
     }
-    .chip-recognized { background: #14757b; color: #fff; }
-    .chip-unknown { background: transparent; color: #14757b; border: 1px solid #14757b; }
+    .chip-recognized { background: var(--c, #14757b); color: #fff; }
+    .chip-unknown { background: transparent; color: var(--c, #14757b); border: 1px solid var(--c, #14757b); }
     .chip-pending { background: #e3e7e9; color: #7a8588; }
     .chip-pending::before {
       content: "";
@@ -150,6 +160,8 @@
       box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
     }
     .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .card[class*="spk-"] { box-shadow: inset 4px 0 0 var(--c), 0 2px 8px rgb(20 40 44 / 8%); }
+    .card[class*="spk-"] .card-name { color: var(--c); }
     .card-name { font-size: 13px; font-weight: 800; }
     .card-sub { margin-top: 2px; font-size: 11px; color: #5d7c80; }
     .card-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
@@ -162,15 +174,16 @@
       font-weight: 800;
       cursor: default;
     }
-    .btn-primary { background: #14757b; color: #fff; }
-    .btn-ghost { background: #e4f2f3; color: #14757b; }
+    .btn-primary { background: var(--c, #14757b); color: #fff; }
+    .btn-ghost { background: var(--tint, #e4f2f3); color: var(--c, #14757b); }
     .btn-text { background: transparent; color: #5d7c80; padding: 0 4px; font-weight: 700; }
     .play-bar {
       flex: 1;
       height: 6px;
       border-radius: 999px;
-      background: linear-gradient(90deg, #14757b 42%, #c9dfe1 42%);
+      background: linear-gradient(90deg, var(--c, #14757b) var(--p, 42%), #c9dfe1 var(--p, 42%));
     }
+    .swatch { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--c); }
     .unavailable {
       margin-top: 10px;
       padding: 8px 10px;
@@ -215,7 +228,8 @@
       border-radius: 50%;
       border: 2px solid #14757b;
     }
-    .radio-on { background: radial-gradient(circle, #14757b 40%, transparent 45%); }
+    .radio-on { background: radial-gradient(circle, var(--c, #14757b) 40%, transparent 45%); }
+    .radio[class*="spk-"] { border-color: var(--c); }
     .new-row { color: #14757b; font-size: 12px; font-weight: 800; padding: 10px 4px 2px; }
 
     /* settings */
@@ -343,24 +357,24 @@
               <div class="row-title">Dinner plans with Sam</div>
               <div class="row-meta">Today · 4:12 · Social</div>
               <div class="chips">
-                <span class="chip chip-recognized">Sam</span>
-                <span class="chip chip-unknown">Speaker 2</span>
+                <span class="chip spk-2 chip-recognized">Sam</span>
+                <span class="chip spk-1 chip-unknown">Speaker 2</span>
               </div>
             </div>
             <div class="row">
               <div class="row-title">Voice note to self</div>
               <div class="row-meta">Yesterday · 0:48 · Ideas</div>
               <div class="chips">
-                <span class="chip chip-recognized">Me</span>
+                <span class="chip spk-6 chip-recognized">Me</span>
               </div>
             </div>
             <div class="row">
               <div class="row-title">Team standup recap</div>
               <div class="row-meta">Mon · 9:02 · Work</div>
               <div class="chips">
-                <span class="chip chip-unknown">Speaker 1</span>
-                <span class="chip chip-unknown">Speaker 2</span>
-                <span class="chip chip-recognized">Priya</span>
+                <span class="chip spk-1 chip-unknown">Speaker 1</span>
+                <span class="chip spk-3 chip-unknown">Speaker 2</span>
+                <span class="chip spk-4 chip-recognized">Priya</span>
                 <span class="chip chip-overflow">+2</span>
               </div>
             </div>
@@ -381,19 +395,26 @@
             <div class="muted">Recognized, unknown, pending, overflow</div>
             <div class="row" style="margin-top:6px">
               <div class="chips">
-                <span class="chip chip-recognized">Sam</span>
-                <span class="chip chip-unknown">Speaker 2</span>
+                <span class="chip spk-2 chip-recognized">Sam</span>
+                <span class="chip spk-1 chip-unknown">Speaker 2</span>
                 <span class="chip chip-pending">Analyzing</span>
                 <span class="chip chip-overflow">+3</span>
               </div>
             </div>
             <div class="row">
               <div class="row-title" style="font-size:12px">Recognized</div>
-              <div class="row-meta">Filled teal, name only. Matched automatically or by the user.</div>
+              <div class="row-meta">Filled, name only. Matched automatically or by the user.</div>
             </div>
             <div class="row">
               <div class="row-title" style="font-size:12px">Unknown</div>
-              <div class="row-meta">Outlined teal, “Speaker N”. N is the order of first speech.</div>
+              <div class="row-meta">Outlined, “Speaker N”. N is the order of first speech.</div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Colour</div>
+              <div class="row-meta">Each speaker has its own colour from an 8-colour palette. A library speaker keeps the same colour everywhere. An unknown speaker gets a colour no other speaker in the same memory uses. Colour is never the only cue: fill, outline, and the name or “Speaker N” label also show state.</div>
+              <div class="chips" style="margin-top:6px">
+                <span class="swatch spk-1"></span><span class="swatch spk-2"></span><span class="swatch spk-3"></span><span class="swatch spk-4"></span><span class="swatch spk-5"></span><span class="swatch spk-6"></span><span class="swatch spk-7"></span><span class="swatch spk-8"></span>
+              </div>
             </div>
             <div class="row">
               <div class="row-title" style="font-size:12px">Pending</div>
@@ -414,8 +435,8 @@
               <div class="row-title">Team standup recap</div>
               <div class="row-meta">Mon · 9:02 · Work</div>
               <div class="chips">
-                <span class="chip chip-unknown">Speaker 1</span>
-                <span class="chip chip-recognized">Priya</span>
+                <span class="chip spk-1 chip-unknown">Speaker 1</span>
+                <span class="chip spk-4 chip-recognized">Priya</span>
               </div>
             </div>
             <div class="row">
@@ -438,7 +459,7 @@
           <div class="device"><div class="screen">
             <div class="screen-title">Speakers</div>
             <div class="muted">3 detected in this memory</div>
-            <div class="card">
+            <div class="card spk-1">
               <div class="card-head">
                 <div>
                   <div class="card-name">Speaker 1</div>
@@ -453,7 +474,7 @@
                 <span class="btn btn-primary">Assign</span>
               </div>
             </div>
-            <div class="card">
+            <div class="card spk-4">
               <div class="card-head">
                 <div>
                   <div class="card-name">Priya</div>
@@ -462,14 +483,14 @@
               </div>
               <div class="card-actions">
                 <span class="btn btn-ghost">▶ Play</span>
-                <div class="play-bar" style="background:linear-gradient(90deg,#14757b 15%,#c9dfe1 15%)"></div>
+                <div class="play-bar" style="--p:15%"></div>
               </div>
               <div class="card-actions">
                 <span class="btn btn-ghost">Change</span>
                 <span class="btn btn-text">Not this person</span>
               </div>
             </div>
-            <div class="card">
+            <div class="card spk-5">
               <div class="card-head">
                 <div>
                   <div class="card-name">Speaker 3</div>
@@ -485,7 +506,7 @@
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Speakers</div>
-            <div class="card">
+            <div class="card spk-3">
               <div class="card-head">
                 <div>
                   <div class="card-name">Speaker 2</div>
@@ -494,7 +515,7 @@
               </div>
               <div class="card-actions">
                 <span class="btn btn-ghost">▶ Play</span>
-                <div class="play-bar" style="background:linear-gradient(90deg,#14757b 60%,#c9dfe1 60%)"></div>
+                <div class="play-bar" style="--p:60%"></div>
               </div>
               <div class="card-actions">
                 <span class="btn btn-primary">Assign</span>
@@ -514,9 +535,9 @@
             <div class="sheet">
               <div class="sheet-grab"></div>
               <div class="search">Search speakers</div>
-              <div class="speaker-option"><span>Priya</span><span class="radio"></span></div>
-              <div class="speaker-option"><span>Sam</span><span class="radio radio-on"></span></div>
-              <div class="speaker-option"><span>Dad</span><span class="radio"></span></div>
+              <div class="speaker-option"><span>Priya</span><span class="radio spk-4"></span></div>
+              <div class="speaker-option"><span>Sam</span><span class="radio radio-on spk-2"></span></div>
+              <div class="speaker-option"><span>Dad</span><span class="radio spk-7"></span></div>
               <div class="new-row">+ New speaker</div>
               <div class="card-actions" style="justify-content:flex-end;margin-top:8px">
                 <span class="btn btn-text">Cancel</span>
