@@ -193,6 +193,26 @@ fun Memory.withCategories(ids: List<Int>): Memory = copy(
     categorizationStatus = CategorizationStatus.CATEGORIZED,
 )
 
+/** The status for a memory saved with [categories]. Any category present means it is categorized. */
+fun categorizationStatusFor(categories: List<Int>): CategorizationStatus =
+    if (categories.isEmpty()) CategorizationStatus.PENDING else CategorizationStatus.CATEGORIZED
+
+/**
+ * The memory with categories set by the user. An unchanged list keeps the existing status and attempts. A changed
+ * list resets them to match the new list. Clearing the list makes the memory pending again, so the recovery job
+ * fills it in.
+ */
+fun Memory.withUserCategories(ids: List<Int>): Memory =
+    if (ids == categories) {
+        this
+    } else {
+        copy(
+            categories = ids,
+            categorizationStatus = categorizationStatusFor(ids),
+            categorizationAttempts = 0,
+        )
+    }
+
 /**
  * The memory after one more finished categorization attempt. [empty] marks a blank transcription. Reaching the
  * limit gives up.

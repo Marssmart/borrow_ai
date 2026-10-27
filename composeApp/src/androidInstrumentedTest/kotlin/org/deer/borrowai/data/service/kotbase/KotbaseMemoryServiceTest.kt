@@ -11,7 +11,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.CategorizationStatus
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.MAX_CATEGORIZATION_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -375,6 +377,71 @@ class KotbaseMemoryServiceTest {
 
         assertEquals(MemoryError.Malformed("bad-2"), service.recordSummary("bad-2", "x").errorOrNull())
         assertEquals(MemoryError.Malformed("bad-2"), service.giveUpSummary("bad-2").errorOrNull())
+    }
+
+    @Test
+    fun createWithCategoriesIsCategorizedAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Tagged", "", "", categories = listOf(2))).getOrNull()!!
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+
+        assertEquals(listOf(2), found.categories)
+        assertEquals(CategorizationStatus.CATEGORIZED, found.categorizationStatus)
+        assertEquals(0, found.categorizationAttempts)
+    }
+
+    @Test
+    fun categorizationAttemptAndGiveUpPersistAcrossReopen() = runTest {
+        val first = openService()
+        val attempted = first.create(MemoryDraft("Attempt", "", "Transcript", "recordings/a1.m4a")).getOrNull()!!
+        val gaveUp = first.create(MemoryDraft("Gave up", "", "Transcript", "recordings/a2.m4a")).getOrNull()!!
+        assertEquals(Either.Right(Unit), first.recordCategorizationAttempt(attempted.id, empty = false))
+        assertEquals(Either.Right(Unit), first.giveUpCategorization(gaveUp.id))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+
+        val pending = reopened.findById(attempted.id).getOrNull()!!
+        assertEquals(CategorizationStatus.PENDING, pending.categorizationStatus)
+        assertEquals(1, pending.categorizationAttempts)
+        val finished = reopened.findById(gaveUp.id).getOrNull()!!
+        assertEquals(CategorizationStatus.GAVE_UP, finished.categorizationStatus)
+        assertEquals(MAX_CATEGORIZATION_ATTEMPTS, finished.categorizationAttempts)
+    }
+
+    @Test
+    fun clearingCategoriesOnEditReturnsMemoryToPendingAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Cleared", "", "Transcript", "recordings/c3.m4a", categories = listOf(4)))
+            .getOrNull()!!
+        assertEquals(Either.Right(Unit), first.recordCategorizationAttempt(created.id, empty = false))
+
+        first.update(created.id, MemoryDraft("Cleared", "", "Transcript", "recordings/c3.m4a", categories = emptyList()))
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById(created.id).getOrNull()!!
+
+        assertEquals(emptyList(), found.categories)
+        assertEquals(CategorizationStatus.PENDING, found.categorizationStatus)
+        assertEquals(0, found.categorizationAttempts)
+    }
+
+    @Test
+    fun legacyMemoryWithoutCategorizationKeysReadsAsPending() = runTest {
+        openService()
+        saveRawMemory(id = "legacy-status", recordingPath = "recordings/legacy-status.m4a")
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val found = openService().findById("legacy-status").getOrNull()!!
+
+        assertEquals(CategorizationStatus.PENDING, found.categorizationStatus)
+        assertEquals(0, found.categorizationAttempts)
     }
 
     @Test

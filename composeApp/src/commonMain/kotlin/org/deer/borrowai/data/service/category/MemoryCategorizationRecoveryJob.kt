@@ -7,6 +7,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
@@ -29,11 +31,16 @@ class MemoryCategorizationRecoveryJob(
         require(batchSize > 0) { "Batch size must be positive." }
     }
 
-    /** Processes one batch of eligible memories. Returns how many memories received categories. */
-    suspend fun recover(): Int {
-        if (isRecording()) return 0
+    private val runMutex = Mutex()
+
+    /**
+     * Processes one batch of eligible memories. Returns how many memories received categories. Runs are serialized,
+     * so overlapping triggers cannot snapshot the same memory or overwrite a stored result with a later failure.
+     */
+    suspend fun recover(): Int = runMutex.withLock {
+        if (isRecording()) return@withLock 0
         val memories = memoryService.findAll().fold(
-            ifLeft = { return 0 },
+            ifLeft = { return@withLock 0 },
             ifRight = { it },
         )
         var stored = 0
@@ -51,7 +58,7 @@ class MemoryCategorizationRecoveryJob(
             // A failing store would leave attempt counts unchanged, so stop instead of retrying every memory forever.
             if (outcome == Outcome.MODEL_MISSING || outcome == Outcome.STORE_FAILED) break
         }
-        return stored
+        stored
     }
 
     private fun isEligible(memory: Memory): Boolean =

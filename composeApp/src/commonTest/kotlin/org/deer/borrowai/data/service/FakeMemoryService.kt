@@ -9,6 +9,7 @@ import arrow.core.left
 import arrow.core.right
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.categorizationStatusFor
 import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -26,6 +27,7 @@ import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
+import org.deer.borrowai.data.domain.withUserCategories
 
 class FakeMemoryService(
     initialMemories: List<Memory> = emptyList(),
@@ -64,6 +66,7 @@ class FakeMemoryService(
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
+            categorizationStatus = categorizationStatusFor(draft.categories),
         )
         records[memory.id] = memory
         publishMemories()
@@ -72,7 +75,7 @@ class FakeMemoryService(
 
     override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.copy(categories = categories) }
+        return updateActive(id) { it.withUserCategories(categories) }
     }
 
     override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
@@ -81,8 +84,7 @@ class FakeMemoryService(
             title = draft.title,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
-            categories = draft.categories,
-        )
+        ).withUserCategories(draft.categories)
         records[id] = updated
         publishMemories()
         Unit.right()

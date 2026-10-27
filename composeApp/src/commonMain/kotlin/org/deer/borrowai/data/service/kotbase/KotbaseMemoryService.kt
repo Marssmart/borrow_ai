@@ -35,7 +35,9 @@ import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
 import org.deer.borrowai.data.domain.afterFinishedCategorizationAttempt
 import org.deer.borrowai.data.domain.CategorizationStatus
+import org.deer.borrowai.data.domain.categorizationStatusFor
 import org.deer.borrowai.data.domain.withCategories
+import org.deer.borrowai.data.domain.withUserCategories
 import org.deer.borrowai.data.domain.withCategorizationGaveUp
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
@@ -82,6 +84,7 @@ class KotbaseMemoryService private constructor(
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
+            categorizationStatus = categorizationStatusFor(draft.categories),
         )
         writeAndPublish { database.save(memory.toDocument()) }.map { memory }
     }
@@ -134,15 +137,14 @@ class KotbaseMemoryService private constructor(
                 title = draft.title,
                 transcription = draft.transcription,
                 recordingPath = draft.recordingPath,
-                categories = draft.categories,
-            )
+            ).withUserCategories(draft.categories)
             writeAndPublish { database.save(updated.toDocument()) }.bind()
         }
     }
 
     override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.copy(categories = categories) }
+        return updateActive(id) { it.withUserCategories(categories) }
     }
 
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {

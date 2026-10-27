@@ -2,6 +2,7 @@ package org.deer.borrowai.data.service.category
 
 import arrow.core.Either
 import arrow.core.left
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -85,6 +86,22 @@ class MemoryCategorizationRecoveryJobTest {
         assertEquals(listOf(1, 2), updated.categories)
         assertEquals(CategorizationStatus.CATEGORIZED, updated.categorizationStatus)
         assertEquals(0, updated.categorizationAttempts)
+    }
+
+    @Test
+    fun overlappingRunsDoNotCategorizeTheSameMemoryTwice() = runTest {
+        val service = service(memory("a"))
+        val categorizer = ScriptedCategorizer {
+            delay(50)
+            CategorizationResult.Categories(listOf(1))
+        }
+        val job = job(service, categorizer)
+
+        val first = async { job.recover() }
+        val second = async { job.recover() }
+
+        assertEquals(1, first.await() + second.await())
+        assertEquals(1, categorizer.calls)
     }
 
     @Test

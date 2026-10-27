@@ -58,4 +58,33 @@ class MemoryCategorizationStatusTest {
         assertEquals(MAX_CATEGORIZATION_ATTEMPTS, gaveUp.categorizationAttempts)
         assertEquals(CategorizationStatus.GAVE_UP, gaveUp.categorizationStatus)
     }
+
+    @Test
+    fun preTaggedDraftStatusFollowsItsCategories() {
+        assertEquals(CategorizationStatus.CATEGORIZED, categorizationStatusFor(listOf(3)))
+        assertEquals(CategorizationStatus.PENDING, categorizationStatusFor(emptyList()))
+    }
+
+    @Test
+    fun unchangedUserCategoriesKeepStatusAndAttempts() {
+        val original = memory(categories = listOf(1), status = CategorizationStatus.GAVE_UP, attempts = 3)
+        assertEquals(original, original.withUserCategories(listOf(1)))
+    }
+
+    @Test
+    fun changedUserCategoriesResetAttemptsAndMarkCategorized() {
+        val changed = memory(categories = listOf(1), status = CategorizationStatus.GAVE_UP, attempts = 3)
+            .withUserCategories(listOf(2))
+        assertEquals(listOf(2), changed.categories)
+        assertEquals(CategorizationStatus.CATEGORIZED, changed.categorizationStatus)
+        assertEquals(0, changed.categorizationAttempts)
+    }
+
+    @Test
+    fun clearingUserCategoriesMakesMemoryPendingAgain() {
+        val cleared = memory(categories = listOf(1), status = CategorizationStatus.CATEGORIZED)
+            .withUserCategories(emptyList())
+        assertEquals(CategorizationStatus.PENDING, cleared.categorizationStatus)
+        assertTrue(cleared.isCategorizationRetryable)
+    }
 }
