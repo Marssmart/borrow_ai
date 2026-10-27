@@ -51,12 +51,13 @@ class MemoryCategorizationRecoveryJob(
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
+                logCategorization("Unexpected error while categorizing ${memory.id}.", exception)
                 Outcome.NOT_STORED
             }
             if (outcome == Outcome.STORED) stored++
             // A missing model will be missing for every memory, so stop instead of repeating the same result.
-            // A failing store would leave attempt counts unchanged, so stop instead of retrying every memory forever.
-            if (outcome == Outcome.MODEL_MISSING || outcome == Outcome.STORE_FAILED) break
+            // A failed store only affects this memory, so the rest of the batch still runs.
+            if (outcome == Outcome.MODEL_MISSING) break
         }
         stored
     }
@@ -68,24 +69,45 @@ class MemoryCategorizationRecoveryJob(
 
     private suspend fun process(memory: Memory): Outcome =
         when (val result = categorize(memory.transcription)) {
-            is CategorizationResult.Categories ->
+            is CategorizationResult.Categories -> {
+                result.backfillFailure?.let {
+                    logCategorization("Backfill failed for ${memory.id}; storing ${result.ids.size} categories.", it)
+                }
                 if (memoryService.recordCategorization(memory.id, result.ids).isRight()) {
+                    logCategorization("Stored ${result.ids.size} categories for ${memory.id}.")
                     Outcome.STORED
                 } else {
+                    logCategorization("Could not store categories for ${memory.id}.")
                     Outcome.STORE_FAILED
                 }
-            CategorizationResult.Empty -> recordAttempt(memory.id, empty = true)
-            CategorizationResult.Unavailable -> Outcome.NOT_STORED
-            CategorizationResult.ModelMissing -> Outcome.MODEL_MISSING
-            is CategorizationResult.Failed -> recordAttempt(memory.id, empty = false)
+            }
+            CategorizationResult.Empty -> recordAttempt(memory.id, empty = true, reason = "empty transcription")
+            CategorizationResult.Unavailable -> {
+                logCategorization("Categorizer unavailable on this build; skipped ${memory.id}.")
+                Outcome.NOT_STORED
+            }
+            CategorizationResult.ModelMissing -> {
+                logCategorization("Categorizer model missing; stopping the batch.")
+                Outcome.MODEL_MISSING
+            }
+            is CategorizationResult.Failed ->
+                recordAttempt(memory.id, empty = false, reason = "categorizer failed", cause = result.cause)
         }
 
-    private suspend fun recordAttempt(id: String, empty: Boolean): Outcome =
-        if (memoryService.recordCategorizationAttempt(id, empty).isRight()) {
+    private suspend fun recordAttempt(
+        id: String,
+        empty: Boolean,
+        reason: String,
+        cause: Throwable? = null,
+    ): Outcome {
+        logCategorization("No categories for $id ($reason); recording attempt.", cause)
+        return if (memoryService.recordCategorizationAttempt(id, empty).isRight()) {
             Outcome.NOT_STORED
         } else {
+            logCategorization("Could not record categorization attempt for $id.")
             Outcome.STORE_FAILED
         }
+    }
 
     private suspend fun categorize(transcription: String): CategorizationResult = try {
         withTimeout(timeoutMillis) { categorizer.categorize(transcription) }

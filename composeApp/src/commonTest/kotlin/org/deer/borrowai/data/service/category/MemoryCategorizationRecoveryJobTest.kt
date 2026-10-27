@@ -256,27 +256,27 @@ class MemoryCategorizationRecoveryJobTest {
     }
 
     @Test
-    fun failedCategoryWriteStopsBatchWithoutCountingAttempt() = runTest {
+    fun failedCategoryWriteDoesNotStopBatch() = runTest {
         val fake = service(memory("a"), memory("b"))
         val failing = FailingCategoryWrites(fake)
         val categorizer = ScriptedCategorizer { CategorizationResult.Categories(listOf(1)) }
 
         assertEquals(0, job(failing, categorizer).recover())
 
-        assertEquals(1, categorizer.calls)
+        assertEquals(2, categorizer.calls)
         assertEquals(0, fake.get("a").categorizationAttempts)
         assertTrue(fake.get("a").categories.isEmpty())
     }
 
     @Test
-    fun failedAttemptWriteStopsBatch() = runTest {
+    fun failedAttemptWriteDoesNotStopBatch() = runTest {
         val fake = service(memory("a"), memory("b"))
         val failing = FailingCategoryWrites(fake)
         val categorizer = ScriptedCategorizer { CategorizationResult.Failed(IllegalStateException("crash")) }
 
         assertEquals(0, job(failing, categorizer).recover())
 
-        assertEquals(1, categorizer.calls)
+        assertEquals(2, categorizer.calls)
         assertEquals(0, fake.get("a").categorizationAttempts)
     }
 

@@ -31,6 +31,7 @@ internal data class SavedMemoriesUiState(
     val hasOpenedDetail: Boolean = false,
     val playbackError: PlaybackError? = null,
     val summaryModelMissing: Boolean = false,
+    val categoryNames: Map<Int, String> = emptyMap(),
 )
 
 internal class SavedMemoriesStateHolder(
@@ -53,6 +54,7 @@ internal class SavedMemoriesStateHolder(
         scope.launch {
             memoryService.getState().collect { memories ->
                 updateMemories(memories)
+                refreshCategoryNames()
             }
         }
         scope.launch {
@@ -141,6 +143,13 @@ internal class SavedMemoriesStateHolder(
         }
     }
 
+    private suspend fun refreshCategoryNames() {
+        memoryService.findCategories().fold({}) { categories ->
+            val names = categories.associate { it.id to it.name }
+            mutableUiState.update { it.copy(categoryNames = names) }
+        }
+    }
+
     private fun setPlaybackError(error: PlaybackError) {
         mutableUiState.update { it.copy(playbackError = error) }
     }
@@ -170,6 +179,10 @@ internal class SavedMemoriesStateHolder(
         val MEMORY_CARD_CONTENT_SPACING = 8.dp
         val MEMORY_CARD_GLYPH_SPACING = 10.dp
         val MEMORY_CARD_SURFACE_ALPHA = 0.92f
+        val MEMORY_CATEGORY_CHIP_SHAPE = RoundedCornerShape(50)
+        val MEMORY_CATEGORY_CHIP_PADDING = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+        val MEMORY_CATEGORY_CHIP_SPACING = 6.dp
+        const val MEMORY_CATEGORY_CHIP_ALPHA = 0.12f
 
         val MEMORY_DETAIL_CONTENT_PADDING = PaddingValues(
             start = 22.dp,

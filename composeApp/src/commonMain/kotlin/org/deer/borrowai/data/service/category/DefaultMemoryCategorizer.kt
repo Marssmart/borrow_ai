@@ -87,6 +87,10 @@ class DefaultMemoryCategorizer(
                     is CategoryModelReply.Text -> {
                         batchScores = CategoryPrompt.parseScores(reply.text, batchIds)
                         if (batchScores.keys == batchIds) break
+                        logCategorization(
+                            "Scoring attempt $attempt covered ${batchScores.size} of ${batchIds.size} categories " +
+                                "(reply ${reply.text.length} chars): ${reply.text.take(SCORING_REPLY_LOG_CHARS)}",
+                        )
                     }
                     CategoryModelReply.ModelMissing -> return ScoringOutcome.Stopped(CategorizationResult.ModelMissing)
                     is CategoryModelReply.Failed -> return ScoringOutcome.Stopped(CategorizationResult.Failed(reply.cause))
@@ -138,6 +142,9 @@ class DefaultMemoryCategorizer(
                     is Either.Right -> ids += created.value.id
                 }
             }
+            if (ids.isEmpty() && persistenceFailure == null) {
+                logCategorization("Backfill reply yielded no usable categories (reply ${text.length} chars).")
+            }
             BackfillOutcome.Created(ids, persistenceFailure)
         }
     }
@@ -163,9 +170,16 @@ class DefaultMemoryCategorizer(
     }
 
     companion object {
-        const val DEFAULT_BATCH_SIZE = 10
+        /**
+         * Scored one category per request. On device the model replied to a 10-category batch with a single
+         * `id|score` line, so every batch failed coverage.
+         */
+        const val DEFAULT_BATCH_SIZE = 1
 
         /** A batch whose reply does not score every category is asked again once before failing. */
         const val MAX_SCORING_ATTEMPTS = 2
+
+        /** Scoring replies hold only ids and scores, so a short prefix is safe to log. */
+        private const val SCORING_REPLY_LOG_CHARS = 200
     }
 }

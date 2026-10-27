@@ -304,7 +304,7 @@ class DefaultMemoryCategorizerTest {
             CategoryModelReply.Text(covered.joinToString("\n") { "$it|90" })
         }
 
-        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+        val result = DefaultMemoryCategorizer(service(3), model, batchSize = 3).categorize("note")
 
         assertEquals(CategorizationResult.Categories(listOf(1, 2, 3)), result)
         assertEquals(2, model.scoringCalls.size)
@@ -317,11 +317,23 @@ class DefaultMemoryCategorizerTest {
             CategoryModelReply.Text("${scoredIds(user).first()}|90")
         }
 
-        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+        val result = DefaultMemoryCategorizer(service(3), model, batchSize = 3).categorize("note")
 
         assertIs<CategorizationResult.Failed>(result)
         assertEquals(DefaultMemoryCategorizer.MAX_SCORING_ATTEMPTS, model.scoringCalls.size)
         assertTrue(model.backfillCalls.isEmpty())
+    }
+
+    @Test
+    fun `default batch scores one category per request`() = runTest {
+        val model = ScriptedModel { _, user ->
+            CategoryModelReply.Text(scoredIds(user).joinToString("\n") { "$it|90" })
+        }
+
+        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+
+        assertEquals(CategorizationResult.Categories(listOf(1, 2, 3)), result)
+        assertEquals(3, model.scoringCalls.size)
     }
 
     @Test
