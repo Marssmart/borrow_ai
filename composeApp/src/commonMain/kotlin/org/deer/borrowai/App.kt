@@ -2,7 +2,11 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -19,8 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import org.deer.borrowai.data.app.AppServices
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.deer.borrowai.data.app.AppServices
 
 private val BorrowColors = lightColorScheme(
     primary = Color(0xFF14757B),
@@ -102,9 +107,14 @@ fun App(services: AppServices) {
                             ),
                         ),
                 )
+                val navBarInset = WindowInsets.navigationBars
+                    .asPaddingValues()
+                    .calculateBottomPadding()
                 HorizontalPager(
                     state = appStateHolder.mainPagerState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(
+                        bottom = BottomNavDockReserve + navBarInset,
+                    ),
                     userScrollEnabled = !appUiState.isMemoryDetailVisible,
                 ) { page ->
                     when (page) {
@@ -118,10 +128,24 @@ fun App(services: AppServices) {
 
                         AppShellStateHolder.MEMORIES_PAGE -> SavedMemoriesScreen(
                             services = services,
-                            onReturnToCapture = appStateHolder::returnToCapture,
+                            onDetailBackRegistered = appStateHolder::registerMemoryDetailBack,
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                         )
+
+                        AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen()
                     }
+                }
+                if (appUiState.isMemoryDetailVisible) {
+                    MemoryDetailNavBar(
+                        onBack = appStateHolder::backFromMemoryDetail,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                } else {
+                    BottomNavBar(
+                        selectedPage = appStateHolder.mainPagerState.currentPage,
+                        onSelect = appStateHolder::navigateToPage,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
                 }
             }
         }

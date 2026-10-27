@@ -1,0 +1,7 @@
+<resources>
+    <string name="nav_record">Record</string>
+    <string name="nav_memories">Memories</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_back">Back to memories</string>
+    <string name="settings_coming_soon">Settings - Coming soon</string>
+</resources>

@@ -169,8 +169,8 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited)";
-				CURRENT_PROJECT_VERSION = 47;
-				MARKETING_VERSION = 1.7.0;
+				CURRENT_PROJECT_VERSION = 50;
+				MARKETING_VERSION = 1.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = org.deer.borrowai.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -196,8 +196,8 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited)";
-				CURRENT_PROJECT_VERSION = 47;
-				MARKETING_VERSION = 1.7.0;
+				CURRENT_PROJECT_VERSION = 50;
+				MARKETING_VERSION = 1.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = org.deer.borrowai.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

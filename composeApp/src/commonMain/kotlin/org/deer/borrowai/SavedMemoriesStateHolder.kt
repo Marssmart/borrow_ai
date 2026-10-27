@@ -96,14 +96,6 @@ internal class SavedMemoriesStateHolder(
         }
     }
 
-    fun returnToCapture(onReturnToCapture: () -> Unit) {
-        scope.launch {
-            pagerState.animateScrollToPage(MEMORY_LIST_PAGE)
-            closeDetailState()
-            onReturnToCapture()
-        }
-    }
-
     fun togglePlayback(memoryId: String, content: PlaybackContent) {
         if (!playbackAvailable) return
         val target = PlaybackTarget(memoryId = memoryId, content = content)
@@ -171,7 +163,6 @@ internal class SavedMemoriesStateHolder(
             end = 20.dp,
             bottom = 14.dp,
         )
-        val MEMORY_LIST_FOOTER_PADDING = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
         val MEMORY_LIST_ITEM_SPACING = 12.dp
 
         val MEMORY_CARD_SHAPE = RoundedCornerShape(23.dp)
@@ -180,12 +171,6 @@ internal class SavedMemoriesStateHolder(
         val MEMORY_CARD_GLYPH_SPACING = 10.dp
         val MEMORY_CARD_SURFACE_ALPHA = 0.92f
 
-        val MEMORY_DETAIL_NAVIGATION_PADDING = PaddingValues(
-            start = 12.dp,
-            top = 8.dp,
-            end = 12.dp,
-            bottom = 0.dp,
-        )
         val MEMORY_DETAIL_CONTENT_PADDING = PaddingValues(
             start = 22.dp,
             top = 0.dp,
