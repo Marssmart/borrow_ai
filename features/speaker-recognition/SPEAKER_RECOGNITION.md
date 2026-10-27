@@ -31,6 +31,7 @@ Everything runs on-device. Audio never leaves the phone.
 - Play a sample from each speaker's own speech in the detail view.
 - Assign an unknown speaker to a previously named speaker with one tap.
 - Persist speakers, embeddings, and samples so the library grows over time.
+- Let the user rename, merge, and delete speakers in a speaker library screen (v1, per Q-4).
 - Re-analyze old memories on demand or in the background when the models change or the user adds a speaker.
 - Keep the existing recording, transcription, and categorization flows unchanged for users who never open the feature.
 
@@ -39,7 +40,6 @@ Everything runs on-device. Audio never leaves the phone.
 - Cloud speaker identification or any server-side voice processing.
 - Real-time speaker labels during recording. Analysis runs after the recording is saved.
 - Speaker-attributed transcripts (who said which sentence). Chips and samples only in v1.
-- A full speaker library management screen (rename, merge, delete speakers). Assign sheet only in v1.
 - Voice enrollment flows that ask the user to read a script.
 - iOS speaker analysis in v1. iOS has no transcriber today, so the pipeline has no iOS input yet (see §10).
 
@@ -106,7 +106,7 @@ As a user, I want new memories to show my known speakers without me doing anythi
 As a user, I want older memories to pick up speakers I added later.
 
 - AC-5.1: Each memory stores the speaker-model version and matching-library version it was analyzed with.
-- AC-5.2: When a speaker is created or the speaker model changes, memories with an older version are queued for re-analysis, at low priority.
+- AC-5.2: When a speaker is created or the speaker model changes, memories with an older version are queued for re-analysis. The queue is drained in the background, at low priority, on every app launch.
 - AC-5.3: Re-analysis never removes manual assignments. It only fills unknown or auto-matched occurrences.
 - AC-5.4: The user can trigger "Re-analyze all" from Settings. It shows progress and can be cancelled.
 
@@ -230,9 +230,12 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 
 ### 7.3 Re-analysis
 
-- Triggered by: speaker created, speaker model upgraded, "Re-analyze all" in Settings.
+- Queued by: speaker created, speaker model upgraded, "Re-analyze all" in Settings.
+- Drained by: app launch, in the background at low priority (AC-5.2).
 - Re-analysis recomputes segmentation and clusters, then re-runs matching. It keeps `MANUAL` links where the occurrence's centroid still maps to the same speaker. Otherwise the manual link stays as it was (see AC-5.3). Simple rule for v1: a manual link is never removed by re-analysis.
 - Runs with the same low priority as other background jobs. Pauses while recording.
+- Launch gate (proposed, confirm in S-6): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch.
+- Scope in v1: the drain runs only while the app process is alive. No WorkManager or BGTask job in v1. The queue is persisted, so a killed app loses nothing.
 
 ---
 
@@ -293,7 +296,14 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 - Row: model status (downloaded, downloading, not available on this device).
 - Row: "Re-analyze all memories" (AC-5.4).
 
-### 9.5 Thresholds (proposals, to be tuned in spike)
+### 9.5 Speaker library screen
+
+- Reached from the “Speakers ›” link in the memory list header (to confirm). A Settings entry point is optional and not in v1 design.
+- Lists every library speaker with name, number of memories, and last-seen date.
+- Actions: rename, merge into another speaker, delete. Delete unlinks occurrences and does not delete memories.
+- Merge moves all embeddings and links to the target and marks the source as deleted.
+
+### 9.6 Thresholds (proposals, to be tuned in spike)
 
 | Parameter | Proposed | Used for |
 |---|---|---|
@@ -341,19 +351,19 @@ The spike writes its numbers into this file (§11 table, filled in) before imple
 
 ## 12. Open questions
 
-These need decisions before implementation. Each one has a proposed default.
+These were open before implementation. All nine are decided, recorded in the Decision column below.
 
-| # | Question | Proposed default |
+| # | Question | Decision |
 |---|---|---|
-| Q-1 | Maximum number of speakers per memory? | 8 |
-| Q-2 | Overlapping speech: use the overlapped part as a sample? | No. Only single-speaker runs. |
-| Q-3 | Should manual matches be re-linked if a better speaker appears later? | No. Manual is final. |
-| Q-4 | Is a library management screen needed in v1? | No. Assign sheet only. |
-| Q-5 | iOS: hide chips or show them as unavailable? | Hide. |
-| Q-6 | When does re-analysis run? | Background, low priority, on speaker creation and on model upgrade. |
-| Q-7 | Is a consent screen needed, or is a Settings explanation enough? | Settings explanation only. Confirm with legal if the app targets regions with biometric rules. |
-| Q-8 | Which speaker model license is acceptable? | Pending S-5. |
-| Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | Separate service, to keep memory persistence unchanged. |
+| Q-1 | Maximum number of speakers per memory? | **8** (decided). |
+| Q-2 | Overlapping speech: use the overlapped part as a sample? | **No.** Only single-speaker runs (decided). |
+| Q-3 | Should manual matches be re-linked if a better speaker appears later? | **No.** Manual is final (decided). |
+| Q-4 | Is a library management screen needed in v1? | **Yes.** Rename, merge, delete in v1 (decided). Changes §2 and §9.5. |
+| Q-5 | iOS: hide chips or show them as unavailable? | **Hide** (decided). |
+| Q-6 | When does re-analysis run? | **Background, low priority, on every app launch** (decided). Queueing still happens on speaker creation and model upgrade (AC-5.2). |
+| Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Settings explanation only** (decided). Legal risk accepted in §14. Legal review still required before P2 ships. |
+| Q-8 | Which speaker model license is acceptable? | **Any license that allows commercial use** (decided). S-5 still verifies each model. |
+| Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
 
 ---
 
@@ -375,8 +385,9 @@ These need decisions before implementation. Each one has a proposed default.
 | Slow on low-end devices | Battery, heat, long queue | Tier gating (§8.2), low priority, pause during recording. |
 | False matches confuse users | Wrong names shown | Conservative threshold, "Not this person" action, manual wins. |
 | Model license blocks shipping | Feature cannot ship | Spike S-5 before any code. |
+| Voiceprints collected without consent | Legal exposure (for example BIPA, GDPR Art. 9, CUBI) | Q-7 decided: Settings explanation only, no consent screen. Legal review required before P2 ships. If review says consent is needed, add the screen before first use. |
 | Overlapping speech gives bad samples | Poor playback | Single-speaker runs only (AC-2.5). |
-| Re-analysis storms the battery | Poor UX | Batch size cap, low priority, Settings control. |
+| Re-analysis storms the battery | Poor UX | Launch gate in §7.3 (not recording, battery saver off, battery ≥ 20% or charging), batch size cap, low priority, Settings "Re-analyze all" and an on/off toggle. |
 | iOS feature gap | Inconsistent behavior | Hidden on iOS in v1 (Q-5). |
 | Couchbase schema change | Data migration | Separate collections. Memory schema change is additive only. |
 
@@ -389,8 +400,8 @@ These need decisions before implementation. Each one has a proposed default.
 | P0 Spike | §11 spike on Android only | Go on S-1 to S-6. Numbers written to this file. |
 | P1 Data and pipeline | Entities, `KotbaseSpeakerService`, clustering and matching in `commonMain`, runner, unit tests, no UI | Unit tests green. Analysis writes occurrences on a test memory. |
 | P2 Read-only UI | Chips on list, speaker cards with sample playback, Settings toggle | US-1, US-2 acceptance criteria met on Android. |
-| P3 Assignment | Assign sheet, auto-matching, "Not this person", manual links | US-3, US-4 met. |
-| P4 Re-analysis | Queue on speaker creation, Settings "Re-analyze all" | US-5 met. |
+| P3 Assignment | Assign sheet, speaker library screen (rename, merge, delete), auto-matching, "Not this person", manual links | US-3, US-4 met. Library screen works on Android. |
+| P4 Re-analysis | Queue on speaker creation and model upgrade, drain on app launch, Settings "Re-analyze all" | US-5 met. |
 | P5 iOS | Only after an iOS transcriber exists | Separate plan. |
 
 Each phase is a separate MR with its own CHANGELOG entry and version bump (see `AGENTS.md`).
@@ -429,7 +440,7 @@ Use short public-domain or self-recorded clips. No real user audio in the repo.
 ## 17. Definition of done
 
 - [ ] Spike numbers recorded in §11, and all go criteria met.
-- [ ] Open questions Q-1 to Q-9 answered and recorded here.
+- [x] Open questions Q-1 to Q-9 answered and recorded here.
 - [ ] Model licenses confirmed and pinned in `ModelCatalog`.
 - [ ] Phase exit criteria in §15 met for each shipped phase.
 - [ ] Unit and instrumented tests green in CI (`./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug`).

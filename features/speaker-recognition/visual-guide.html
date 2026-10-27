@@ -338,6 +338,7 @@
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Memories</div>
+            <div class="muted" style="margin-top:-6px">Speakers ›  <span class="muted">(entry point, to confirm)</span></div>
             <div class="row">
               <div class="row-title">Dinner plans with Sam</div>
               <div class="row-meta">Today · 4:12 · Social</div>
@@ -529,9 +530,64 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">3 · Settings</p>
+      <p class="eyebrow">3 · Speaker library</p>
+      <h2>Rename, merge, delete</h2>
+      <p class="section-note">Reached from “Speakers ›” in the memory list header (to confirm). Deleting a speaker never deletes memories. Their chips become “Speaker N” again. Merging combines voice samples, and memories keep their names.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Speakers</div>
+            <div class="muted">Named speakers in this app</div>
+            <div class="row">
+              <div class="row-title">Priya</div>
+              <div class="row-meta">6 memories · last 2 days</div>
+            </div>
+            <div class="row">
+              <div class="row-title">Sam</div>
+              <div class="row-meta">5 memories · last week</div>
+            </div>
+            <div class="row">
+              <div class="row-title">Dad</div>
+              <div class="row-meta">1 memory · 3 weeks ago</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Library · list</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen" style="justify-content:flex-end">
+            <div class="screen-title" style="margin-top:auto">Speaker: Sam</div>
+            <div class="sheet">
+              <div class="sheet-grab"></div>
+              <div class="speaker-option"><span>Rename</span><span class="muted">›</span></div>
+              <div class="speaker-option"><span>Merge into…</span><span class="muted">›</span></div>
+              <div class="speaker-option"><span style="color:#b3261e">Delete</span><span class="muted">›</span></div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Library · actions</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen" style="justify-content:flex-end">
+            <div class="screen-title" style="margin-top:auto">Delete Dad?</div>
+            <div class="sheet">
+              <div class="sheet-grab"></div>
+              <div class="muted">Memories stay. Dad’s chip becomes “Speaker N” in each one. Voice samples are removed.</div>
+              <div class="card-actions" style="justify-content:flex-end;margin-top:8px">
+                <span class="btn btn-text">Cancel</span>
+                <span class="btn btn-primary">Delete</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Library · delete</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">4 · Settings</p>
       <h2>Opt-in and re-analysis</h2>
-      <p class="section-note">Off by default. The privacy line is required copy (see master spec §13). Re-analysis is a single action with progress shown in place.</p>
+      <p class="section-note">Off by default. The privacy line is required copy (see master spec §13). Re-analysis is queued on speaker creation or model upgrade, and drains in the background on app launch. The “Start re-analysis” action is also available here.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -546,7 +602,7 @@
             </div>
             <div class="setting">
               <div class="setting-row"><span>Re-analyze all memories</span></div>
-              <div class="setting-note">Runs in the background at low priority. Pauses while recording.</div>
+              <div class="setting-note">Runs in the background at low priority. Pauses while recording, when battery saver is on, or when battery is below 20% and not charging (proposed, §7.3).</div>
               <div class="setting-link">Start re-analysis</div>
             </div>
           </div></div>
@@ -567,7 +623,7 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">4 · Pipeline</p>
+      <p class="eyebrow">5 · Pipeline</p>
       <h2>What the user sees, step by step</h2>
       <p class="section-note">Analysis runs after transcription, so transcription status is never blocked by speaker work.</p>
       <div class="flow">
@@ -580,7 +636,7 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">5 · States</p>
+      <p class="eyebrow">6 · States</p>
       <h2>Screen states</h2>
       <p class="section-note">Every state the UI must handle. Each row maps to an acceptance criterion in the master spec.</p>
       <table>
@@ -597,6 +653,9 @@
           <tr><td>Feature off</td><td>No chips</td><td>Section hidden</td><td>AC-6.3</td></tr>
           <tr><td>Analysis failed</td><td>No chips, retry on next launch</td><td>“Couldn’t analyze voices. Try again later.”</td><td>§7.1 attempt cap</td></tr>
           <tr><td>Unavailable tier</td><td>No chips</td><td>Section hidden</td><td>§8.2</td></tr>
+          <tr><td>Library empty</td><td>—</td><td>“No speakers yet. Names appear when you assign a speaker.”</td><td>§9.5</td></tr>
+          <tr><td>Delete speaker</td><td>Chips become “Speaker N”</td><td>Memories stay. Samples removed.</td><td>§9.5</td></tr>
+          <tr><td>Launch gate closed</td><td>No change</td><td>Re-analysis waits for the next launch</td><td>AC-5.2, §7.3</td></tr>
         </tbody>
       </table>
     </section>
