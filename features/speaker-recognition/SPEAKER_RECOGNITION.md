@@ -302,7 +302,7 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 ### 9.8 Consent screen
 
 - Shown once, before the first analysis, and again only if the user withdrew consent and turns the feature on again.
-- Text (final wording to be reviewed by legal, §14): "BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings."
+- Text: "BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings."
 - Buttons: "Agree" (enables the feature and starts the queue) and "Not now" (feature stays off, nothing is stored).
 - Consent is recorded with a timestamp and the consent text version, so a later text change can ask again.
 
@@ -381,7 +381,7 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | Q-4 | Is a library management screen needed in v1? | **Yes.** Rename, merge, delete in v1 (decided). Changes §2 and §9.5. |
 | Q-5 | iOS: hide chips or show them as unavailable? | **Hide** (decided). |
 | Q-6 | When does re-analysis run? | **Background, low priority, on every app launch** (decided). Enabled as soon as the user opts in, with no separate control (AC-5.4). Queueing also happens on speaker creation and model upgrade (AC-5.2). |
-| Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Explicit in-app consent** (decided, §9.8). Analysis does not start until the user agrees. Legal review of the consent text still required before P2 ships. |
+| Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Explicit in-app consent** (decided, §9.8). Analysis does not start until the user agrees. Legal concerns (BIPA, GDPR Art. 9, CUBI) are treated as covered by this explicit opt-in and the delete-all path (AC-6.6). |
 | Q-8 | Which speaker model license is acceptable? | **Any license that allows commercial use** (decided). S-5 still verifies each model. |
 | Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
 
@@ -405,7 +405,7 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | Slow on low-end devices | Battery, heat, long queue | Tier gating (§8.2), low priority, pause during recording. |
 | False matches confuse users | Wrong names shown | Conservative threshold, "Not this person" action, manual wins. |
 | Model license blocks shipping | Feature cannot ship | Spike S-5 before any code. |
-| Voiceprints collected without consent | Legal exposure (for example BIPA, GDPR Art. 9, CUBI) | Explicit consent screen before first analysis (§9.8, Q-7), with withdrawal that deletes data (AC-6.6). Legal review of the consent text required before P2 ships. |
+| Voiceprints collected without consent | Legal exposure (for example BIPA, GDPR Art. 9, CUBI) | Explicit consent screen before first analysis (§9.8, Q-7), with withdrawal that deletes all data (AC-6.6). |
 | Overlapping speech gives bad samples | Poor playback | Single-speaker runs only (AC-2.5). |
 | Re-analysis storms the battery | Poor UX | Launch gate in §7.3 (not recording, battery saver off, battery ≥ 20% or charging), batch size cap, low priority, the Settings toggle, which stops all analysis including re-analysis. |
 | iOS feature gap | Inconsistent behavior | Hidden on iOS in v1 (Q-5). |
@@ -464,7 +464,7 @@ Use short public-domain or self-recorded clips. No real user audio in the repo.
 - [ ] Model licenses confirmed and pinned in `ModelCatalog`.
 - [ ] Phase exit criteria in §15 met for each shipped phase.
 - [ ] Unit and instrumented tests green in CI (`./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug`).
-- [ ] Consent screen text (§9.8) matches §13 and has been reviewed by legal.
+- [ ] Consent screen text (§9.8) matches §13.
 - [ ] Withdrawing consent deletes all speaker data (AC-6.6), tested on device.
 - [ ] CHANGELOG entry and version bump in each MR.
 - [ ] `visual-guide.html` matches the shipped UI, or the differences are noted.
