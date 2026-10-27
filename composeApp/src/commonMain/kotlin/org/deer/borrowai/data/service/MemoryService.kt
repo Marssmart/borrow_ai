@@ -75,6 +75,18 @@ interface MemoryService {
     /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
     suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
 
+    /** Stores [categories] on an active memory and marks its categorization as done. */
+    suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit>
+
+    /**
+     * Counts one finished categorization attempt that produced no categories. [empty] marks a blank transcription.
+     * The memory gives up once the limit is reached.
+     */
+    suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit>
+
+    /** Stops retrying an active memory's categorization by setting its status to GAVE_UP. */
+    suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit>
+
     /** Every row of the category master table, ordered by id. */
     suspend fun findCategories(): Either<MemoryError, List<Category>>
 

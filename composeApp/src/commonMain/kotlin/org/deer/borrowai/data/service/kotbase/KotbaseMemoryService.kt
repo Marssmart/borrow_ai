@@ -33,6 +33,12 @@ import org.deer.borrowai.data.domain.toCategoriesString
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.domain.afterFinishedAttempt
+import org.deer.borrowai.data.domain.afterFinishedCategorizationAttempt
+import org.deer.borrowai.data.domain.CategorizationStatus
+import org.deer.borrowai.data.domain.categorizationStatusFor
+import org.deer.borrowai.data.domain.withCategories
+import org.deer.borrowai.data.domain.withUserCategories
+import org.deer.borrowai.data.domain.withCategorizationGaveUp
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.migrateLegacySummaryState
@@ -78,6 +84,7 @@ class KotbaseMemoryService private constructor(
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
+            categorizationStatus = categorizationStatusFor(draft.categories),
         )
         writeAndPublish { database.save(memory.toDocument()) }.map { memory }
     }
@@ -130,15 +137,14 @@ class KotbaseMemoryService private constructor(
                 title = draft.title,
                 transcription = draft.transcription,
                 recordingPath = draft.recordingPath,
-                categories = draft.categories,
-            )
+            ).withUserCategories(draft.categories)
             writeAndPublish { database.save(updated.toDocument()) }.bind()
         }
     }
 
     override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.copy(categories = categories) }
+        return updateActive(id) { it.withUserCategories(categories) }
     }
 
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
@@ -201,6 +207,17 @@ class KotbaseMemoryService private constructor(
 
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withGaveUp() }
+
+    override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
+        categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
+        return updateActive(id) { it.withCategories(categories) }
+    }
+
+    override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
+        updateActive(id) { it.afterFinishedCategorizationAttempt(empty = empty) }
+
+    override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withCategorizationGaveUp() }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
         mutex.withLock {
@@ -311,6 +328,8 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_SUMMARY_STATUS),
             SelectResult.property(COLUMN_SUMMARY_ATTEMPTS),
             SelectResult.property(COLUMN_CATEGORIES),
+            SelectResult.property(COLUMN_CATEGORIZATION_STATUS),
+            SelectResult.property(COLUMN_CATEGORIZATION_ATTEMPTS),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
@@ -378,6 +397,11 @@ class KotbaseMemoryService private constructor(
                 summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
                 summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
                 categories = parseCategoriesString(getString(COLUMN_CATEGORIES)),
+                categorizationStatus = decodeCategorizationStatus(
+                    getString(COLUMN_CATEGORIZATION_STATUS),
+                    parseCategoriesString(getString(COLUMN_CATEGORIES)),
+                ),
+                categorizationAttempts = getInt(COLUMN_CATEGORIZATION_ATTEMPTS),
             )
         }
     }
@@ -396,6 +420,8 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_SUMMARY_STATUS, summaryStatus.name)
         setInt(COLUMN_SUMMARY_ATTEMPTS, summaryAttempts)
         setString(COLUMN_CATEGORIES, categories.toCategoriesString())
+        setString(COLUMN_CATEGORIZATION_STATUS, categorizationStatus.name)
+        setInt(COLUMN_CATEGORIZATION_ATTEMPTS, categorizationAttempts)
     }
 
     private fun Document.toMemory(): Memory? {
@@ -419,12 +445,26 @@ class KotbaseMemoryService private constructor(
             summaryStatus = decodeSummaryStatus(getString(COLUMN_SUMMARY_STATUS)),
             summaryAttempts = getInt(COLUMN_SUMMARY_ATTEMPTS),
             categories = parseCategoriesString(getString(COLUMN_CATEGORIES)),
+            categorizationStatus = decodeCategorizationStatus(
+                getString(COLUMN_CATEGORIZATION_STATUS),
+                parseCategoriesString(getString(COLUMN_CATEGORIES)),
+            ),
+            categorizationAttempts = getInt(COLUMN_CATEGORIZATION_ATTEMPTS),
         )
     }
 
     /** Throws [IllegalArgumentException] for a missing or unknown status, which decodes as [MemoryError.Malformed]. */
     private fun decodeSummaryStatus(raw: String?): SummaryStatus =
         SummaryStatus.valueOf(requireNotNull(raw) { "Missing summaryStatus." })
+
+    /**
+     * Documents written before categorization tracking have no status. Those with categories are
+     * [CategorizationStatus.CATEGORIZED]; the rest are [CategorizationStatus.PENDING] so the recovery job
+     * categorizes them. An unknown stored value throws and decodes as [MemoryError.Malformed].
+     */
+    private fun decodeCategorizationStatus(raw: String?, categories: List<Int>): CategorizationStatus =
+        raw?.let { CategorizationStatus.valueOf(it) }
+            ?: if (categories.isEmpty()) CategorizationStatus.PENDING else CategorizationStatus.CATEGORIZED
 
     /**
      * Documents written before the status field existed have no value. A legacy document that finished
@@ -465,6 +505,8 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_LAST_TRANSCRIPTION_ERROR = "lastTranscriptionError"
         private const val COLUMN_SUMMARY_STATUS = "summaryStatus"
         private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
+        private const val COLUMN_CATEGORIZATION_STATUS = "categorizationStatus"
+        private const val COLUMN_CATEGORIZATION_ATTEMPTS = "categorizationAttempts"
 
         private fun categoryDocumentId(id: Int): String = "category:$id"
 

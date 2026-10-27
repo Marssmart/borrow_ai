@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.0]
+
+- Memories are categorized in the background after their transcription finishes. Memories saved before this change are backfilled the same way.
+- A memory is retried for categorization up to 3 times. Background categorization runs in batches of 5 and pauses while a recording is in progress.
+- The on-device model is shared by the summarizer and the categorizer, and is closed once by the app on shutdown.
+- Added an instrumented test that wires a category model into the app services and checks that the graph closes cleanly.
+- Updated Android and iOS versioning to 1.7.0 (build 47).
+
 ## [1.6.0]
 
 - Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.
