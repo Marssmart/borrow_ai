@@ -4,13 +4,21 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.7.4]
+## [1.7.5]
 
 - Fixed memory categories never being saved: memory writes now update the stored document instead of overwriting it without its current revision, which caused write conflicts.
 - A failed write for one memory no longer stops the categorization run for the rest of the batch.
 - Fixed categorization producing no categories: the on-device model answered only the first category of each multi-category scoring batch, so every run failed coverage. Each category is now scored in its own request.
 - Memory cards now show their categories as chips.
 - Categorization now logs its outcome and failure cause under the `MemoryCategorization` log tag so failures can be diagnosed from logcat.
+- Updated Android and iOS versioning to 1.7.5 (build 52).
+
+## [1.7.4]
+
+- The bottom navigation highlight now moves to the destination tab as the screen starts to change, instead of waiting for the transition to finish.
+- Opening a memory now switches to the detail navigation bar as the detail slide starts, instead of after it settles.
+- Swiping back from a memory detail now switches to the list navigation bar as the slide starts, instead of after it settles.
+- Reversing a swipe back into a memory detail now restores the detail navigation bar.
 - Updated Android and iOS versioning to 1.7.4 (build 51).
 
 ## [1.7.3]

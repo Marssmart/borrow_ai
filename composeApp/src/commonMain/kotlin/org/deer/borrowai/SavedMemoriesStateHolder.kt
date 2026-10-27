@@ -75,6 +75,7 @@ internal class SavedMemoriesStateHolder(
             it.copy(
                 selectedMemoryId = memoryId,
                 detailSwipeEnabled = true,
+                hasOpenedDetail = true,
             )
         }
         scope.launch {
@@ -83,10 +84,18 @@ internal class SavedMemoriesStateHolder(
         }
     }
 
+    fun onPagerTargetPageChanged(page: Int) {
+        val state = uiState.value
+        when {
+            page == MEMORY_LIST_PAGE && state.hasOpenedDetail ->
+                mutableUiState.update { it.copy(hasOpenedDetail = false) }
+            page == MEMORY_DETAIL_PAGE && state.selectedMemoryId != null && !state.hasOpenedDetail ->
+                mutableUiState.update { it.copy(hasOpenedDetail = true) }
+        }
+    }
+
     fun onPagerPageSettled(page: Int) {
-        if (page == MEMORY_DETAIL_PAGE) {
-            mutableUiState.update { it.copy(hasOpenedDetail = true) }
-        } else if (page == MEMORY_LIST_PAGE && uiState.value.hasOpenedDetail) {
+        if (page == MEMORY_LIST_PAGE && uiState.value.selectedMemoryId != null) {
             closeDetailState()
         }
     }

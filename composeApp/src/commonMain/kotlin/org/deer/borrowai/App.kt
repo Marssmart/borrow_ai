@@ -142,7 +142,7 @@ fun App(services: AppServices) {
                     )
                 } else {
                     BottomNavBar(
-                        selectedPage = appStateHolder.mainPagerState.currentPage,
+                        selectedPage = appStateHolder.mainPagerState.targetPage,
                         onSelect = appStateHolder::navigateToPage,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
