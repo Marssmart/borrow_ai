@@ -572,6 +572,24 @@
       line-height: 1.2;
     }
     .cat-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .app-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .app-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgb(20 117 123 / 12%);
+      color: #14757b;
+      white-space: nowrap;
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
 
     @keyframes mic-pulse {
       0%, 100% { transform: scale(1); }
@@ -1118,8 +1136,12 @@
       return `<div class="cat-tags">${chips}</div>`;
     }
 
-    function renderCategoryCard(note) {
-      const categories = noteCategories(note);
+    function appChipTags(categories) {
+      const chips = categories.map((name) => `<span class="app-chip">${escapeHtml(name)}</span>`).join("");
+      return `<div class="app-chips">${chips}</div>`;
+    }
+
+    function renderCategoryCard(note, tags) {
       return `<article class="memory-card" style="--c: ${categoryColor(0)}">
         <div class="memory-card-head">
           <span class="audio-glyph" aria-hidden="true">▶</span>
@@ -1128,7 +1150,7 @@
             <div class="memory-date">${escapeHtml(note.date)}</div>
           </div>
         </div>
-        ${categoryTags(categories)}
+        ${tags}
         <section class="memory-section summary"><p>${escapeHtml(preview(note.summary))}</p></section>
         ${audioButtons()}
       </article>`;
@@ -1136,8 +1158,12 @@
 
     document.querySelector("[data-category-grid]").innerHTML = `
       <figure class="variant-stage">
-        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note)).join("")}</div>
+        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note, categoryTags(noteCategories(note)))).join("")}</div>
         <figcaption class="screen-caption">Tinted chips</figcaption>
+      </figure>
+      <figure class="variant-stage">
+        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note, appChipTags(note.categories))).join("")}</div>
+        <figcaption class="screen-caption">App chips (as shipped in 1.7.4)</figcaption>
       </figure>`;
 
     const detailMemory = memories[0];
