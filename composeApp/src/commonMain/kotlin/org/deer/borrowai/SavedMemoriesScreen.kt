@@ -478,9 +478,9 @@ private fun CategoryChips(names: List<String>) {
             Text(
                 name,
                 modifier = Modifier
-                    .padding(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_PADDING)
                     .clip(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_SHAPE)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_ALPHA)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_ALPHA))
+                    .padding(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_PADDING),
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,

@@ -86,7 +86,7 @@ class KotbaseMemoryService private constructor(
             categories = draft.categories,
             categorizationStatus = categorizationStatusFor(draft.categories),
         )
-        writeAndPublish { saveMemory(memory) }.map { memory }
+        writeAndPublish { insertMemory(memory) }.map { memory }
     }
 
     override suspend fun claimNextPendingTranscription(): Either<MemoryError, Memory?> = mutex.withLock {
@@ -232,9 +232,15 @@ class KotbaseMemoryService private constructor(
      * is stored. Writing a fresh document with no base revision over an existing one is what produced
      * `LiteCoreException: conflict` for categorization writes.
      */
+    /** Updates an existing memory from its current revision, or creates it when none is stored. */
     private fun saveMemory(memory: Memory) {
         val document = database.getDocument(memory.id)?.toMutable() ?: MutableDocument(memory.id)
         database.save(memory.applyTo(document))
+    }
+
+    /** Creates a new memory. A fresh document makes a duplicate id fail with a conflict instead of overwriting it. */
+    private fun insertMemory(memory: Memory) {
+        database.save(memory.applyTo(MutableDocument(memory.id)))
     }
 
     /**

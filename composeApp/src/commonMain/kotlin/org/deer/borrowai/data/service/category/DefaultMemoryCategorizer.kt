@@ -89,7 +89,7 @@ class DefaultMemoryCategorizer(
                         if (batchScores.keys == batchIds) break
                         logCategorization(
                             "Scoring attempt $attempt covered ${batchScores.size} of ${batchIds.size} categories " +
-                                "(reply ${reply.text.length} chars): ${reply.text.take(SCORING_REPLY_LOG_CHARS)}",
+                                "(reply ${reply.text.length} chars).",
                         )
                     }
                     CategoryModelReply.ModelMissing -> return ScoringOutcome.Stopped(CategorizationResult.ModelMissing)
@@ -178,8 +178,5 @@ class DefaultMemoryCategorizer(
 
         /** A batch whose reply does not score every category is asked again once before failing. */
         const val MAX_SCORING_ATTEMPTS = 2
-
-        /** Scoring replies hold only ids and scores, so a short prefix is safe to log. */
-        private const val SCORING_REPLY_LOG_CHARS = 200
     }
 }
