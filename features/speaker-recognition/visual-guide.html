@@ -608,7 +608,7 @@
     <section class="section">
       <p class="eyebrow">4 · Settings</p>
       <h2>Opt-in and re-analysis</h2>
-      <p class="section-note">Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
+      <p class="section-note">Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is enabled as soon as the user opts in, with no separate control. It is also queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -622,9 +622,7 @@
               <div class="setting-note">About 60 MB. Downloaded once, verified by checksum.</div>
             </div>
             <div class="setting">
-              <div class="setting-row"><span>Re-analyze all memories</span></div>
-              <div class="setting-note">Runs in the background at low priority. Pauses while recording, when battery saver is on, or when battery is below 20% and not charging (proposed, §7.3).</div>
-              <div class="setting-link">Start re-analysis</div>
+              <div class="setting-note">Re-analysis runs automatically in the background at low priority. It pauses while recording, when battery saver is on, or when battery is below 20% and not charging (proposed, §7.3).</div>
             </div>
             <div class="setting">
               <div class="setting-row"><span>Withdraw consent and delete speaker data</span></div>
