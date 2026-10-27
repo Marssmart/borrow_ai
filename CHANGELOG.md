@@ -4,6 +4,24 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.6.0]
+
+- Added a memory categorizer service. For a memory's transcription, it scores each master category from 0 to 100 in batches, keeps categories scoring at least 75 (up to 3), and asks the model to propose new categories when fewer than 3 qualify.
+- Each memory ends with at least one category. If no category qualifies and no new one is proposed, the highest-scoring master category is used.
+- Added `updateCategories` to the memory service, which replaces only a memory's categories and leaves its summary status unchanged. It rejects more than 3 category ids, duplicate ids, and ids below 1 instead of saving them. The categorization result enforces the same rules.
+- Category backfill runs under a lock and re-reads the master list, so concurrent categorizations cannot create duplicate category names. A proposed name that a concurrent categorization already created resolves to that category's id.
+- Backfill persistence failures are reported on the categorization result instead of being discarded. Categories already matched or created are kept.
+- Category score parsing accepts indented score lines and reads only `<id>|<score>` lines, so digits in prose from the model are not taken as scores.
+- The on-device model runtime is shared between the summarizer and the categorizer, and is closed once by the app. When app services fail to start, the runtime is closed in the failure path, and a close error no longer hides the original startup failure.
+- Added instrumented tests for `updateCategories` and summary updates, covering persistence across reopen, missing, deleted, and malformed memories.
+- Added unit tests for the shared on-device LLM runtime, covering a missing model, replies, fresh conversations per call, load and reply failures with retry, timeouts, and close behavior during inference.
+- The on-device model timeout returns to the caller on time, even while native inference is still running. The native call cannot be interrupted, so a hung inference still blocks later calls and close until it returns.
+- Closing the on-device model waits up to 5 seconds for a running inference, then closes the engine once the inference returns. Close cancels the runtime's own scope, and calls made after close fail without reloading the model. A hung native inference still delays engine close until it returns.
+- A scoring batch whose reply does not score every category is asked again once. If it is still incomplete, categorization fails instead of silently leaving those categories unscored.
+- The backfill prompt lists at most 100 existing category names. Proposals that duplicate any existing category are still dropped.
+- A failure while checking whether the on-device model is present is reported as a failed summary or categorization instead of crashing the runtime. Cancellation is still propagated.
+- Updated Android and iOS versioning to 1.6.0 (build 46).
+
 ## [1.5.0]
 
 - Memories can now store up to 3 category ids in a new `categories` field, saved as `{id1}|{id2}|{id3}`. Ids must be distinct and start at 1.

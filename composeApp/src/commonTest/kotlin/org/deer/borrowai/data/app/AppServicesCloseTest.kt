@@ -34,7 +34,15 @@ import kotlin.test.assertSame
 
 class AppServicesCloseTest {
     private val recordingsRoot: Path = "/app/files/recordings".toPath()
-    private val expectedOrder = listOf("media close", "await", "background jobs", "callbacks", "summarizer", "database")
+    private val expectedOrder = listOf(
+        "media close",
+        "await",
+        "background jobs",
+        "callbacks",
+        "summarizer",
+        "runtime",
+        "database",
+    )
 
     @Test
     fun `media close failure still awaits saves, cancels jobs and closes the database`() = runTest {
@@ -122,6 +130,7 @@ class AppServicesCloseTest {
             backgroundJobs = listOf(backgroundJob),
             callbackGroup = callbackGroup,
             summarizer = summarizer,
+            closeModelRuntime = { events += "runtime" },
             onClose = { events += "database" },
         )
     }

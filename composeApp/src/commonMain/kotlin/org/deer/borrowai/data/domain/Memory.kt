@@ -256,10 +256,19 @@ fun parseCategoriesString(raw: String?): List<Int> {
     return ids
 }
 
-/** Write-side check for new categories: the id rules plus the [MAX_MEMORY_CATEGORIES] limit. */
+/**
+ * Returns why [ids] cannot be stored as a memory's new categories (the id rules plus the
+ * [MAX_MEMORY_CATEGORIES] limit), or null when they can.
+ */
+fun categoryIdsViolation(ids: List<Int>): String? {
+    if (ids.size > MAX_MEMORY_CATEGORIES) return "A memory can have at most $MAX_MEMORY_CATEGORIES categories."
+    if (ids.any { it < 1 }) return "Category ids start at 1."
+    if (ids.distinct().size != ids.size) return "A memory cannot repeat a category."
+    return null
+}
+
 private fun requireCategoryIds(ids: List<Int>) {
-    require(ids.size <= MAX_MEMORY_CATEGORIES) { "A memory can have at most $MAX_MEMORY_CATEGORIES categories." }
-    requireCategoryIdRules(ids)
+    categoryIdsViolation(ids)?.let { throw IllegalArgumentException(it) }
 }
 
 private fun requireCategoryIdRules(ids: List<Int>) {
