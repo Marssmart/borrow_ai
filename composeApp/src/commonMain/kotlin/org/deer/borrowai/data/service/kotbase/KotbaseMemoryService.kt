@@ -86,7 +86,7 @@ class KotbaseMemoryService private constructor(
             categories = draft.categories,
             categorizationStatus = categorizationStatusFor(draft.categories),
         )
-        writeAndPublish { database.save(memory.toDocument()) }.map { memory }
+        writeAndPublish { insertMemory(memory) }.map { memory }
     }
 
     override suspend fun claimNextPendingTranscription(): Either<MemoryError, Memory?> = mutex.withLock {
@@ -98,7 +98,7 @@ class KotbaseMemoryService private constructor(
                 null
             } else {
                 val claimed = candidate.claimedForTranscription()
-                writeAndPublish { database.save(claimed.toDocument()) }.bind()
+                writeAndPublish { saveMemory(claimed) }.bind()
                 claimed
             }
         }
@@ -108,14 +108,14 @@ class KotbaseMemoryService private constructor(
         mutex.withLock {
             either {
                 val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-                writeAndPublish { database.save(existing.withFinishedTranscription(transcription).toDocument()) }.bind()
+                writeAndPublish { saveMemory(existing.withFinishedTranscription(transcription)) }.bind()
             }
         }
 
     override suspend fun failTranscription(id: String, error: String?): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-            writeAndPublish { database.save(existing.withFailedTranscription(error).toDocument()) }.bind()
+            writeAndPublish { saveMemory(existing.withFailedTranscription(error)) }.bind()
         }
     }
 
@@ -124,7 +124,7 @@ class KotbaseMemoryService private constructor(
             val unfinished = withContext(Dispatchers.Default) { readAll() }.bind()
                 .filter { !it.deleted && (it.transcriptionStatus == TranscriptionStatus.IN_PROGRESS || it.isMissingTranscription()) }
             unfinished.forEach { memory ->
-                writeAndPublish { database.save(memory.requeuedForTranscription().toDocument()) }.bind()
+                writeAndPublish { saveMemory(memory.requeuedForTranscription()) }.bind()
             }
             unfinished.size
         }
@@ -138,7 +138,7 @@ class KotbaseMemoryService private constructor(
                 transcription = draft.transcription,
                 recordingPath = draft.recordingPath,
             ).withUserCategories(draft.categories)
-            writeAndPublish { database.save(updated.toDocument()) }.bind()
+            writeAndPublish { saveMemory(updated) }.bind()
         }
     }
 
@@ -150,7 +150,7 @@ class KotbaseMemoryService private constructor(
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-            writeAndPublish { database.save(existing.copy(deleted = true).toDocument()) }.bind()
+            writeAndPublish { saveMemory(existing.copy(deleted = true)) }.bind()
         }
     }
 
@@ -223,9 +223,25 @@ class KotbaseMemoryService private constructor(
         mutex.withLock {
             either {
                 val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-                writeAndPublish { database.save(change(existing).toDocument()) }.bind()
+                writeAndPublish { saveMemory(change(existing)) }.bind()
             }
         }
+
+    /**
+     * Writes [memory] on top of the stored document revision. A brand-new document is created when none
+     * is stored. Writing a fresh document with no base revision over an existing one is what produced
+     * `LiteCoreException: conflict` for categorization writes.
+     */
+    /** Updates an existing memory from its current revision, or creates it when none is stored. */
+    private fun saveMemory(memory: Memory) {
+        val document = database.getDocument(memory.id)?.toMutable() ?: MutableDocument(memory.id)
+        database.save(memory.applyTo(document))
+    }
+
+    /** Creates a new memory. A fresh document makes a duplicate id fail with a conflict instead of overwriting it. */
+    private fun insertMemory(memory: Memory) {
+        database.save(memory.applyTo(MutableDocument(memory.id)))
+    }
 
     /**
      * Runs [write] and refreshes the published state as one unit. Cancellation is deferred until
@@ -406,7 +422,7 @@ class KotbaseMemoryService private constructor(
         }
     }
 
-    private fun Memory.toDocument(): MutableDocument = MutableDocument(id).apply {
+    private fun Memory.applyTo(document: MutableDocument): MutableDocument = document.apply {
         setString(KEY_TYPE, TYPE_MEMORY)
         setLong(COLUMN_CREATED_AT, createdAtEpochMillis)
         setString(COLUMN_TITLE, title)

@@ -4,7 +4,8 @@ import arrow.core.Either
 import arrow.core.left
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -155,6 +156,19 @@ class DefaultMemoryCategorizerTest {
     }
 
     @Test
+    fun `a model call that never returns fails after the call timeout`() = runTest {
+        val hung = ScriptedModel { _, _ ->
+            delay(10_000)
+            CategoryModelReply.Text("")
+        }
+
+        val result = DefaultMemoryCategorizer(service(2), hung, callTimeoutMillis = 1_000L).categorize("note")
+
+        assertIs<CategorizationResult.Failed>(result)
+        assertEquals(1, hung.scoringCalls.size)
+    }
+
+    @Test
     fun `keeps matched categories when backfill fails and reports the failure`() = runTest {
         val model = model(
             score = { if (it == 1) 80 else 0 },
@@ -241,7 +255,7 @@ class DefaultMemoryCategorizerTest {
 
         val first = async { categorizer.categorize("note") }
         val second = async { categorizer.categorize("note") }
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(2, model.backfillCalls.size)
 
         gate.complete(Unit)
@@ -304,7 +318,7 @@ class DefaultMemoryCategorizerTest {
             CategoryModelReply.Text(covered.joinToString("\n") { "$it|90" })
         }
 
-        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+        val result = DefaultMemoryCategorizer(service(3), model, batchSize = 3).categorize("note")
 
         assertEquals(CategorizationResult.Categories(listOf(1, 2, 3)), result)
         assertEquals(2, model.scoringCalls.size)
@@ -317,11 +331,23 @@ class DefaultMemoryCategorizerTest {
             CategoryModelReply.Text("${scoredIds(user).first()}|90")
         }
 
-        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+        val result = DefaultMemoryCategorizer(service(3), model, batchSize = 3).categorize("note")
 
         assertIs<CategorizationResult.Failed>(result)
         assertEquals(DefaultMemoryCategorizer.MAX_SCORING_ATTEMPTS, model.scoringCalls.size)
         assertTrue(model.backfillCalls.isEmpty())
+    }
+
+    @Test
+    fun `default batch scores one category per request`() = runTest {
+        val model = ScriptedModel { _, user ->
+            CategoryModelReply.Text(scoredIds(user).joinToString("\n") { "$it|90" })
+        }
+
+        val result = DefaultMemoryCategorizer(service(3), model).categorize("note")
+
+        assertEquals(CategorizationResult.Categories(listOf(1, 2, 3)), result)
+        assertEquals(3, model.scoringCalls.size)
     }
 
     @Test

@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -151,6 +153,7 @@ internal fun SavedMemoriesScreen(
             SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
                 memories = uiState.memories,
                 summaryModelMissing = uiState.summaryModelMissing,
+                categoryNames = uiState.categoryNames,
                 scrollState = stateHolder.memoriesScrollState,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
                 onOpenMemory = stateHolder::openMemory,
@@ -228,6 +231,7 @@ internal fun SavedMemoriesScreen(
 private fun MemoryListScreen(
     memories: List<Memory>,
     summaryModelMissing: Boolean,
+    categoryNames: Map<Int, String>,
     scrollState: ScrollState,
     playingTarget: PlaybackTarget?,
     onOpenMemory: (String) -> Unit,
@@ -260,6 +264,7 @@ private fun MemoryListScreen(
             memories.forEach { memory ->
                 MemoryCard(
                     memory = memory,
+                    categoryNames = memory.categories.mapNotNull { categoryNames[it] },
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
                     onOpen = { onOpenMemory(memory.id) },
                     onPlayRecording = { onPlayRecording(memory.id) },
@@ -272,6 +277,7 @@ private fun MemoryListScreen(
 @Composable
 private fun MemoryCard(
     memory: Memory,
+    categoryNames: List<String>,
     playingContent: PlaybackContent?,
     onOpen: () -> Unit,
     onPlayRecording: () -> Unit,
@@ -336,6 +342,10 @@ private fun MemoryCard(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+            }
+
+            if (categoryNames.isNotEmpty()) {
+                CategoryChips(names = categoryNames)
             }
 
             if (isFailed) {
@@ -456,6 +466,28 @@ private fun MemoryDetailScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoryChips(names: List<String>) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_SPACING),
+        verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_SPACING),
+    ) {
+        names.forEach { name ->
+            Text(
+                name,
+                modifier = Modifier
+                    .clip(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_SHAPE)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_ALPHA))
+                    .padding(SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_PADDING),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

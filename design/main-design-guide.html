@@ -572,6 +572,26 @@
       line-height: 1.2;
     }
     .cat-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .app-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .app-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 5px 11px;
+      border: 1px solid rgb(255 255 255 / 96%);
+      border-radius: 999px;
+      background: #c9e5e7;
+      color: #123b43;
+      white-space: nowrap;
+      font-size: 9px;
+      font-weight: 650;
+      line-height: 1.2;
+    }
 
     @keyframes mic-pulse {
       0%, 100% { transform: scale(1); }
@@ -915,7 +935,7 @@
       <header class="category-gallery-head">
         <p class="eyebrow">Categories · Variants</p>
         <h2 id="category-gallery-title">Note categories</h2>
-        <p class="workspace-description">Chosen style: Tinted chips. Each card shows a note with three categories and a note with one.</p>
+        <p class="workspace-description">Chosen style: App chips, matching the shipped memory cards. Each card shows a note with three categories and a note with one.</p>
         <ul class="category-rules">
           <li>Max 3 categories per note</li>
           <li>Max 12 characters per name</li>
@@ -1118,8 +1138,12 @@
       return `<div class="cat-tags">${chips}</div>`;
     }
 
-    function renderCategoryCard(note) {
-      const categories = noteCategories(note);
+    function appChipTags(categories) {
+      const chips = categories.map((name) => `<span class="app-chip">${escapeHtml(name)}</span>`).join("");
+      return `<div class="app-chips">${chips}</div>`;
+    }
+
+    function renderCategoryCard(note, tags) {
       return `<article class="memory-card" style="--c: ${categoryColor(0)}">
         <div class="memory-card-head">
           <span class="audio-glyph" aria-hidden="true">▶</span>
@@ -1128,7 +1152,7 @@
             <div class="memory-date">${escapeHtml(note.date)}</div>
           </div>
         </div>
-        ${categoryTags(categories)}
+        ${tags}
         <section class="memory-section summary"><p>${escapeHtml(preview(note.summary))}</p></section>
         ${audioButtons()}
       </article>`;
@@ -1136,8 +1160,12 @@
 
     document.querySelector("[data-category-grid]").innerHTML = `
       <figure class="variant-stage">
-        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note)).join("")}</div>
+        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note, categoryTags(noteCategories(note)))).join("")}</div>
         <figcaption class="screen-caption">Tinted chips</figcaption>
+      </figure>
+      <figure class="variant-stage">
+        <div class="variant-stage-cards">${categoryNotes.map((note) => renderCategoryCard(note, appChipTags(note.categories))).join("")}</div>
+        <figcaption class="screen-caption">App chips (as shipped in 1.7.4)</figcaption>
       </figure>`;
 
     const detailMemory = memories[0];
