@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BorrowAI — Speaker Recognition Visual Guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef0f3;
+      color: #17201d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button { font: inherit; }
+
+    .workspace {
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 64px;
+    }
+    .workspace-head { margin-bottom: 24px; }
+    .eyebrow {
+      margin: 0 0 7px;
+      color: #14757b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -.045em;
+      line-height: 1;
+    }
+    h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      letter-spacing: -.02em;
+    }
+    .lede {
+      margin: 9px 0 0;
+      max-width: 820px;
+      color: #53605b;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .section {
+      margin-top: 44px;
+    }
+    .section-note {
+      margin: 0 0 18px;
+      color: #53605b;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 820px;
+    }
+
+    .mock-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+      gap: 28px 22px;
+    }
+    .screen-preview { min-width: 0; margin: 0; }
+    .device {
+      position: relative;
+      width: min(100%, 300px);
+      aspect-ratio: 320 / 690;
+      margin: 0 auto;
+      padding: 5px;
+      overflow: hidden;
+      border: 1px solid rgb(20 30 26 / 20%);
+      border-radius: 42px;
+      background: #183f46;
+      box-shadow: 0 19px 42px rgb(20 30 26 / 17%), 0 2px 6px rgb(20 30 26 / 12%);
+    }
+    .screen {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      flex-direction: column;
+      border-radius: 36px;
+      background: #dcecef;
+      color: #123b43;
+      padding: 26px 14px 14px;
+      gap: 10px;
+    }
+    .screen-caption {
+      margin: 10px 0 0;
+      color: #66716b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .screen-title {
+      margin: 4px 0 2px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .muted { color: #5d7c80; font-size: 11px; }
+
+    /* memory list row */
+    .row {
+      padding: 11px 12px;
+      border-radius: 16px;
+      background: rgb(255 255 255 / 75%);
+      box-shadow: 0 2px 6px rgb(20 40 44 / 8%);
+    }
+    .row-title { font-size: 13px; font-weight: 750; }
+    .row-meta { margin-top: 3px; font-size: 11px; color: #5d7c80; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+    /* chips: the four states */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .chip-recognized { background: #14757b; color: #fff; }
+    .chip-unknown { background: transparent; color: #14757b; border: 1px solid #14757b; }
+    .chip-pending { background: #e3e7e9; color: #7a8588; }
+    .chip-pending::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #9aa5a8;
+    }
+    .chip-overflow { background: #d4e6e8; color: #123b43; }
+
+    /* detail cards */
+    .card {
+      padding: 12px;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+    }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .card-name { font-size: 13px; font-weight: 800; }
+    .card-sub { margin-top: 2px; font-size: 11px; color: #5d7c80; }
+    .card-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+    .btn {
+      height: 30px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: default;
+    }
+    .btn-primary { background: #14757b; color: #fff; }
+    .btn-ghost { background: #e4f2f3; color: #14757b; }
+    .btn-text { background: transparent; color: #5d7c80; padding: 0 4px; font-weight: 700; }
+    .play-bar {
+      flex: 1;
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #14757b 42%, #c9dfe1 42%);
+    }
+    .unavailable {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: #f3ecdc;
+      color: #7a5a14;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* assign sheet */
+    .sheet {
+      margin-top: auto;
+      padding: 14px 12px 12px;
+      border-radius: 24px 24px 30px 30px;
+      background: #fff;
+      box-shadow: 0 -6px 18px rgb(20 40 44 / 12%);
+    }
+    .sheet-grab { width: 40px; height: 4px; margin: 0 auto 10px; border-radius: 999px; background: #c9d3d5; }
+    .search {
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid #d2d9d4;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      color: #8a9699;
+      font-size: 11px;
+    }
+    .speaker-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 4px;
+      border-bottom: 1px solid #edf1f1;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .radio {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #14757b;
+    }
+    .radio-on { background: radial-gradient(circle, #14757b 40%, transparent 45%); }
+    .new-row { color: #14757b; font-size: 12px; font-weight: 800; padding: 10px 4px 2px; }
+
+    /* settings */
+    .setting {
+      padding: 12px;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 2px 6px rgb(20 40 44 / 8%);
+    }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 750; }
+    .toggle {
+      width: 38px;
+      height: 22px;
+      border-radius: 999px;
+      background: #14757b;
+      position: relative;
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .setting-note { margin-top: 6px; font-size: 11px; color: #5d7c80; line-height: 1.4; }
+    .setting-link { margin-top: 10px; font-size: 12px; font-weight: 800; color: #14757b; }
+
+    /* state table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+      font-size: 13px;
+    }
+    th, td {
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #edf1f1;
+    }
+    th {
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #eef3f3;
+      padding: 1px 5px;
+      border-radius: 6px;
+    }
+
+    /* flow */
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .step {
+      flex: 1 1 150px;
+      padding: 14px;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+      font-size: 12px;
+      line-height: 1.45;
+      color: #34413d;
+      position: relative;
+    }
+    .step-num {
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border-radius: 50%;
+      background: #14757b;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .step strong { display: block; color: #17201d; font-size: 13px; margin-bottom: 3px; }
+
+    @media (max-width: 1000px) {
+      .mock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .mock-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="workspace-head">
+      <p class="eyebrow">BorrowAI · Feature guide</p>
+      <h1>Speaker recognition</h1>
+      <p class="lede">
+        Shows who spoke in a memory. Chips on each list row, one card per speaker in the detail view with a playable sample,
+        and an assign action that links unknown speakers to people the user has already named. All analysis runs on-device.
+        Master spec: <code>SPEAKER_RECOGNITION.md</code>.
+      </p>
+    </header>
+
+    <section class="section">
+      <p class="eyebrow">1 · Memory list</p>
+      <h2>Speaker chips on each row</h2>
+      <p class="section-note">Up to three chips per row. Recognized names are filled teal, unknown speakers are outlined, and pending analysis is muted. Extra speakers collapse into “+N”.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Memories</div>
+            <div class="row">
+              <div class="row-title">Dinner plans with Sam</div>
+              <div class="row-meta">Today · 4:12 · Social</div>
+              <div class="chips">
+                <span class="chip chip-recognized">Sam</span>
+                <span class="chip chip-unknown">Speaker 2</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="row-title">Voice note to self</div>
+              <div class="row-meta">Yesterday · 0:48 · Ideas</div>
+              <div class="chips">
+                <span class="chip chip-recognized">Me</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="row-title">Team standup recap</div>
+              <div class="row-meta">Mon · 9:02 · Work</div>
+              <div class="chips">
+                <span class="chip chip-unknown">Speaker 1</span>
+                <span class="chip chip-unknown">Speaker 2</span>
+                <span class="chip chip-recognized">Priya</span>
+                <span class="chip chip-overflow">+2</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="row-title">Call with the bank</div>
+              <div class="row-meta">Sun · 6:30 · Finance</div>
+              <div class="chips">
+                <span class="chip chip-pending">Analyzing</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Memory list · chips</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Chip states</div>
+            <div class="muted">Recognized, unknown, pending, overflow</div>
+            <div class="row" style="margin-top:6px">
+              <div class="chips">
+                <span class="chip chip-recognized">Sam</span>
+                <span class="chip chip-unknown">Speaker 2</span>
+                <span class="chip chip-pending">Analyzing</span>
+                <span class="chip chip-overflow">+3</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Recognized</div>
+              <div class="row-meta">Filled teal, name only. Matched automatically or by the user.</div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Unknown</div>
+              <div class="row-meta">Outlined teal, “Speaker N”. N is the order of first speech.</div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Pending</div>
+              <div class="row-meta">Muted grey with a dot. Shown only while analysis is queued or running.</div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Overflow</div>
+              <div class="row-meta">Shows the number of speakers beyond three.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Chip legend</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Memory</div>
+            <div class="row">
+              <div class="row-title">Team standup recap</div>
+              <div class="row-meta">Mon · 9:02 · Work</div>
+              <div class="chips">
+                <span class="chip chip-unknown">Speaker 1</span>
+                <span class="chip chip-recognized">Priya</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Transcript</div>
+              <div class="row-meta">Transcript text appears here as today.</div>
+            </div>
+            <div class="muted" style="margin-top:4px">Tapping a chip scrolls to that speaker’s card below.</div>
+          </div></div>
+          <p class="screen-caption">Chip tap → detail</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">2 · Memory detail</p>
+      <h2>One card per speaker</h2>
+      <p class="section-note">Each card plays only that speaker’s sample from the original recording. Only one sample plays at a time. Unknown speakers get an Assign action. Matched speakers get Change, and auto-matched speakers also get “Not this person”.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Speakers</div>
+            <div class="muted">3 detected in this memory</div>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-name">Speaker 1</div>
+                  <div class="card-sub">Speech 2:10 · unknown</div>
+                </div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-ghost">▶ Play</span>
+                <div class="play-bar"></div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-primary">Assign</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-name">Priya</div>
+                  <div class="card-sub">Speech 1:24 · matched automatically</div>
+                </div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-ghost">▶ Play</span>
+                <div class="play-bar" style="background:linear-gradient(90deg,#14757b 15%,#c9dfe1 15%)"></div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-ghost">Change</span>
+                <span class="btn btn-text">Not this person</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-name">Speaker 3</div>
+                  <div class="card-sub">Speech 0:04 · unknown</div>
+                </div>
+              </div>
+              <div class="unavailable">Audio unavailable. The original recording is missing.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Detail · speaker cards</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Speakers</div>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-name">Speaker 2</div>
+                  <div class="card-sub">Speech 0:31 · unknown</div>
+                </div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-ghost">▶ Play</span>
+                <div class="play-bar" style="background:linear-gradient(90deg,#14757b 60%,#c9dfe1 60%)"></div>
+              </div>
+              <div class="card-actions">
+                <span class="btn btn-primary">Assign</span>
+              </div>
+            </div>
+            <div class="muted" style="margin-top:6px">When the memory has no speech, the section shows:</div>
+            <div class="card" style="background:#f6f9f9">
+              <div class="card-name" style="font-weight:700;color:#5d7c80">No speakers detected in this memory.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Detail · empty state</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen" style="justify-content:flex-end">
+            <div class="screen-title" style="margin-top:auto">Assign Speaker 1</div>
+            <div class="sheet">
+              <div class="sheet-grab"></div>
+              <div class="search">Search speakers</div>
+              <div class="speaker-option"><span>Priya</span><span class="radio"></span></div>
+              <div class="speaker-option"><span>Sam</span><span class="radio radio-on"></span></div>
+              <div class="speaker-option"><span>Dad</span><span class="radio"></span></div>
+              <div class="new-row">+ New speaker</div>
+              <div class="card-actions" style="justify-content:flex-end;margin-top:8px">
+                <span class="btn btn-text">Cancel</span>
+                <span class="btn btn-primary">Assign</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Assign sheet</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">3 · Settings</p>
+      <h2>Opt-in and re-analysis</h2>
+      <p class="section-note">Off by default. The privacy line is required copy (see master spec §13). Re-analysis is a single action with progress shown in place.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Settings</div>
+            <div class="setting">
+              <div class="setting-row"><span>Speaker recognition</span><span class="toggle"></span></div>
+              <div class="setting-note">Voice analysis runs on this device. Voice samples are stored only in this app.</div>
+            </div>
+            <div class="setting">
+              <div class="setting-row"><span>Speaker models</span><span class="muted">Downloaded</span></div>
+              <div class="setting-note">About 60 MB. Downloaded once, verified by checksum.</div>
+            </div>
+            <div class="setting">
+              <div class="setting-row"><span>Re-analyze all memories</span></div>
+              <div class="setting-note">Runs in the background at low priority. Pauses while recording.</div>
+              <div class="setting-link">Start re-analysis</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Settings · speakers</p>
+        </figure>
+
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Settings</div>
+            <div class="setting">
+              <div class="setting-row"><span>Speaker recognition</span><span class="muted">Off</span></div>
+              <div class="setting-note">Not available on this device. Speaker models need at least 5 GiB of RAM.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Settings · unavailable tier</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">4 · Pipeline</p>
+      <h2>What the user sees, step by step</h2>
+      <p class="section-note">Analysis runs after transcription, so transcription status is never blocked by speaker work.</p>
+      <div class="flow">
+        <div class="step"><span class="step-num">1</span><strong>Saved</strong>Recording is saved. The row shows no chips yet.</div>
+        <div class="step"><span class="step-num">2</span><strong>Analyzing</strong>Pending chips appear while the job runs.</div>
+        <div class="step"><span class="step-num">3</span><strong>Matched</strong>Known speakers appear with their names.</div>
+        <div class="step"><span class="step-num">4</span><strong>Unknown</strong>Other speakers show as “Speaker N”.</div>
+        <div class="step"><span class="step-num">5</span><strong>Assigned</strong>User names an unknown speaker. Chip and card update at once.</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">5 · States</p>
+      <h2>Screen states</h2>
+      <p class="section-note">Every state the UI must handle. Each row maps to an acceptance criterion in the master spec.</p>
+      <table>
+        <thead>
+          <tr><th>State</th><th>List row</th><th>Detail card</th><th>Spec</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Pending</td><td>Muted “Analyzing” chip</td><td>Section shows “Analyzing voices…”</td><td>AC-1.3</td></tr>
+          <tr><td>No speech</td><td>No chips</td><td>“No speakers detected in this memory.”</td><td>AC-1.4</td></tr>
+          <tr><td>Unknown speaker</td><td>Outlined “Speaker N”</td><td>Play and Assign</td><td>AC-1.2, AC-3.1</td></tr>
+          <tr><td>Auto-matched</td><td>Filled name</td><td>Play, Change, Not this person</td><td>AC-4.1, AC-4.4</td></tr>
+          <tr><td>Manual match</td><td>Filled name</td><td>Play and Change (no undo to unknown)</td><td>AC-4.3</td></tr>
+          <tr><td>Missing audio</td><td>Chip unchanged</td><td>“Audio unavailable”, no Play</td><td>AC-2.4</td></tr>
+          <tr><td>Feature off</td><td>No chips</td><td>Section hidden</td><td>AC-6.3</td></tr>
+          <tr><td>Analysis failed</td><td>No chips, retry on next launch</td><td>“Couldn’t analyze voices. Try again later.”</td><td>§7.1 attempt cap</td></tr>
+          <tr><td>Unavailable tier</td><td>No chips</td><td>Section hidden</td><td>§8.2</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
