@@ -26,6 +26,10 @@ package org.deer.borrowai.data.domain
  * [categorizationStatus] tracks categorization the same way [summaryStatus] tracks summaries.
  * [categorizationAttempts] counts finished attempts. Once it reaches [MAX_CATEGORIZATION_ATTEMPTS] the memory is
  * [CategorizationStatus.GAVE_UP] and the recovery job stops.
+ *
+ * [speakerStatus] tracks speaker analysis the same way [transcriptionStatus] tracks transcription. [speakerAttempts]
+ * counts claims. Once it reaches [MAX_SPEAKER_ATTEMPTS], a failed analysis sets FAILED. [speakerAnalysisVersion] is set
+ * when an analysis completes. [lastSpeakerError] holds the most recent failure, for debugging.
  */
 data class Memory(
     val id: String,
@@ -43,12 +47,17 @@ data class Memory(
     val categories: List<Int> = emptyList(),
     val categorizationStatus: CategorizationStatus = CategorizationStatus.PENDING,
     val categorizationAttempts: Int = 0,
+    val speakerStatus: SpeakerStatus = SpeakerStatus.PENDING,
+    val speakerAttempts: Int = 0,
+    val lastSpeakerError: String? = null,
+    val speakerAnalysisVersion: Int? = null,
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
         require(summaryAttempts >= 0) { "Summary attempts cannot be negative." }
         require(transcriptionAttempts >= 0) { "Transcription attempts cannot be negative." }
         require(categorizationAttempts >= 0) { "Categorization attempts cannot be negative." }
+        require(speakerAttempts >= 0) { "Speaker attempts cannot be negative." }
         requireCategoryIdRules(categories)
     }
 
@@ -269,6 +278,47 @@ fun Memory.isMissingTranscription(): Boolean =
         recordingPath != null &&
         transcription.isBlank() &&
         transcriptionStatus == TranscriptionStatus.PENDING
+
+/** The speaker status for a memory saved with [recordingPath]. Without audio there is no speech to analyze, so it is skipped. */
+fun speakerStatusFor(recordingPath: String?): SpeakerStatus =
+    if (recordingPath == null) SpeakerStatus.SKIPPED else SpeakerStatus.PENDING
+
+fun Memory.claimedForSpeakerAnalysis(): Memory = copy(
+    speakerStatus = SpeakerStatus.ANALYZING,
+    speakerAttempts = speakerAttempts + 1,
+)
+
+fun Memory.withFinishedSpeakerAnalysis(analysisVersion: Int): Memory = copy(
+    speakerStatus = SpeakerStatus.DONE,
+    speakerAnalysisVersion = analysisVersion,
+    lastSpeakerError = null,
+)
+
+fun Memory.withFailedSpeakerAnalysis(error: String?): Memory = copy(
+    speakerStatus = speakerStatusAfterFailure(speakerAttempts),
+    lastSpeakerError = error ?: lastSpeakerError,
+)
+
+/**
+ * A claim interrupted by a crash goes back to PENDING without refunding its attempt. If the interrupted claim used the
+ * last attempt, the memory is FAILED instead, with a reason for debugging.
+ */
+fun Memory.requeuedForSpeakerAnalysis(): Memory {
+    val exhausted = speakerAttempts >= MAX_SPEAKER_ATTEMPTS
+    return copy(
+        speakerStatus = speakerStatusAfterFailure(speakerAttempts),
+        lastSpeakerError = if (exhausted) EXHAUSTED_SPEAKER_REASON else lastSpeakerError,
+    )
+}
+
+private const val EXHAUSTED_SPEAKER_REASON = "Speaker analysis did not finish after several attempts."
+
+/** Stops speaker analysis for a memory that will not be analyzed. A finished analysis is kept. */
+fun Memory.withSpeakerSkipped(): Memory =
+    if (speakerStatus == SpeakerStatus.DONE) this else copy(speakerStatus = SpeakerStatus.SKIPPED)
+
+private fun speakerStatusAfterFailure(attempts: Int): SpeakerStatus =
+    if (attempts >= MAX_SPEAKER_ATTEMPTS) SpeakerStatus.FAILED else SpeakerStatus.PENDING
 
 data class MemoryDraft(
     val title: String,

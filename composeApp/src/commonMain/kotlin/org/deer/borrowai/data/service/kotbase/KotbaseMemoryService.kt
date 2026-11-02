@@ -49,6 +49,13 @@ import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
+import org.deer.borrowai.data.domain.SpeakerStatus
+import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.speakerStatusFor
+import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
+import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
+import org.deer.borrowai.data.domain.withSpeakerSkipped
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.StatefulMemoryService
 
@@ -85,6 +92,7 @@ class KotbaseMemoryService private constructor(
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
             categorizationStatus = categorizationStatusFor(draft.categories),
+            speakerStatus = speakerStatusFor(draft.recordingPath),
         )
         writeAndPublish { insertMemory(memory) }.map { memory }
     }
@@ -219,6 +227,52 @@ class KotbaseMemoryService private constructor(
     override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withCategorizationGaveUp() }
 
+    override suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?> = mutex.withLock {
+        either {
+            val candidate = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && it.speakerStatus == SpeakerStatus.PENDING }
+                .maxByOrNull(Memory::createdAtEpochMillis)
+            if (candidate == null) {
+                null
+            } else {
+                val claimed = candidate.claimedForSpeakerAnalysis()
+                writeAndPublish { saveMemory(claimed) }.bind()
+                claimed
+            }
+        }
+    }
+
+    override suspend fun completeSpeakerAnalysis(id: String, analysisVersion: Int): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFinishedSpeakerAnalysis(analysisVersion) }
+
+    override suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFailedSpeakerAnalysis(error) }
+
+    override suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withSpeakerSkipped() }
+
+    override suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val unfinished = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && it.speakerStatus == SpeakerStatus.ANALYZING }
+            if (unfinished.isNotEmpty()) {
+                writeAndPublish { unfinished.forEach { saveMemory(it.requeuedForSpeakerAnalysis()) } }.bind()
+            }
+            unfinished.size
+        }
+    }
+
+    override suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val pending = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && it.speakerStatus == SpeakerStatus.PENDING }
+            if (pending.isNotEmpty()) {
+                writeAndPublish { pending.forEach { saveMemory(it.withSpeakerSkipped()) } }.bind()
+            }
+            pending.size
+        }
+    }
+
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
         mutex.withLock {
             either {
@@ -346,6 +400,10 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_CATEGORIES),
             SelectResult.property(COLUMN_CATEGORIZATION_STATUS),
             SelectResult.property(COLUMN_CATEGORIZATION_ATTEMPTS),
+            SelectResult.property(COLUMN_SPEAKER_STATUS),
+            SelectResult.property(COLUMN_SPEAKER_ATTEMPTS),
+            SelectResult.property(COLUMN_LAST_SPEAKER_ERROR),
+            SelectResult.property(COLUMN_SPEAKER_ANALYSIS_VERSION),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
@@ -418,6 +476,10 @@ class KotbaseMemoryService private constructor(
                     parseCategoriesString(getString(COLUMN_CATEGORIES)),
                 ),
                 categorizationAttempts = getInt(COLUMN_CATEGORIZATION_ATTEMPTS),
+                speakerStatus = decodeSpeakerStatus(getString(COLUMN_SPEAKER_STATUS)),
+                speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
+                lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
+                speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
             )
         }
     }
@@ -438,6 +500,10 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_CATEGORIES, categories.toCategoriesString())
         setString(COLUMN_CATEGORIZATION_STATUS, categorizationStatus.name)
         setInt(COLUMN_CATEGORIZATION_ATTEMPTS, categorizationAttempts)
+        setString(COLUMN_SPEAKER_STATUS, speakerStatus.name)
+        setInt(COLUMN_SPEAKER_ATTEMPTS, speakerAttempts)
+        setString(COLUMN_LAST_SPEAKER_ERROR, lastSpeakerError)
+        setNumber(COLUMN_SPEAKER_ANALYSIS_VERSION, speakerAnalysisVersion)
     }
 
     private fun Document.toMemory(): Memory? {
@@ -466,8 +532,19 @@ class KotbaseMemoryService private constructor(
                 parseCategoriesString(getString(COLUMN_CATEGORIES)),
             ),
             categorizationAttempts = getInt(COLUMN_CATEGORIZATION_ATTEMPTS),
+            speakerStatus = decodeSpeakerStatus(getString(COLUMN_SPEAKER_STATUS)),
+            speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
+            lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
+            speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
         )
     }
+
+    /**
+     * Documents saved before speaker recognition have no status. They decode as PENDING, the default in [Memory].
+     * An unknown stored value throws and decodes as [MemoryError.Malformed].
+     */
+    private fun decodeSpeakerStatus(raw: String?): SpeakerStatus =
+        raw?.let { SpeakerStatus.valueOf(it) } ?: SpeakerStatus.PENDING
 
     /** Throws [IllegalArgumentException] for a missing or unknown status, which decodes as [MemoryError.Malformed]. */
     private fun decodeSummaryStatus(raw: String?): SummaryStatus =
@@ -523,6 +600,10 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_SUMMARY_ATTEMPTS = "summaryAttempts"
         private const val COLUMN_CATEGORIZATION_STATUS = "categorizationStatus"
         private const val COLUMN_CATEGORIZATION_ATTEMPTS = "categorizationAttempts"
+        private const val COLUMN_SPEAKER_STATUS = "speakerStatus"
+        private const val COLUMN_SPEAKER_ATTEMPTS = "speakerAttempts"
+        private const val COLUMN_LAST_SPEAKER_ERROR = "lastSpeakerError"
+        private const val COLUMN_SPEAKER_ANALYSIS_VERSION = "speakerAnalysisVersion"
 
         private fun categoryDocumentId(id: Int): String = "category:$id"
 

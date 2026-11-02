@@ -181,6 +181,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 | `vector` | FloatArray (blob) | Dimension set by the embedding model. Stored with the model version. |
 | `modelVersion` | Int | Embeddings from different versions are never compared. |
 | `sourceOccurrenceId` | String | |
+| `memoryId` | String | Added in P1. Lets deletion and the cap find every embedding of a memory. |
+| `createdAtEpochMillis` | Long (epoch millis) | Added in P1. Orders embeddings for the cap, which drops the oldest. |
 
 **SpeakerOccurrence** (one cluster in one memory)
 
@@ -199,7 +201,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 
 **Rules**
 
-- A memory deleted in `DeletedMemoryPurger` also deletes its occurrences, embeddings with `speakerId == null` tied to it, and no sample file is kept (samples are time ranges, not files, see §8.3).
+- A memory deleted in `DeletedMemoryPurger` also deletes its occurrences and all of its embeddings, including embeddings already attached to a library speaker (AC-6.4, §13). No sample file is kept (samples are time ranges, not files, see §8.3). This corrects the earlier wording, which removed only embeddings with `speakerId == null` and so conflicted with AC-6.4.
 - `recordingPath` stays relative. No absolute paths are stored.
 - All reads and writes return Arrow `Either<MemoryError, T>` (add `SpeakerError` cases under `MemoryError` or a sibling type).
 
@@ -468,5 +470,5 @@ Use short public-domain or self-recorded clips. No real user audio in the repo.
 - [ ] Unit and instrumented tests green in CI (`./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug`).
 - [ ] Consent screen text (§9.8) matches §13.
 - [ ] Withdrawing consent deletes all speaker data (AC-6.6), tested on device.
-- [ ] CHANGELOG entry and version bump in each MR.
+- [ ] CHANGELOG entry and version bump in each MR. (Done for P1 in 1.8.0, build 55. Applies to each later phase.)
 - [ ] `visual-guide.html` matches the shipped UI, or the differences are noted.

@@ -19,6 +19,13 @@ import org.deer.borrowai.data.domain.afterFinishedCategorizationAttempt
 import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.requeuedForTranscription
+import org.deer.borrowai.data.domain.SpeakerStatus
+import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.speakerStatusFor
+import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
+import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
+import org.deer.borrowai.data.domain.withSpeakerSkipped
 import org.deer.borrowai.data.domain.summaryStatusFor
 import org.deer.borrowai.data.domain.withCategories
 import org.deer.borrowai.data.domain.withCategorizationGaveUp
@@ -67,6 +74,7 @@ class FakeMemoryService(
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
             categorizationStatus = categorizationStatusFor(draft.categories),
+            speakerStatus = speakerStatusFor(draft.recordingPath),
         )
         records[memory.id] = memory
         publishMemories()
@@ -182,6 +190,52 @@ class FakeMemoryService(
 
     override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withCategorizationGaveUp() }
+
+    override suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?> = mutex.withLock {
+        val next = records.values
+            .filter { !it.deleted && it.speakerStatus == SpeakerStatus.PENDING }
+            .maxByOrNull(Memory::createdAtEpochMillis)
+            ?.claimedForSpeakerAnalysis()
+        if (next != null) records[next.id] = next
+        next.right()
+    }
+
+    override suspend fun completeSpeakerAnalysis(id: String, analysisVersion: Int): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFinishedSpeakerAnalysis(analysisVersion) }
+
+    override suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit> =
+        updateActive(id) { it.withFailedSpeakerAnalysis(error) }
+
+    override suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withSpeakerSkipped() }
+
+    override suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var requeued = 0
+        records.replaceAll { _, memory ->
+            if (!memory.deleted && memory.speakerStatus == SpeakerStatus.ANALYZING) {
+                requeued++
+                memory.requeuedForSpeakerAnalysis()
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        requeued.right()
+    }
+
+    override suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var skipped = 0
+        records.replaceAll { _, memory ->
+            if (!memory.deleted && memory.speakerStatus == SpeakerStatus.PENDING) {
+                skipped++
+                memory.withSpeakerSkipped()
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        skipped.right()
+    }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =
         mutex.withLock {

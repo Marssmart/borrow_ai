@@ -178,4 +178,63 @@ class TranscriptionWorkRunnerTest {
         assertFalse(runner.sweep())
         assertEquals(TranscriptionStatus.PENDING, memories.get("b").transcriptionStatus)
     }
+
+    @Test
+    fun successfulTranscriptionsNotifyTheCallbackWithTheMemoryId() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+        memories.addPending("b")
+        val notified = mutableListOf<String>()
+        val runner = TranscriptionWorkRunner(
+            memoryService = memories,
+            recordingsRoot = root,
+            batchTranscriber = object : BatchTranscriber {
+                override suspend fun transcribe(recordingPath: Path): String? = "text"
+            },
+            scheduler = TranscriptionScheduler.None,
+            onTranscriptionSucceeded = { memoryId -> notified += memoryId },
+        )
+
+        runner.drain()
+
+        assertEquals(listOf("a", "b"), notified)
+    }
+
+    @Test
+    fun failedTranscriptionsDoNotNotifyTheCallback() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+        val notified = mutableListOf<String>()
+        val runner = TranscriptionWorkRunner(
+            memoryService = memories,
+            recordingsRoot = root,
+            batchTranscriber = object : BatchTranscriber {
+                override suspend fun transcribe(recordingPath: Path): String? = null
+            },
+            scheduler = TranscriptionScheduler.None,
+            onTranscriptionSucceeded = { memoryId -> notified += memoryId },
+        )
+
+        runner.drain()
+
+        assertTrue(notified.isEmpty())
+    }
+
+    @Test
+    fun aFailingCallbackDoesNotFailTheTranscription() = runTest {
+        val memories = memories()
+        memories.addPending("a")
+        val runner = TranscriptionWorkRunner(
+            memoryService = memories,
+            recordingsRoot = root,
+            batchTranscriber = object : BatchTranscriber {
+                override suspend fun transcribe(recordingPath: Path): String? = "text"
+            },
+            scheduler = TranscriptionScheduler.None,
+            onTranscriptionSucceeded = { error("speaker bookkeeping failed") },
+        )
+
+        assertTrue(runner.drain())
+        assertEquals(TranscriptionStatus.DONE, memories.get("a").transcriptionStatus)
+    }
 }

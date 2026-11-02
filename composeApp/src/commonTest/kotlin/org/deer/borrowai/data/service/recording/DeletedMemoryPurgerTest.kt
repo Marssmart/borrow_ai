@@ -13,9 +13,15 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.OccurrenceDraft
+import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
+import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.SpeakerError
+import org.deer.borrowai.data.service.SpeakerService
 
 class DeletedMemoryPurgerTest {
     private val root = "/app/files".toPath()
@@ -42,7 +48,7 @@ class DeletedMemoryPurgerTest {
         val memory = memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
         memories.delete(memory.id)
 
-        val purged = DeletedMemoryPurger(memories, root, { false }, fs).purge()
+        val purged = DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge()
 
         assertEquals(1, purged)
         assertFalse(fs.exists(recordings / "abc.m4a"))
@@ -56,7 +62,7 @@ class DeletedMemoryPurgerTest {
         val memories = memories()
         memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
 
-        assertEquals(0, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertEquals(0, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())
         assertTrue(fs.exists(recordings / "abc.m4a"))
         assertEquals(1, memories.getState().value.size)
     }
@@ -69,7 +75,7 @@ class DeletedMemoryPurgerTest {
         val memory = memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
         memories.delete(memory.id)
 
-        assertEquals(0, DeletedMemoryPurger(memories, root, { true }, fs).purge())
+        assertEquals(0, DeletedMemoryPurger(memories, root, { true }, fs, FakeSpeakerService()).purge())
         assertTrue(fs.exists(recordings / "abc.m4a"))
         assertEquals(true, memories.findById("abc").getOrNull()?.deleted)
     }
@@ -83,7 +89,7 @@ class DeletedMemoryPurgerTest {
         memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "b")
         memories.delete("a")
 
-        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())
         assertTrue(fs.exists(recordings / "abc.m4a"))
     }
 
@@ -101,7 +107,7 @@ class DeletedMemoryPurgerTest {
                 return memories.findAll()
             }
         }
-        val purger = DeletedMemoryPurger(failing, root, { false }, fs)
+        val purger = DeletedMemoryPurger(failing, root, { false }, fs, FakeSpeakerService())
 
         assertEquals(0, purger.purge())
         failing.fail = false
@@ -115,7 +121,7 @@ class DeletedMemoryPurgerTest {
         val memory = memories.createMemory(MemoryDraft("t", "s", "x"), id = "text-only")
         memories.delete(memory.id)
 
-        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())
         assertTrue(memories.findById("text-only").isLeft())
     }
 
@@ -128,7 +134,7 @@ class DeletedMemoryPurgerTest {
         memories.update("abc", MemoryDraft("edited", "", ""))
         memories.delete("abc")
 
-        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())
         assertFalse(fs.exists(recordings / "abc.m4a"))
         RecordingReconciler(
             memoryService = memories,
@@ -151,7 +157,66 @@ class DeletedMemoryPurgerTest {
         val memory = memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
         memories.delete(memory.id)
 
-        assertEquals(0, DeletedMemoryPurger(memories, root, { false }, fs).purge())
+        assertEquals(0, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())
         assertEquals(true, memories.findById("abc").getOrNull()?.deleted)
+    }
+
+    @Test
+    fun speakerRowsAreRemovedBeforeTheRecord() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        memories.createMemory(MemoryDraft("t", "s", "x"), id = "abc")
+        speakers.replaceOccurrences(
+            memoryId = "abc",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(
+                OccurrenceDraft(
+                    ordinal = 1,
+                    speakerId = null,
+                    link = SpeakerLink.NONE,
+                    totalSpeechMs = 2_000L,
+                    sampleStartMs = 0L,
+                    sampleEndMs = 2_000L,
+                    centroid = floatArrayOf(1f, 0f),
+                ),
+            ),
+        )
+        memories.delete("abc")
+        val steps = mutableListOf<String>()
+        val recordingSpeakers = object : SpeakerService by speakers {
+            override suspend fun deleteForMemory(memoryId: String): Either<SpeakerError, Unit> {
+                steps += "speakers"
+                return speakers.deleteForMemory(memoryId)
+            }
+        }
+        val recordingMemories = object : MemoryService by memories {
+            override suspend fun purge(id: String): Boolean {
+                steps += "record"
+                return memories.purge(id)
+            }
+        }
+
+        assertEquals(1, DeletedMemoryPurger(recordingMemories, root, { false }, fs, recordingSpeakers).purge())
+        assertEquals(listOf("speakers", "record"), steps)
+        assertTrue(speakers.findOccurrences("abc").getOrNull()!!.isEmpty())
+        assertTrue(memories.findById("abc").isLeft())
+    }
+
+    @Test
+    fun failedSpeakerCleanupKeepsTheRecordForRetry() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        memories.createMemory(MemoryDraft("t", "s", "x"), id = "abc")
+        memories.delete("abc")
+        speakers.failDeletes = true
+        val purger = DeletedMemoryPurger(memories, root, { false }, fs, speakers)
+
+        assertEquals(0, purger.purge())
+        assertEquals(true, memories.findById("abc").getOrNull()?.deleted)
+
+        speakers.failDeletes = false
+        assertEquals(1, purger.purge())
     }
 }
