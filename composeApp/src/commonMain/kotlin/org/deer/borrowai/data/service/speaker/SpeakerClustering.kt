@@ -13,15 +13,15 @@ internal const val MAX_SPEAKERS = 8
  * Groups speech turns into speakers. Returns, for each turn, its speaker index or -1 when the turn belongs to no kept
  * speaker. Speaker indexes are ordered by first appearance in the audio.
  *
- * Turns are merged by average linkage until the closest pair is farther apart than [CLUSTER_DISTANCE]. Clusters whose
- * centroids are that close are merged too. Speakers with less than [MIN_SPEECH_MS] of speech are dropped. Speakers past
- * [MAX_SPEAKERS] merge into the nearest kept speaker.
+ * Turns are grouped in one pass (see [leaderClustering]). Speakers whose centroids are within [CLUSTER_DISTANCE] are
+ * merged afterwards. Speakers with less than [MIN_SPEECH_MS] of speech are dropped. Speakers past [MAX_SPEAKERS] merge
+ * into the nearest kept speaker.
  */
 internal fun clusterTurns(turns: List<SpeechTurn>): IntArray {
     val labels = IntArray(turns.size) { -1 }
     if (turns.isEmpty()) return labels
     val unit = turns.map { normalized(it.embedding) }
-    val merged = mergeSimilarCentroids(averageLinkage(unit), unit)
+    val merged = mergeSimilarCentroids(leaderClustering(unit), unit)
     val withSpeech = merged.filter { speechMs(it, turns) >= MIN_SPEECH_MS }
     val kept = capSpeakers(withSpeech, turns, unit)
     kept.sortedBy { firstStartMs(it, turns) }.forEachIndexed { label, cluster ->
@@ -30,50 +30,34 @@ internal fun clusterTurns(turns: List<SpeechTurn>): IntArray {
     return labels
 }
 
-/** Average-linkage agglomerative clustering over unit vectors. Stops at the first pair farther than [CLUSTER_DISTANCE]. */
-private fun averageLinkage(unit: List<FloatArray>): List<MutableList<Int>> {
-    val count = unit.size
-    val distance = DoubleArray(count * count)
-    for (i in 0 until count) {
-        for (j in i + 1 until count) {
-            val pairDistance = 1.0 - dot(unit[i], unit[j])
-            distance[i * count + j] = pairDistance
-            distance[j * count + i] = pairDistance
-        }
-    }
-    val alive = BooleanArray(count) { true }
-    val size = IntArray(count) { 1 }
-    val members = List(count) { mutableListOf(it) }
-    while (true) {
-        var bestA = -1
-        var bestB = -1
-        var best = Double.POSITIVE_INFINITY
-        for (a in 0 until count) {
-            if (!alive[a]) continue
-            for (b in a + 1 until count) {
-                if (alive[b] && distance[a * count + b] < best) {
-                    best = distance[a * count + b]
-                    bestA = a
-                    bestB = b
-                }
+/**
+ * One pass over the turns. Each turn joins the closest existing speaker whose centroid is within [CLUSTER_DISTANCE],
+ * otherwise it starts a new speaker. Memory is proportional to the turns plus the speakers, not to their square, so a
+ * long recording with many turns stays bounded. The result depends on turn order, which is why [mergeSimilarCentroids]
+ * runs afterwards to join speakers the pass split.
+ */
+private fun leaderClustering(unit: List<FloatArray>): List<MutableList<Int>> {
+    val clusters = mutableListOf<MutableList<Int>>()
+    val sums = mutableListOf<FloatArray>()
+    for ((index, vector) in unit.withIndex()) {
+        var nearest = -1
+        var nearestDistance = Double.POSITIVE_INFINITY
+        for (cluster in clusters.indices) {
+            val distance = 1.0 - dot(normalized(sums[cluster]), vector)
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearest = cluster
             }
         }
-        if (bestA < 0 || best > CLUSTER_DISTANCE) break
-        // Lance-Williams update for average linkage: the distance from the merged cluster is the size-weighted mean.
-        val sizeA = size[bestA].toDouble()
-        val sizeB = size[bestB].toDouble()
-        for (k in 0 until count) {
-            if (!alive[k] || k == bestA || k == bestB) continue
-            val updated = (sizeA * distance[bestA * count + k] + sizeB * distance[bestB * count + k]) / (sizeA + sizeB)
-            distance[bestA * count + k] = updated
-            distance[k * count + bestA] = updated
+        if (nearest >= 0 && nearestDistance <= CLUSTER_DISTANCE) {
+            clusters[nearest].add(index)
+            sums[nearest] = FloatArray(vector.size) { sums[nearest][it] + vector[it] }
+        } else {
+            clusters.add(mutableListOf(index))
+            sums.add(vector.copyOf())
         }
-        size[bestA] += size[bestB]
-        members[bestA].addAll(members[bestB])
-        members[bestB].clear()
-        alive[bestB] = false
     }
-    return members.filterIndexed { index, _ -> alive[index] }
+    return clusters
 }
 
 /** Merges the two clusters with the closest centroids while they are within [CLUSTER_DISTANCE]. */

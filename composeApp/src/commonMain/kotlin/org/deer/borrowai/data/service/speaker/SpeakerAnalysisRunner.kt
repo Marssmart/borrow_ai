@@ -2,6 +2,7 @@ package org.deer.borrowai.data.service.speaker
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -83,6 +84,14 @@ class SpeakerAnalysisRunner(
         scope.launch { drainSafely() }
     }
 
+    /**
+     * Drains again whenever the speaker settings change. Turning the feature off marks waiting memories SKIPPED, and
+     * turning it on starts analysis. Returns the job so the caller can stop it with the app graph.
+     */
+    fun watchSettings(): Job = scope.launch {
+        speakerService.changes.collect { requestDrain() }
+    }
+
     /** An unexpected failure ends only this drain. Memories it left ANALYZING are requeued by the next drain. */
     private suspend fun drainSafely() {
         try {
@@ -118,31 +127,62 @@ class SpeakerAnalysisRunner(
      */
     private suspend fun analyzeClaimed(memory: Memory, library: List<SpeakerEmbedding>): Boolean {
         val relativePath = memory.recordingPath ?: return skip(memory.id)
-        val drafts = try {
-            planSpeakerOccurrences(
-                turns = analyzer.analyze(recordingsRoot / relativePath),
-                library = library,
-                modelVersion = SPEAKER_ANALYSIS_VERSION,
-            )
+        val turns = try {
+            analyzer.analyze(recordingsRoot / relativePath)
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
             // The class name only: exception messages can carry file paths.
             return failAttempt(memory.id, exception::class.simpleName ?: "UnknownError")
         }
-        if (drafts.isEmpty()) return skip(memory.id)
-        val storeError = speakerService.replaceOccurrences(memory.id, SPEAKER_ANALYSIS_VERSION, drafts).leftOrNull()
-        if (storeError == SpeakerError.Disabled) {
-            // Analysis was switched off while this memory ran. Its result is dropped and the drain stops.
-            skip(memory.id)
-            return false
+        var currentLibrary = library
+        // A speaker deleted while the audio was analyzed makes the store refuse the write. The turns are re-planned once
+        // against the current speakers. The audio is not analyzed again.
+        for (attempt in 0..1) {
+            if (attempt > 0) {
+                currentLibrary = speakerService.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION)
+                    .fold(ifLeft = { return failAttempt(memory.id, "Speaker data could not be read") }, ifRight = { it })
+            }
+            val known = speakerService.findSpeakers()
+                .fold(ifLeft = { return failAttempt(memory.id, "Speaker data could not be read") }, ifRight = { it })
+                .mapTo(mutableSetOf()) { it.id }
+            val previous = speakerService.findOccurrences(memory.id)
+                .fold(ifLeft = { return failAttempt(memory.id, "Speaker data could not be read") }, ifRight = { it })
+            val drafts = try {
+                planSpeakerOccurrences(
+                    turns = turns,
+                    library = currentLibrary,
+                    modelVersion = SPEAKER_ANALYSIS_VERSION,
+                    knownSpeakerIds = known,
+                    previous = previous,
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                return failAttempt(memory.id, exception::class.simpleName ?: "UnknownError")
+            }
+            if (drafts.isEmpty()) return skip(memory.id)
+            val storeError = speakerService.replaceOccurrences(memory.id, SPEAKER_ANALYSIS_VERSION, drafts).leftOrNull()
+            when (storeError) {
+                null -> return complete(memory.id)
+                SpeakerError.Disabled -> {
+                    // Analysis was switched off while this memory ran. Its result is dropped and the drain stops.
+                    skip(memory.id)
+                    return false
+                }
+                is SpeakerError.NotFound -> continue
+                else -> return failAttempt(memory.id, "Speaker occurrences could not be saved")
+            }
         }
-        if (storeError != null) return failAttempt(memory.id, "Speaker occurrences could not be saved")
-        val completionError = memoryService.completeSpeakerAnalysis(memory.id, SPEAKER_ANALYSIS_VERSION).leftOrNull()
+        return failAttempt(memory.id, "A speaker changed during analysis")
+    }
+
+    /** Marks the memory DONE. A memory deleted while it ran has its speaker rows removed here, as the purger may have run already. */
+    private suspend fun complete(memoryId: String): Boolean {
+        val completionError = memoryService.completeSpeakerAnalysis(memoryId, SPEAKER_ANALYSIS_VERSION).leftOrNull()
             ?: return true
         if (completionError !is MemoryError.NotFound) return storeFailed()
-        // Deleted while it ran: the rows just written must go too, even if the purger already ran.
-        return speakerService.deleteForMemory(memory.id).fold(ifLeft = { storeFailed() }, ifRight = { true })
+        return speakerService.deleteForMemory(memoryId).fold(ifLeft = { storeFailed() }, ifRight = { true })
     }
 
     private suspend fun skip(memoryId: String): Boolean =

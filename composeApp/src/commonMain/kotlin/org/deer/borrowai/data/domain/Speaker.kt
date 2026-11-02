@@ -119,6 +119,7 @@ class OccurrenceDraft(
     val sampleStartMs: Long,
     val sampleEndMs: Long,
     val centroid: FloatArray,
+    val rejectedSpeakerIds: List<String> = emptyList(),
 ) {
     init {
         require(ordinal >= 1) { "Speaker ordinals start at 1." }

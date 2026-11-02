@@ -219,4 +219,31 @@ class DeletedMemoryPurgerTest {
         speakers.failDeletes = false
         assertEquals(1, purger.purge())
     }
+
+    @Test
+    fun speakerRowsWithoutAMemoryAreRemovedByThePurge() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        speakers.replaceOccurrences(
+            memoryId = "gone",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(
+                OccurrenceDraft(
+                    ordinal = 1,
+                    speakerId = null,
+                    link = SpeakerLink.NONE,
+                    totalSpeechMs = 2_000L,
+                    sampleStartMs = 0L,
+                    sampleEndMs = 2_000L,
+                    centroid = floatArrayOf(1f, 0f),
+                ),
+            ),
+        )
+
+        DeletedMemoryPurger(memories, root, { false }, fs, speakers).purge()
+
+        assertTrue(speakers.findOccurrences("gone").getOrNull()!!.isEmpty())
+        assertTrue(speakers.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
 }

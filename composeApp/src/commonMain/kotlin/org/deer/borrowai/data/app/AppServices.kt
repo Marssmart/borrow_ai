@@ -292,6 +292,7 @@ class AppServices internal constructor(
                 // One drain at launch, started last so a failure while wiring the graph cannot leave it running. Its first
                 // step requeues analyses that an earlier run left unfinished.
                 speakerRunner.requestDrain()
+                val speakerSettingsJob = speakerRunner.watchSettings()
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
@@ -300,7 +301,13 @@ class AppServices internal constructor(
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
                     closeScope = graphScope,
-                    backgroundJobs = listOf(reconcilerJob, purgerJob, summaryRecoveryJob, categorizationRecoveryJob),
+                    backgroundJobs = listOf(
+                        reconcilerJob,
+                        purgerJob,
+                        summaryRecoveryJob,
+                        categorizationRecoveryJob,
+                        speakerSettingsJob,
+                    ),
                     callbackGroup = callbackGroup,
                     summarizer = summarizer,
                     closeModelRuntime = closeModelRuntime,

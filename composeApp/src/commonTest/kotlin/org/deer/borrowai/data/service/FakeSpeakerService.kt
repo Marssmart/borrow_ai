@@ -155,7 +155,7 @@ class FakeSpeakerService(
                 ordinal = draft.ordinal,
                 speakerId = draft.speakerId,
                 link = draft.link,
-                rejectedSpeakerIds = emptyList(),
+                rejectedSpeakerIds = draft.rejectedSpeakerIds,
                 totalSpeechMs = draft.totalSpeechMs,
                 sampleStartMs = draft.sampleStartMs,
                 sampleEndMs = draft.sampleEndMs,
@@ -188,6 +188,16 @@ class FakeSpeakerService(
         published()
         Unit.right()
     }
+
+    override suspend fun deleteRowsWithoutMemory(liveMemoryIds: Set<String>): Either<SpeakerError, Int> =
+        mutex.withLock {
+            val orphanEmbeddings = embeddings.values.filter { it.memoryId !in liveMemoryIds }.map { it.id }
+            val orphanOccurrences = occurrences.values.filter { it.memoryId !in liveMemoryIds }.map { it.id }
+            orphanEmbeddings.forEach { embeddings.remove(it) }
+            orphanOccurrences.forEach { occurrences.remove(it) }
+            published()
+            (orphanEmbeddings.size + orphanOccurrences.size).right()
+        }
 
     /** Removes the rows of [memoryId] and returns the speakers that lost an embedding. */
     private fun removeRows(memoryId: String): Set<String> {

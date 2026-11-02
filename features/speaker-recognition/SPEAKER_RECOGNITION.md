@@ -168,8 +168,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 |---|---|---|
 | `id` | String (UUID) | |
 | `name` | String | User-provided, unique case-insensitively. |
-| `createdAt` | Instant | |
-| `lastUsedAt` | Instant | Sort key for the assign sheet. |
+| `createdAt` | Long (epoch millis) | |
+| `lastUsedAt` | Long (epoch millis) | Sort key for the assign sheet. |
 | `embeddingCount` | Int | Capped at 10 by dropping the oldest embeddings. |
 
 **SpeakerEmbedding**
@@ -229,7 +229,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 6. Cap clusters at `maxSpeakersPerMemory` (default 8). Extra clusters merge into the nearest one.
 7. For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.
 8. Compute each cluster's centroid. Compare it with every library speaker's embeddings. Use the best score, and link `AUTO` if it is at or above the match threshold and the speaker is not rejected.
-9. Write occurrences, the centroid embedding, and the sample range in one transaction. Set `speakerStatus = DONE` and `speakerAnalysisVersion`.
+9. Write occurrences, the centroid embedding, and the sample range in one batch. Set `speakerStatus = DONE` and `speakerAnalysisVersion`. *Deviation (P1):* the occurrences and embeddings go in one batch, but the DONE write is a separate memory-record write. A crash between the two leaves the memory ANALYZING. The retry rebuilds the same rows, so nothing is lost or duplicated.
 10. Emit a change event so the list and detail views refresh.
 
 ### 7.3 Re-analysis
@@ -238,7 +238,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 - Drained by: app launch, in the background at low priority (AC-5.2).
 - Re-analysis recomputes segmentation and clusters, then re-runs matching. It keeps `MANUAL` links where the occurrence's centroid still maps to the same speaker. Otherwise the manual link stays as it was (see AC-5.3). Simple rule for v1: a manual link is never removed by re-analysis.
 - Runs with the same low priority as other background jobs. Pauses while recording.
-- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch.
+- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch. *P1 checks these between memories. The check between speech turns belongs in the analyzer wrapper, and is added in P5 with the first real analyzer.*
+- Notes for later phases. P2 withdrawal must also reset each memory's `speakerStatus` (DONE becomes SKIPPED or PENDING), not only delete the speaker data. P4 re-analysis must include SKIPPED memories as well as PENDING ones.
 - Scope in v1: the drain runs only while the app process is alive. No WorkManager or BGTask job in v1. The queue is persisted, so a killed app loses nothing.
 
 ---

@@ -59,6 +59,11 @@ class DeletedMemoryPurger(
                 // The record stays so the next run retries the remaining steps.
             }
         }
+        // Rows whose memory is gone are removed too. A purge that stopped after removing its speaker rows, or a record
+        // removed some other way, would otherwise leave voiceprints behind.
+        memoryService.findAll().getOrNull()
+            ?.mapTo(mutableSetOf(), Memory::id)
+            ?.let { speakerService.deleteRowsWithoutMemory(it) }
         return purged
     }
 

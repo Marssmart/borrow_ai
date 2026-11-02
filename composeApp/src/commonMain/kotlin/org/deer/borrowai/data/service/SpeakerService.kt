@@ -37,6 +37,12 @@ interface SpeakerService {
     /** Deletes the speaker [id]. Its voiceprints are deleted with it. Its occurrences become unknown. Memories are not touched. */
     suspend fun deleteSpeaker(id: String): Either<SpeakerError, Unit>
 
+    /**
+     * Removes embeddings and occurrences whose memory is not in [liveMemoryIds]. Used by the purger after its pass, so
+     * rows left by an interrupted purge are not kept forever. Returns how many rows were removed.
+     */
+    suspend fun deleteRowsWithoutMemory(liveMemoryIds: Set<String>): Either<SpeakerError, Int>
+
     /** Embeddings attached to a speaker and stored with [modelVersion]. Unknown embeddings are left out. */
     suspend fun findSpeakerEmbeddings(modelVersion: Int): Either<SpeakerError, List<SpeakerEmbedding>>
 
