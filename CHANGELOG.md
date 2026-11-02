@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.7.7]
+
+- Recorded the speaker recognition P0 spike results in the feature spec. The sherpa-onnx 1.13.8 Kotlin API exposes offline diarization and speaker embedding extraction, and the candidate model pairs fit the 60 MB download limit. Embedding model licenses and on-device measurements remain open.
+- Updated Android and iOS versioning to 1.7.7 (build 54).
+
 ## [1.7.6]
 
 - Removed the play icon from the memory card header in Saved memories, and the memory date is now left-aligned.
