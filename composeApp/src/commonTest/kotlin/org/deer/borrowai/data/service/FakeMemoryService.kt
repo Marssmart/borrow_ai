@@ -55,6 +55,8 @@ class FakeMemoryService(
     val deleteCalls = mutableListOf<String>()
     /** When set, [delete] returns this error without changing the memory. */
     var deleteFailure: MemoryError? = null
+    /** When set, [requestSummary] returns this error without changing the memory. */
+    var requestFailure: MemoryError? = null
     private var nextGeneratedId = 1L
     private val memories = MutableStateFlow(
         records.values.filterNot(Memory::deleted).sortedByDescending(Memory::createdAtEpochMillis),
@@ -112,8 +114,10 @@ class FakeMemoryService(
         Unit.right()
     }
 
-    override suspend fun requestSummary(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withSummaryRequested() }
+    override suspend fun requestSummary(id: String): Either<MemoryError, Unit> {
+        requestFailure?.let { return it.left() }
+        return updateActive(id) { it.withSummaryRequested() }
+    }
 
     override suspend fun requestCategorization(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withCategorizationRequested() }

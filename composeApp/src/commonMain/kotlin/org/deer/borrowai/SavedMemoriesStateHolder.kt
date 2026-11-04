@@ -80,6 +80,8 @@ internal data class SavedMemoriesUiState(
     val saveStatusLoaded: Boolean = false,
     /** The memory whose transcript was just changed in the editor. Its detail view shows the banner until dismissed. */
     val transcriptChangedMemoryId: String? = null,
+    /** Counts failed requests for new output from the banner. The screen shows an error each time it goes up. */
+    val transcriptRequestFailures: Int = 0,
 ) {
     /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
     val visibleMemories: List<Memory>
@@ -264,14 +266,31 @@ internal class SavedMemoriesStateHolder(
 
     /** Asks the recovery job for a new summary. The caller has already confirmed when that replaces the user's text. */
     fun requestNewSummary(memoryId: String) {
-        dismissTranscriptBanner()
-        launchWrite { memoryService.requestSummary(memoryId) }
+        requestFromBanner(memoryId) { memoryService.requestSummary(memoryId) }
     }
 
     /** Asks the recovery job for new categories. The caller has already confirmed when that replaces the user's choice. */
     fun requestNewCategories(memoryId: String) {
-        dismissTranscriptBanner()
-        launchWrite { memoryService.requestCategorization(memoryId) }
+        requestFromBanner(memoryId) { memoryService.requestCategorization(memoryId) }
+    }
+
+    /**
+     * Clears the banner only when the request is recorded. A failed request keeps the banner, so the user can try again,
+     * and counts the failure so the screen can show it.
+     */
+    private fun requestFromBanner(memoryId: String, request: suspend () -> Either<MemoryError, Unit>) {
+        launchWrite {
+            request().fold(
+                ifLeft = {
+                    mutableUiState.update { state -> state.copy(transcriptRequestFailures = state.transcriptRequestFailures + 1) }
+                },
+                ifRight = {
+                    mutableUiState.update { state ->
+                        if (state.transcriptChangedMemoryId == memoryId) state.copy(transcriptChangedMemoryId = null) else state
+                    }
+                },
+            )
+        }
     }
 
     private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {

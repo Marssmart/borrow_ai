@@ -357,6 +357,22 @@ class SavedMemoriesDeleteTest {
         assertFalse(stored.categoriesEditedByUser)
     }
 
+    @Test
+    fun failedSummaryRequestKeepsTheBannerAndCountsTheFailure() = runTest {
+        val service = memoryService(transcribed("a", "old"))
+        service.requestFailure = MemoryError.Persistence(IllegalStateException("disk full"))
+        val holder = holder(service)
+        runCurrent()
+        holder.saveMemoryEdit("a", null, null, "new", "") { }
+        runCurrent()
+
+        holder.requestNewSummary("a")
+        runCurrent()
+
+        assertEquals("a", holder.uiState.value.transcriptChangedMemoryId)
+        assertEquals(1, holder.uiState.value.transcriptRequestFailures)
+    }
+
     private fun transcribed(
         id: String,
         transcription: String,

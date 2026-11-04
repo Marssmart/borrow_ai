@@ -88,6 +88,7 @@ import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.memory_delete
+import borrowai.composeapp.generated.resources.memory_banner_request_failed
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_edit
 import borrowai.composeapp.generated.resources.memory_edit_deleted
@@ -164,6 +165,10 @@ internal fun SavedMemoriesScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val deletedElsewhereMessage = stringResource(Res.string.memory_edit_deleted)
+    val requestFailedMessage = stringResource(Res.string.memory_banner_request_failed)
+    LaunchedEffect(uiState.transcriptRequestFailures) {
+        if (uiState.transcriptRequestFailures > 0) snackbarHostState.showSnackbar(requestFailedMessage)
+    }
     val onEditedMemoryDeleted: () -> Unit = {
         // Runs once per editor session: a second call, after the editor has closed, does nothing.
         if (editingMemoryId != null) {

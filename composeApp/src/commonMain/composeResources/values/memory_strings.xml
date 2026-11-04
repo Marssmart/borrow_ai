@@ -70,6 +70,7 @@
     <string name="memory_banner_write_summary">Write new summary</string>
     <string name="memory_banner_suggest_categories">Suggest categories</string>
     <string name="memory_banner_dismiss">Dismiss</string>
+    <string name="memory_banner_request_failed">Couldn\'t request new output. Try again.</string>
     <string name="memory_banner_replace_summary_title">Replace your summary?</string>
     <string name="memory_banner_replace_summary_message">The new summary replaces the one you wrote.</string>
     <string name="memory_banner_replace_categories_title">Replace your categories?</string>
