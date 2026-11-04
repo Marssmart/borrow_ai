@@ -182,6 +182,7 @@ No schema change and no new storage. The commit timing lives in the UI state hol
 |---|---|
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt` | Add the pending-delete state (`PendingMemoryDelete`), plus request, undo, and commit functions. The list shows `visibleMemories`, which leaves out the pending memories. `memories` keeps them, so the detail view can slide back with its memory (§8.3). Call `mediaSessionService.stopPlayback()` when the playing target is the memory being deleted. Commit on tab leave, on background, and on a second delete. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/PendingMemoryDelete.kt` (new) | A pure class for the window and commit rules, so the rules can be unit tested without Compose. |
+| `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/app/AppServices.kt` and `data/app/PendingWrites.kt` (new) | `launchWrite` starts the soft-delete writes. `close()` waits for them before the database closes, through `PendingWrites`. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt` | **More actions** button and `DropdownMenu` in `MemoryDetailScreen` (line 388). Long-press and the TalkBack custom action in `MemoryCard` (line 272). `SnackbarHost`. Empty state in `MemoryListScreen` (line 225). |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/App.kt` | Pass a "go to Record" callback into `SavedMemoriesScreen`. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MediaSessionService.kt` | Expose whether a save is pending. `RecordingMediaSessionService` already has `isBusy` (line 368), but the interface does not. Needed for AC-5.3. |
@@ -212,7 +213,7 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 
 ### 8.3 Implementation notes (P1)
 
-- **Commit scope.** Soft-delete writes run on `AppServices.graphScope`, not on the Memories screen's scope. A write started when that page leaves composition would otherwise be cancelled with it.
+- **Commit scope.** Soft-delete writes start through `AppServices.launchWrite`, not on the Memories screen's scope, so a write keeps running after that page leaves composition. `AppServices.close()` waits for every write started this way (`PendingWrites`) before the database closes. Shutdown cannot cut a delete off.
 - **Commit triggers.** The 10-second window timer runs on the screen scope. Leaving the Memories tab is seen when its page leaves composition (`DisposableEffect`), which happens after the swipe settles. Going to the background is `LifecycleEventEffect(ON_STOP)`. A second delete commits the first one before it opens its own window.
 - **Hidden while writing.** A memory stays hidden until its write returns. A `Persistence` or `Malformed` result shows it again and counts one error. `NotFound` counts as done (AC-6.2).
 - **Stale timers.** Each window has a request id. A timer left over from an earlier window does nothing.

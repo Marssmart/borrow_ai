@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.app
 
 import arrow.core.Either
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -32,6 +33,7 @@ import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.SummaryResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
 
 class AppServicesCloseTest {
@@ -104,6 +106,29 @@ class AppServicesCloseTest {
      * Builds the graph around [media] and [summarizer], routing close-scope failures into [failures] and
      * recording each close step in [events]. [advanceUntilIdle] then runs the drain to completion.
      */
+    @Test
+    fun `close waits for a memory write that is still running before the database closes`() = runTest {
+        val events = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val release = CompletableDeferred<Unit>()
+        val media = RecordingMediaSession(events)
+        val services = servicesWith(media, events, failures, RecordingSummarizer(events))
+
+        services.launchWrite {
+            release.await()
+            events += "write"
+        }
+        services.close()
+        advanceUntilIdle()
+
+        assertFalse("database" in events)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("write", "database"), events.filter { it == "write" || it == "database" })
+    }
+
     private fun TestScope.servicesWith(
         media: MediaSessionService,
         events: MutableList<String>,

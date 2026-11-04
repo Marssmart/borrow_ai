@@ -7,6 +7,7 @@ import arrow.core.left
 import arrow.core.right
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -222,7 +223,7 @@ class SavedMemoriesDeleteTest {
         memoriesScrollState = ScrollState(0),
         detailScrollState = ScrollState(0),
         scope = backgroundScope,
-        commitScope = this,
+        launchWrite = { block -> launch { block() } },
     )
 }
 

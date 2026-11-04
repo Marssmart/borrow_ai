@@ -51,8 +51,8 @@ internal class SavedMemoriesStateHolder(
     val memoriesScrollState: ScrollState,
     val detailScrollState: ScrollState,
     private val scope: CoroutineScope,
-    /** Runs the soft-delete writes. It outlives the screen, so a delete still commits after the screen leaves composition. */
-    private val commitScope: CoroutineScope,
+    /** Starts the soft-delete writes through the app, so close waits for them and a write outlives the screen. */
+    private val launchWrite: (suspend () -> Unit) -> Unit,
 ) {
     private val mutableUiState = MutableStateFlow(SavedMemoriesUiState())
     private var lastUndoRequestId = 0L
@@ -188,7 +188,7 @@ internal class SavedMemoriesStateHolder(
     }
 
     private fun writeDelete(memoryId: String) {
-        commitScope.launch {
+        launchWrite {
             val outcome = deleteOutcome(memoryService.delete(memoryId))
             mutableUiState.update { state ->
                 state.copy(

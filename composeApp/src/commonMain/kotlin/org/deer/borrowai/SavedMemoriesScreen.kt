@@ -115,7 +115,7 @@ internal fun SavedMemoriesScreen(
             memoriesScrollState = memoriesScrollState,
             detailScrollState = detailScrollState,
             scope = scope,
-            commitScope = services.graphScope,
+            launchWrite = services::launchWrite,
             summaryModelMissing = services.summaryModelMissing,
         )
     }

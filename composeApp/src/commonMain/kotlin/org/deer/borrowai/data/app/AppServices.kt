@@ -93,12 +93,15 @@ class AppServices internal constructor(
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
+    private val pendingWrites = PendingWrites(closeScope)
 
     /**
-     * Scope of the app graph. Work that must finish after the screen that started it leaves composition, such as a
-     * memory delete, runs here.
+     * Starts a write that must finish even if the screen that asked for it leaves, such as a memory delete. [close]
+     * waits for it before the database closes.
      */
-    val graphScope: CoroutineScope get() = closeScope
+    fun launchWrite(block: suspend () -> Unit) {
+        pendingWrites.launch(block)
+    }
 
     /**
      * Closes the media session, then cancels the graph and runs [onClose] once any memory save started
@@ -120,6 +123,8 @@ class AppServices internal constructor(
             try {
                 // Saves started before close must finish, even when the media close failed, before the database closes.
                 step { mediaSession.awaitPendingWork() }
+                // Memory writes started before close, such as a delete that committed when the page left, must finish too.
+                step { pendingWrites.awaitAll() }
                 // Transcription workers may still hold the runner, so stop it before the database closes under them.
                 step { transcriptionRunner.shutdown() }
                 // Speaker drains can run alongside transcription, so they stop before the database closes too.
