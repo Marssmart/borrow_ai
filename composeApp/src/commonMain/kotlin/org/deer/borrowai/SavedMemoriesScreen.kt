@@ -493,17 +493,19 @@ private fun MemoryCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        formatMemoryTimestamp(memory.createdAtEpochMillis),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    memory.durationMillis?.let { durationMillis ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            formatPlaybackTime(durationMillis),
+                            formatMemoryTimestamp(memory.createdAtEpochMillis),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall,
                         )
+                        memory.durationMillis?.let { durationMillis ->
+                            Text(
+                                formatPlaybackTime(durationMillis),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                     }
                 }
             }
