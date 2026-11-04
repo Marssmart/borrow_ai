@@ -3,6 +3,7 @@ package org.deer.borrowai.data.service.recording
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import kotlin.math.ceil
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
@@ -73,14 +74,18 @@ class RecordingMediaSessionService(
     private val tickerJob = MutableJob(scope)
     private val pendingSaves = MutableStateFlow<List<Job>>(emptyList())
     private var activeRecording: ActiveRecording? = null
+    private val playbackSpeedState = MutableStateFlow(NORMAL_PLAYBACK_SPEED)
+    // Set by a transient focus loss, so the focus returning resumes playback that was running.
+    private var resumeAfterFocusReturns = false
 
     init {
-        audioPlayer.setInterruptionHandler { stopActivePlayback() }
+        audioPlayer.setInterruptionHandler { interruption -> onPlaybackInterruption(interruption) }
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
     // Cold, so it starts no coroutine: each collector reads the pending saves from its own scope.
     override val saving: Flow<Boolean> = pendingSaves.map { it.isNotEmpty() }.distinctUntilChanged()
+    override val playbackSpeed: StateFlow<Float> = playbackSpeedState.asStateFlow()
     // Playback is decided per file in requestPlayback (missing, empty, or unplayable files return RecordingUnavailable),
     // so the service itself is always able to attempt playback.
     override val playbackAvailable: Boolean = true
@@ -160,6 +165,8 @@ class RecordingMediaSessionService(
         if (playing.paused || !audioPlayer.controlsAvailable || playing.target.sample != null) return
         tickerJob.cancel()
         audioPlayer.pause()
+        // A pause by the user ends any wait for the audio focus to return.
+        resumeAfterFocusReturns = false
         mutableState.value = playing.copy(paused = true, elapsedMillis = currentPlaybackPosition(playing))
     }
 
@@ -167,20 +174,7 @@ class RecordingMediaSessionService(
         ensureOpen()
         val playing = mutableState.value as? MediaSessionState.Playing
         if (playing == null || !playing.paused || !audioPlayer.controlsAvailable) return Unit.right()
-        // Playback paused at its end plays again from the beginning.
-        val atEnd = playing.elapsedMillis >= playing.durationMillis
-        val startMillis = if (atEnd) 0L else playing.elapsedMillis
-        if (atEnd) audioPlayer.seekTo(startMillis)
-        try {
-            audioPlayer.resume()
-        } catch (exception: PlaybackUnavailableException) {
-            // A failed resume leaves the memory paused where it was, so the player goes back to the end.
-            if (atEnd) audioPlayer.seekTo(playing.durationMillis)
-            return PlaybackError.ResumeFailed.left()
-        }
-        mutableState.value = playing.copy(paused = false, elapsedMillis = startMillis)
-        startPlaybackTicker(playing.durationMillis, startMillis)
-        return Unit.right()
+        return resumeFrom(playing)
     }
 
     override fun seekPlayback(positionMillis: Long) {
@@ -198,6 +192,15 @@ class RecordingMediaSessionService(
         // The delta is clamped first, so an extreme value cannot overflow when it is added to the position.
         val clampedDeltaMillis = deltaMillis.coerceIn(-playing.durationMillis, playing.durationMillis)
         seekPlayback(currentPlaybackPosition(playing) + clampedDeltaMillis)
+    }
+
+    override fun setPlaybackSpeed(speed: Float) {
+        ensureOpen()
+        playbackSpeedState.value = speed
+        audioPlayer.setSpeed(speed)
+        mutableState.update { current ->
+            if (current is MediaSessionState.Playing) current.copy(speed = speed) else current
+        }
     }
 
     override fun dismissRecordingError() {
@@ -264,7 +267,13 @@ class RecordingMediaSessionService(
             stopMillis = minOf(sample.endMs, fileDurationMillis)
             audioPlayer.seekTo(startMillis)
         }
-        mutableState.value = MediaSessionState.Playing(target = target, elapsedMillis = startMillis, durationMillis = stopMillis)
+        resumeAfterFocusReturns = false
+        mutableState.value = MediaSessionState.Playing(
+            target = target,
+            elapsedMillis = startMillis,
+            durationMillis = stopMillis,
+            speed = playbackSpeedState.value,
+        )
         // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
         // after publishing either sees the close or lets close stop this playback.
         if (closed.value) {
@@ -284,8 +293,10 @@ class RecordingMediaSessionService(
         tickerJob.launch {
             while (isActive) {
                 // Wakes at the end when that comes first, so a speaker sample stops at its end and not a tick later.
+                // Positions are in file time, so at a faster speed the end comes sooner in real time.
                 val remainingMillis = durationMillis - currentPosition()
-                delay(minOf(PLAYBACK_TICK_INTERVAL_MILLIS, remainingMillis.coerceAtLeast(0L)))
+                val remainingRealMillis = ceil(remainingMillis / playbackSpeedState.value).toLong()
+                delay(minOf(PLAYBACK_TICK_INTERVAL_MILLIS, remainingRealMillis.coerceAtLeast(0L)))
                 val positionMillis = currentPosition()
                 if (positionMillis >= durationMillis) {
                     finishPlayback()
@@ -324,6 +335,73 @@ class RecordingMediaSessionService(
     /** The player's position, clamped to the recording. Falls back to the last published position when unavailable. */
     private fun currentPlaybackPosition(playing: MediaSessionState.Playing): Long =
         audioPlayer.positionMillis()?.coerceIn(0L, playing.durationMillis) ?: playing.elapsedMillis
+
+    /**
+     * Resumes [playing] from its paused position. A resume that another app's audio focus refuses leaves the memory
+     * paused, marked as paused by another app, so the notice explains why.
+     */
+    private fun resumeFrom(playing: MediaSessionState.Playing): Either<PlaybackError, Unit> {
+        // Playback paused at its end plays again from the beginning.
+        val atEnd = playing.elapsedMillis >= playing.durationMillis
+        val startMillis = if (atEnd) 0L else playing.elapsedMillis
+        if (atEnd) audioPlayer.seekTo(startMillis)
+        try {
+            audioPlayer.resume()
+        } catch (exception: AudioFocusHeldException) {
+            if (atEnd) audioPlayer.seekTo(playing.durationMillis)
+            mutableState.value = playing.copy(pausedByOtherApp = true)
+            return PlaybackError.AudioFocusHeld.left()
+        } catch (exception: PlaybackUnavailableException) {
+            // A failed resume leaves the memory paused where it was, so the player goes back to the end.
+            if (atEnd) audioPlayer.seekTo(playing.durationMillis)
+            return PlaybackError.ResumeFailed.left()
+        }
+        resumeAfterFocusReturns = false
+        mutableState.value = playing.copy(paused = false, pausedByOtherApp = false, elapsedMillis = startMillis)
+        startPlaybackTicker(playing.durationMillis, startMillis)
+        return Unit.right()
+    }
+
+    /**
+     * Applies a change the platform made to playback. The player has already paused or stopped, so this updates the
+     * state only. A transient loss resumes when the focus returns, but only if playback was running before the loss.
+     * A speaker sample has no pause, so an interruption stops it instead.
+     */
+    private fun onPlaybackInterruption(interruption: PlaybackInterruption) {
+        val playing = mutableState.value as? MediaSessionState.Playing ?: return
+        if (playing.target.sample != null) {
+            if (interruption != PlaybackInterruption.FOCUS_REGAINED) stopActivePlayback()
+            return
+        }
+        when (interruption) {
+            PlaybackInterruption.TRANSIENT -> if (!playing.paused) {
+                resumeAfterFocusReturns = true
+                pauseForInterruption(playing, pausedByOtherApp = true)
+            }
+
+            PlaybackInterruption.PERMANENT -> {
+                resumeAfterFocusReturns = false
+                if (!playing.paused) pauseForInterruption(playing, pausedByOtherApp = true)
+            }
+
+            PlaybackInterruption.OUTPUT_UNPLUGGED -> if (!playing.paused) {
+                pauseForInterruption(playing, pausedByOtherApp = false)
+            }
+
+            PlaybackInterruption.FOCUS_REGAINED -> {
+                if (playing.paused && playing.pausedByOtherApp && resumeAfterFocusReturns) resumeFrom(playing)
+            }
+        }
+    }
+
+    private fun pauseForInterruption(playing: MediaSessionState.Playing, pausedByOtherApp: Boolean) {
+        tickerJob.cancel()
+        mutableState.value = playing.copy(
+            paused = true,
+            pausedByOtherApp = pausedByOtherApp,
+            elapsedMillis = currentPlaybackPosition(playing),
+        )
+    }
 
     private fun stopActivePlayback() {
         if (mutableState.value !is MediaSessionState.Playing) return
@@ -512,6 +590,7 @@ class RecordingMediaSessionService(
     private companion object {
         const val TICK_INTERVAL_MILLIS = 1_000L
         const val PLAYBACK_TICK_INTERVAL_MILLIS = 250L
+        const val NORMAL_PLAYBACK_SPEED = 1f
     }
 }
 

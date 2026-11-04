@@ -32,6 +32,7 @@ import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
@@ -391,6 +392,56 @@ class SavedMemoriesStateHolderTest {
         categories = categories,
     )
 
+    @Test
+    fun resumeRefusedByAnotherAppDoesNotOpenTheErrorDialog() = runTest {
+        val holder = holder(
+            this,
+            FakeMemoryService(emptyList(), EpochClock { 0L }),
+            mediaSession = PausedByOtherAppMediaSession(),
+        )
+        runCurrent()
+
+        holder.togglePlayback("m1", PlaybackContent.RECORDING)
+        runCurrent()
+
+        assertNull(holder.uiState.value.playbackError)
+    }
+
+    /** A session paused by another app, which cannot resume while that app holds the audio focus. */
+    private class PausedByOtherAppMediaSession : MediaSessionService {
+        override val state: StateFlow<MediaSessionState> = MutableStateFlow(
+            MediaSessionState.Playing(
+                target = PlaybackTarget("m1", PlaybackContent.RECORDING),
+                elapsedMillis = 1_000L,
+                durationMillis = 10_000L,
+                paused = true,
+                pausedByOtherApp = true,
+            ),
+        )
+
+        override val playbackControlsAvailable: Boolean = true
+
+        override fun startRecording(holdToRecord: Boolean) = Unit
+
+        override fun stopRecording(): RecordingResult? = null
+
+        override fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest> =
+            PlaybackError.MemoryNotFound.left()
+
+        override fun confirmPendingPlayback(): Either<PlaybackError, PlaybackRequest> =
+            PlaybackError.NoPendingConfirmation.left()
+
+        override fun cancelPendingPlayback(): Boolean = false
+
+        override fun stopPlayback() = Unit
+
+        override fun resumePlayback(): Either<PlaybackError, Unit> = PlaybackError.AudioFocusHeld.left()
+
+        override fun dismissRecordingError() = Unit
+
+        override fun close() = Unit
+    }
+
     private fun resultIds(holder: SavedMemoriesStateHolder): List<String> =
         holder.uiState.value.searchResults.memories.map(Memory::id)
 
@@ -404,10 +455,11 @@ class SavedMemoriesStateHolderTest {
         scope: TestScope,
         memoryService: FakeMemoryService,
         searchDispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler),
+        mediaSession: MediaSessionService = FakeMediaSession(),
     ): SavedMemoriesStateHolder =
         SavedMemoriesStateHolder(
             memoryService = memoryService,
-            mediaSessionService = FakeMediaSession(),
+            mediaSessionService = mediaSession,
             speakers = FakeSpeakerService(),
             speakerAnalysisActive = { false },
             summaryModelMissing = MutableStateFlow(false),
