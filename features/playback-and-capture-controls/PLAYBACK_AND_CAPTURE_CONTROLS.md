@@ -1,6 +1,6 @@
 # Playback and capture controls
 
-Status: Planning (draft v0.1)
+Status: P1 built. P2 to P5 are planned (draft v0.2)
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 

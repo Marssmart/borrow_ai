@@ -32,7 +32,7 @@ A `Memory` (`data/domain/Memory.kt`) has an id, creation time, title, summary, t
 
 ## Recording and playback
 
-- `RecordingMediaSessionService` implements `MediaSessionService` and drives the session states Idle, Recording, and Playing.
+- `RecordingMediaSessionService` implements `MediaSessionService` and drives the session states Idle, Recording, and Playing. Playing covers both playing and paused. On Android the position comes from the player, which also handles pause, seek, and skip.
 - `AudioRecorder` has Android and iOS implementations and writes M4A files named `<id>.m4a`. Unfinished captures use a temporary prefix.
 - `LiveTranscriber` shows text while recording, on a 16 kHz path.
 - `BatchTranscriber` transcribes the finished file.
