@@ -5,7 +5,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import arrow.core.Either
 import arrow.core.left
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -14,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -184,6 +187,26 @@ class SavedMemoriesStateHolderTest {
         assertEquals(listOf("budget"), resultIds(holder))
     }
 
+    @Test
+    fun openingTheDetailCancelsASearchThatIsStillRunning() = runTest {
+        val searches = QueuedDispatcher()
+        val holder = holder(this, libraryMemories(), searches)
+        runCurrent()
+        searches.runQueued()
+        runCurrent()
+        val allIds = resultIds(holder)
+
+        holder.onSearchTextChanged("budget")
+        holder.submitSearch()
+        runCurrent()
+        holder.openMemory("dentist")
+        runCurrent()
+        searches.runQueued()
+        runCurrent()
+
+        assertEquals(allIds, resultIds(holder))
+    }
+
     private fun libraryMemories(): List<Memory> = listOf(
         memory("budget", createdAt = 1, transcription = "Quarterly budget numbers", title = "Budget review"),
         memory("dentist", createdAt = 2, transcription = "Book the dentist", title = "Dentist"),
@@ -207,10 +230,17 @@ class SavedMemoriesStateHolderTest {
     private fun resultIds(holder: SavedMemoriesStateHolder): List<String> =
         holder.uiState.value.searchResults.memories.map(Memory::id)
 
-    private fun holder(scope: TestScope, memories: List<Memory>): SavedMemoriesStateHolder =
-        holder(scope, FakeMemoryService(memories, EpochClock { 0L }))
+    private fun holder(
+        scope: TestScope,
+        memories: List<Memory>,
+        searchDispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler),
+    ): SavedMemoriesStateHolder = holder(scope, FakeMemoryService(memories, EpochClock { 0L }), searchDispatcher)
 
-    private fun holder(scope: TestScope, memoryService: FakeMemoryService): SavedMemoriesStateHolder =
+    private fun holder(
+        scope: TestScope,
+        memoryService: FakeMemoryService,
+        searchDispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler),
+    ): SavedMemoriesStateHolder =
         SavedMemoriesStateHolder(
             memoryService = memoryService,
             mediaSessionService = FakeMediaSession(),
@@ -220,8 +250,21 @@ class SavedMemoriesStateHolderTest {
             detailScrollState = ScrollState(0),
             scope = scope.backgroundScope,
             launchWrite = { block -> scope.launch { block() } },
-            searchDispatcher = StandardTestDispatcher(scope.testScheduler),
+            searchDispatcher = searchDispatcher,
         )
+
+    /** Holds dispatched work until [runQueued], so a test decides when a search runs. */
+    private class QueuedDispatcher : CoroutineDispatcher() {
+        private val queued = ArrayDeque<Runnable>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            queued.addLast(block)
+        }
+
+        fun runQueued() {
+            while (queued.isNotEmpty()) queued.removeFirst().run()
+        }
+    }
 
     private class FakeMediaSession : MediaSessionService {
         override val state: StateFlow<MediaSessionState> = MutableStateFlow(MediaSessionState.Idle)

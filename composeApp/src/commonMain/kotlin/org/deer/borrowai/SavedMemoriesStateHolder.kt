@@ -120,14 +120,14 @@ internal class SavedMemoriesStateHolder(
                 appliedQuery,
                 mutableUiState.map { it.selectedMemoryId != null }.distinctUntilChanged(),
             ) { memories, query, isDetailOpen ->
-                // The result set stays as it was while the detail view is open (AC-5.1).
+                // A null request stops a running search and keeps the result set frozen (AC-5.1).
                 if (isDetailOpen) null else SearchRequest(memories, query)
             }
-                .filterNotNull()
                 .distinctUntilChanged()
                 .mapLatest { request ->
-                    withContext(searchDispatcher) { searcher.search(request.memories, request.query) }
+                    request?.let { r -> withContext(searchDispatcher) { searcher.search(r.memories, r.query) } }
                 }
+                .filterNotNull()
                 .collect { results ->
                     mutableUiState.update { it.copy(searchResults = results) }
                 }
