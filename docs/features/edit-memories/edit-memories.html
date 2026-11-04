@@ -208,7 +208,7 @@
 </tr>
 </tbody>
 </table>
-<p>The rules live in a new pure file, <code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt</code> (new). It holds a <code>MemoryEdit</code> value and a <code>memoryEditViolation(edit)</code> function, which returns the first failing rule, or null.</p>
+<p>The rules live in a new pure file, <code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt</code> (new). It holds a <code>MemoryEdit</code> value and a <code>memoryEditViolation(edit, transcriptionStatus)</code> function, which returns the first failing rule, or null. The transcript rules depend on the status, as §6.5 explains.</p>
 <h3 id="63-service-changes">6.3 Service changes</h3>
 <table>
 <thead>
@@ -246,6 +246,14 @@
 </table>
 <h3 id="64-why-right-for-a-guarded-write">6.4 Why <code>Right</code> for a guarded write?</h3>
 <p>Returning an error would make the job log a failure and count an attempt. Returning <code>Right</code> tells the job it is finished, and it stops. The memory is never changed, so the user's text is safe either way. A new <code>MemoryError</code> kind would be cleaner but touches every caller, so Q-4 leaves it open.</p>
+<h3 id="65-implementation-notes-p1">6.5 Implementation notes (P1)</h3>
+<ul>
+<li><strong>Transcript rule by status.</strong> The transcript rules in §6.2 apply only when the transcript is done or failed (<code>TranscriptionStatus.isTranscriptEditable</code>). While it is pending or in progress, <code>memoryEditViolation</code> skips the transcript, and <code>edit</code> refuses any change to it. This is why the validation takes the status.</li>
+<li><strong>One write.</strong> <code>edit</code> applies <code>Memory.withEdit</code>. A changed summary sets <code>summaryEditedByUser</code>. A blank one clears the marker and asks for a new summary instead (AC-3.3). A changed category list sets <code>categoriesEditedByUser</code>. A changed transcript keeps the summary and the categories (AC-4.5).</li>
+<li><strong>Guards.</strong> Every AI summary write runs through <code>unlessSummaryEdited</code>, and every category write through <code>unlessCategoriesEdited</code>. A guarded write returns the memory unchanged. <code>FakeMemoryService</code> uses the same guards, so the race tests exercise them.</li>
+<li><strong>Cleared categories stay cleared.</strong> Clearing the list sets the marker, so the categorization job does not refill it (AC-5.5). The old rule, which made a cleared memory retryable, is replaced.</li>
+<li><strong>Tests.</strong> <code>MemoryEditTest</code> covers the limits, the status rule, the markers, and the guards. The race tests are in <code>MemorySummaryRecoveryJobTest</code> and <code>MemoryCategorizationRecoveryJobTest</code>. The instrumented <code>KotbaseMemoryServiceTest</code> now calls <code>edit</code>. It was compiled, not run, because device runs are on hold.</li>
+</ul>
 <hr />
 <h2 id="7-ui-android-material-3">7. UI (Android, Material 3)</h2>
 <h3 id="71-detail-view">7.1 Detail view</h3>

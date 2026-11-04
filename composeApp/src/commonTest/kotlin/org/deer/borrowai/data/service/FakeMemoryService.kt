@@ -29,7 +29,14 @@ import org.deer.borrowai.data.domain.withSpeakerSkipped
 import org.deer.borrowai.data.domain.summaryStatusFor
 import org.deer.borrowai.data.domain.withCategories
 import org.deer.borrowai.data.domain.withCategorizationGaveUp
-import org.deer.borrowai.data.domain.withEditedSummary
+import org.deer.borrowai.data.domain.MemoryEdit
+import org.deer.borrowai.data.domain.isTranscriptEditable
+import org.deer.borrowai.data.domain.memoryEditViolation
+import org.deer.borrowai.data.domain.unlessCategoriesEdited
+import org.deer.borrowai.data.domain.unlessSummaryEdited
+import org.deer.borrowai.data.domain.withCategorizationRequested
+import org.deer.borrowai.data.domain.withEdit
+import org.deer.borrowai.data.domain.withSummaryRequested
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
@@ -91,17 +98,24 @@ class FakeMemoryService(
         return updateActive(id) { it.withUserCategories(categories) }
     }
 
-    override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
+    override suspend fun edit(id: String, edit: MemoryEdit): Either<MemoryError, Unit> = mutex.withLock {
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
-        val updated = existing.withEditedSummary(draft.summary).copy(
-            title = draft.title,
-            transcription = draft.transcription,
-            recordingPath = draft.recordingPath,
-        ).withUserCategories(draft.categories)
-        records[id] = updated
+        memoryEditViolation(edit, existing.transcriptionStatus)?.let {
+            return@withLock MemoryError.InvalidInput(it).left()
+        }
+        if (!existing.transcriptionStatus.isTranscriptEditable() && edit.transcription != existing.transcription) {
+            return@withLock MemoryError.InvalidInput("The transcript is still being created.").left()
+        }
+        records[id] = existing.withEdit(edit)
         publishMemories()
         Unit.right()
     }
+
+    override suspend fun requestSummary(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withSummaryRequested() }
+
+    override suspend fun requestCategorization(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withCategorizationRequested() }
 
     override suspend fun findCategories(): Either<MemoryError, List<Category>> = mutex.withLock {
         categories.values.sortedBy(Category::id).right()
@@ -181,29 +195,30 @@ class FakeMemoryService(
     }
 
     override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> = updateActive(id) {
-        it.afterFinishedAttempt(error = error, empty = false)
+        it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = error, empty = false) }
     }
 
     override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> = updateActive(id) {
-        it.afterFinishedAttempt(error = null, empty = true)
+        it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = null, empty = true) }
     }
 
     override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> = updateActive(id) {
-        it.withSummary(summary)
+        it.unlessSummaryEdited { m -> m.withSummary(summary) }
     }
 
-    override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> = updateActive(id) { it.withGaveUp() }
+    override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.unlessSummaryEdited { m -> m.withGaveUp() } }
 
     override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.withCategories(categories) }
+        return updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategories(categories) } }
     }
 
     override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
-        updateActive(id) { it.afterFinishedCategorizationAttempt(empty = empty) }
+        updateActive(id) { it.unlessCategoriesEdited { m -> m.afterFinishedCategorizationAttempt(empty = empty) } }
 
     override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withCategorizationGaveUp() }
+        updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategorizationGaveUp() } }
 
     override suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?> = mutex.withLock {
         val next = records.values

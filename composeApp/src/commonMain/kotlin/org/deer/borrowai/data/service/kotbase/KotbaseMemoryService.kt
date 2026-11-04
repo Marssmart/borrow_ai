@@ -27,6 +27,7 @@ import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.parseCategoriesString
 import org.deer.borrowai.data.domain.toCategoriesString
@@ -43,7 +44,13 @@ import org.deer.borrowai.data.domain.claimedForTranscription
 import org.deer.borrowai.data.domain.isMissingTranscription
 import org.deer.borrowai.data.domain.migrateLegacySummaryState
 import org.deer.borrowai.data.domain.summaryStatusFor
-import org.deer.borrowai.data.domain.withEditedSummary
+import org.deer.borrowai.data.domain.isTranscriptEditable
+import org.deer.borrowai.data.domain.memoryEditViolation
+import org.deer.borrowai.data.domain.unlessCategoriesEdited
+import org.deer.borrowai.data.domain.unlessSummaryEdited
+import org.deer.borrowai.data.domain.withCategorizationRequested
+import org.deer.borrowai.data.domain.withEdit
+import org.deer.borrowai.data.domain.withSummaryRequested
 import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
@@ -139,17 +146,22 @@ class KotbaseMemoryService private constructor(
         }
     }
 
-    override suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit> = mutex.withLock {
+    override suspend fun edit(id: String, edit: MemoryEdit): Either<MemoryError, Unit> = mutex.withLock {
         either {
             val existing = withContext(Dispatchers.Default) { readActive(id) }.bind()
-            val updated = existing.withEditedSummary(draft.summary).copy(
-                title = draft.title,
-                transcription = draft.transcription,
-                recordingPath = draft.recordingPath,
-            ).withUserCategories(draft.categories)
-            writeAndPublish { saveMemory(updated) }.bind()
+            memoryEditViolation(edit, existing.transcriptionStatus)?.let { raise(MemoryError.InvalidInput(it)) }
+            if (!existing.transcriptionStatus.isTranscriptEditable() && edit.transcription != existing.transcription) {
+                raise(MemoryError.InvalidInput("The transcript is still being created."))
+            }
+            writeAndPublish { saveMemory(existing.withEdit(edit)) }.bind()
         }
     }
+
+    override suspend fun requestSummary(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withSummaryRequested() }
+
+    override suspend fun requestCategorization(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.withCategorizationRequested() }
 
     override suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
@@ -206,30 +218,30 @@ class KotbaseMemoryService private constructor(
         }
 
     override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> =
-        updateActive(id) { it.afterFinishedAttempt(error = error, empty = false) }
+        updateActive(id) { it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = error, empty = false) } }
 
     override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.afterFinishedAttempt(error = null, empty = true) }
+        updateActive(id) { it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = null, empty = true) } }
 
     override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withSummary(summary) }
+        updateActive(id) { it.unlessSummaryEdited { m -> m.withSummary(summary) } }
 
     override suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit> =
         updateActive(id) { if (it.durationMillis == null) it.copy(durationMillis = durationMillis) else it }
 
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withGaveUp() }
+        updateActive(id) { it.unlessSummaryEdited { m -> m.withGaveUp() } }
 
     override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.withCategories(categories) }
+        return updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategories(categories) } }
     }
 
     override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
-        updateActive(id) { it.afterFinishedCategorizationAttempt(empty = empty) }
+        updateActive(id) { it.unlessCategoriesEdited { m -> m.afterFinishedCategorizationAttempt(empty = empty) } }
 
     override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withCategorizationGaveUp() }
+        updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategorizationGaveUp() } }
 
     override suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?> = mutex.withLock {
         either {
@@ -409,6 +421,8 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_SPEAKER_ATTEMPTS),
             SelectResult.property(COLUMN_LAST_SPEAKER_ERROR),
             SelectResult.property(COLUMN_SPEAKER_ANALYSIS_VERSION),
+            SelectResult.property(COLUMN_SUMMARY_EDITED_BY_USER),
+            SelectResult.property(COLUMN_CATEGORIES_EDITED_BY_USER),
         )
         .from(DataSource.database(database))
         .where(Expression.property(KEY_TYPE).equalTo(Expression.string(TYPE_MEMORY)))
@@ -486,6 +500,8 @@ class KotbaseMemoryService private constructor(
                 speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
                 lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
                 speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
+                summaryEditedByUser = getBoolean(COLUMN_SUMMARY_EDITED_BY_USER),
+                categoriesEditedByUser = getBoolean(COLUMN_CATEGORIES_EDITED_BY_USER),
             )
         }
     }
@@ -511,6 +527,8 @@ class KotbaseMemoryService private constructor(
         setInt(COLUMN_SPEAKER_ATTEMPTS, speakerAttempts)
         setString(COLUMN_LAST_SPEAKER_ERROR, lastSpeakerError)
         setNumber(COLUMN_SPEAKER_ANALYSIS_VERSION, speakerAnalysisVersion)
+        setBoolean(COLUMN_SUMMARY_EDITED_BY_USER, summaryEditedByUser)
+        setBoolean(COLUMN_CATEGORIES_EDITED_BY_USER, categoriesEditedByUser)
     }
 
     private fun Document.toMemory(): Memory? {
@@ -544,6 +562,8 @@ class KotbaseMemoryService private constructor(
             speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
             lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
             speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
+            summaryEditedByUser = getBoolean(COLUMN_SUMMARY_EDITED_BY_USER),
+            categoriesEditedByUser = getBoolean(COLUMN_CATEGORIES_EDITED_BY_USER),
         )
     }
 
@@ -601,6 +621,8 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_RECORDING_PATH = "recordingPath"
         private const val COLUMN_DURATION_MILLIS = "durationMillis"
         private const val COLUMN_DELETED = "deleted"
+        private const val COLUMN_SUMMARY_EDITED_BY_USER = "summaryEditedByUser"
+        private const val COLUMN_CATEGORIES_EDITED_BY_USER = "categoriesEditedByUser"
         private const val COLUMN_TRANSCRIPTION_STATUS = "transcriptionStatus"
         private const val COLUMN_TRANSCRIPTION_DONE = "transcriptionDone"
         private const val COLUMN_TRANSCRIPTION_ATTEMPTS = "transcriptionAttempts"

@@ -183,8 +183,7 @@ class SpeakerAnalysisRunnerTest {
     @Test
     fun memoryWithoutAudioIsSkippedWithoutAnalysis() = runTest {
         val memories = memories()
-        memories.addAudioMemory("a")
-        memories.update("a", MemoryDraft("t", "s", "x", recordingPath = null))
+        memories.create(MemoryDraft("t", "s", "x"), id = "a")
         val analyzer = ScriptedAnalyzer()
 
         runner(memories, FakeSpeakerService(enabled = true), analyzer, this).drain()

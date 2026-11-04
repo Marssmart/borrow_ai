@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 
@@ -28,8 +29,19 @@ interface MemoryService {
         transcriptionStatus: TranscriptionStatus = TranscriptionStatus.DONE,
     ): Either<MemoryError, Memory>
 
-    /** Replaces the content of an active memory. Returns [MemoryError.NotFound] when it is missing or deleted. */
-    suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit>
+    /**
+     * Saves the edited fields of an active memory in one write. A summary or category list that changed is marked as
+     * the user's, so the recovery jobs leave it alone. A transcript change is refused while it is still being created.
+     * Returns [MemoryError.NotFound] when the memory is missing or deleted, and [MemoryError.InvalidInput] when a rule
+     * fails.
+     */
+    suspend fun edit(id: String, edit: MemoryEdit): Either<MemoryError, Unit>
+
+    /** Clears the user's summary marker and sets the summary back to pending, so a new one is written. */
+    suspend fun requestSummary(id: String): Either<MemoryError, Unit>
+
+    /** Clears the user's category marker and sets the categories back to pending, so new ones are chosen. */
+    suspend fun requestCategorization(id: String): Either<MemoryError, Unit>
 
     /**
      * Replaces only the category ids of an active memory. Every other field, including the summary status, is kept.

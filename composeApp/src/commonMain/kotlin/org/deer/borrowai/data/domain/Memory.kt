@@ -52,6 +52,10 @@ data class Memory(
     val speakerAttempts: Int = 0,
     val lastSpeakerError: String? = null,
     val speakerAnalysisVersion: Int? = null,
+    /** Set when the user wrote the summary. The summary job then leaves it alone. */
+    val summaryEditedByUser: Boolean = false,
+    /** Set when the user chose the categories. The categorization job then leaves them alone. */
+    val categoriesEditedByUser: Boolean = false,
 ) {
     init {
         recordingPath?.let(::requireRelativeRecordingPath)
@@ -65,6 +69,7 @@ data class Memory(
     /** True when the recovery job may still try to categorize this memory. */
     val isCategorizationRetryable: Boolean
         get() = !deleted &&
+            !categoriesEditedByUser &&
             categorizationAttempts < MAX_CATEGORIZATION_ATTEMPTS &&
             (categorizationStatus == CategorizationStatus.PENDING || categorizationStatus == CategorizationStatus.EMPTY)
 
@@ -75,6 +80,7 @@ data class Memory(
     /** True when the recovery job may still try to summarize this memory. */
     val isSummaryRetryable: Boolean
         get() = !deleted &&
+            !summaryEditedByUser &&
             summaryAttempts < MAX_SUMMARY_ATTEMPTS &&
             (summaryStatus == SummaryStatus.PENDING || summaryStatus == SummaryStatus.EMPTY)
 }
@@ -129,6 +135,32 @@ fun Memory.withGaveUp(): Memory = copy(
     summaryAttempts = MAX_SUMMARY_ATTEMPTS,
     summaryStatus = SummaryStatus.GAVE_UP,
 )
+
+/**
+ * The memory with a summary the user wrote. A non-blank summary is the user's and counts as done. A blank summary
+ * asks for a new one: the marker clears, and the summary is pending again with fresh attempts.
+ */
+fun Memory.withUserSummary(summary: String): Memory =
+    if (summary.isNotBlank()) {
+        copy(summary = summary, summaryStatus = SummaryStatus.SUMMARIZED, summaryEditedByUser = true)
+    } else {
+        copy(
+            summary = summary,
+            summaryStatus = SummaryStatus.PENDING,
+            summaryAttempts = 0,
+            summaryEditedByUser = false,
+        )
+    }
+
+/** The memory with a new summary requested. The marker clears, so the recovery job writes one again. */
+fun Memory.withSummaryRequested(): Memory = copy(
+    summaryEditedByUser = false,
+    summaryStatus = SummaryStatus.PENDING,
+    summaryAttempts = 0,
+)
+
+/** Applies [change] unless the user wrote the summary. A user summary is returned unchanged. */
+fun Memory.unlessSummaryEdited(change: (Memory) -> Memory): Memory = if (summaryEditedByUser) this else change(this)
 
 /**
  * The memory after one more finished attempt. [empty] marks a blank summary. [error] is stored as the last
@@ -220,6 +252,7 @@ fun Memory.withUserCategories(ids: List<Int>): Memory =
             categories = ids,
             categorizationStatus = categorizationStatusFor(ids),
             categorizationAttempts = 0,
+            categoriesEditedByUser = true,
         )
     }
 
@@ -241,6 +274,17 @@ fun Memory.withCategorizationGaveUp(): Memory = copy(
     categorizationAttempts = MAX_CATEGORIZATION_ATTEMPTS,
     categorizationStatus = CategorizationStatus.GAVE_UP,
 )
+
+/** The memory with new categories requested. The marker clears, so the categorization job fills them in again. */
+fun Memory.withCategorizationRequested(): Memory = copy(
+    categoriesEditedByUser = false,
+    categorizationStatus = CategorizationStatus.PENDING,
+    categorizationAttempts = 0,
+)
+
+/** Applies [change] unless the user chose the categories. User categories are returned unchanged. */
+fun Memory.unlessCategoriesEdited(change: (Memory) -> Memory): Memory =
+    if (categoriesEditedByUser) this else change(this)
 
 fun Memory.claimedForTranscription(): Memory = copy(
     transcriptionStatus = TranscriptionStatus.IN_PROGRESS,
