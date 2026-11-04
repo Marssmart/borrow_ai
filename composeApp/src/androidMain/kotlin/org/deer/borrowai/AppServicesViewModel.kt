@@ -35,6 +35,8 @@ internal class AppServicesViewModel(
     private val recorder: AudioRecorder,
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
+    // Tests pass a unique name, so they never open the real database.
+    databaseName: String = AppServices.DATABASE_NAME,
     private val transcriptionWorkerFactory: TranscriptionWorkerFactory =
         (appContext.applicationContext as BorrowAiApplication).transcriptionWorkerFactory,
     private val createServices: suspend () -> AppServices = {
@@ -58,6 +60,7 @@ internal class AppServicesViewModel(
             recorder = recorder,
             audioPlayer = audioPlayer,
             microphonePermission = microphonePermission,
+            databaseName = databaseName,
             liveTranscriber = liveTranscriber,
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
             transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
@@ -106,6 +109,7 @@ internal class AppServicesViewModelFactory(
     private val recorder: AudioRecorder,
     private val audioPlayer: AudioPlayer,
     private val microphonePermission: MicrophonePermission,
+    private val databaseName: String = AppServices.DATABASE_NAME,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass != AppServicesViewModel::class.java) {
@@ -120,6 +124,7 @@ internal class AppServicesViewModelFactory(
                 recorder = recorder,
                 audioPlayer = audioPlayer,
                 microphonePermission = microphonePermission,
+                databaseName = databaseName,
             ),
         )
     }
