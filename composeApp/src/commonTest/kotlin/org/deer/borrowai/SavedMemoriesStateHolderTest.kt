@@ -1,0 +1,227 @@
+package org.deer.borrowai
+
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.pager.PagerState
+import arrow.core.Either
+import arrow.core.left
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemorySearch
+import org.deer.borrowai.data.domain.TranscriptionStatus
+import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.MediaSessionService
+import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.PlaybackError
+import org.deer.borrowai.data.service.PlaybackRequest
+import org.deer.borrowai.data.service.PlaybackTarget
+import org.deer.borrowai.data.service.RecordingResult
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SavedMemoriesStateHolderTest {
+    private val debounce = SavedMemoriesStateHolder.MEMORY_SEARCH_DEBOUNCE_MILLIS
+
+    @Test
+    fun resultsStartWithEveryMemoryNewestFirst() = runTest {
+        val holder = holder(this, libraryMemories())
+
+        runCurrent()
+
+        assertEquals(listOf("pending", "dentist", "budget"), resultIds(holder))
+        assertEquals(3, holder.uiState.value.memories.size)
+        assertFalse(holder.uiState.value.searchResults.isFiltered)
+    }
+
+    @Test
+    fun typedQueryIsAppliedOnlyAfterTheDebounce() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+
+        holder.onSearchTextChanged("budget")
+        advanceTimeBy(debounce - 1)
+        runCurrent()
+        assertEquals(listOf("pending", "dentist", "budget"), resultIds(holder))
+
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf("budget"), resultIds(holder))
+        assertTrue(holder.uiState.value.searchResults.isFiltered)
+    }
+
+    @Test
+    fun typingRestartsTheDebounceFromTheLastKeystroke() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+
+        holder.onSearchTextChanged("b")
+        advanceTimeBy(debounce - 50)
+        runCurrent()
+        holder.onSearchTextChanged("bu")
+        advanceTimeBy(debounce - 50)
+        runCurrent()
+        assertEquals(listOf("pending", "dentist", "budget"), resultIds(holder))
+
+        advanceTimeBy(50)
+        runCurrent()
+        assertEquals(listOf("budget"), resultIds(holder))
+    }
+
+    @Test
+    fun submitSearchAppliesTheTextAtOnce() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+
+        holder.onSearchTextChanged("  dentist ")
+        holder.submitSearch()
+        runCurrent()
+
+        assertEquals(listOf("dentist"), resultIds(holder))
+        assertEquals("dentist", holder.uiState.value.searchResults.query)
+        advanceTimeBy(debounce)
+        runCurrent()
+        assertEquals(listOf("dentist"), resultIds(holder))
+    }
+
+    @Test
+    fun clearSearchEmptiesTheFieldAndShowsEveryMemoryAtOnce() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+        holder.onSearchTextChanged("budget")
+        holder.submitSearch()
+        runCurrent()
+
+        holder.clearSearch()
+        runCurrent()
+
+        assertEquals("", holder.uiState.value.searchText)
+        assertEquals(listOf("pending", "dentist", "budget"), resultIds(holder))
+        assertFalse(holder.uiState.value.searchResults.isFiltered)
+    }
+
+    @Test
+    fun typedTextIsCutAt100CharactersAndFlagged() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+        // Without the cut the query would be "budget zzz", which matches nothing.
+        val pasted = "budget" + " ".repeat(MemorySearch.MAX_QUERY_LENGTH) + "zzz"
+
+        holder.onSearchTextChanged(pasted)
+        advanceTimeBy(debounce)
+        runCurrent()
+
+        assertEquals(MemorySearch.MAX_QUERY_LENGTH, holder.uiState.value.searchText.length)
+        assertTrue(holder.uiState.value.searchTextCut)
+        assertEquals("budget", holder.uiState.value.searchResults.query)
+        assertEquals(listOf("budget"), resultIds(holder))
+    }
+
+    @Test
+    fun libraryChangesRecalculateAnActiveSearch() = runTest {
+        val memoryService = FakeMemoryService(libraryMemories(), EpochClock { 0L })
+        val holder = holder(this, memoryService)
+        runCurrent()
+        holder.onSearchTextChanged("insurance")
+        holder.submitSearch()
+        runCurrent()
+        assertEquals(emptyList(), resultIds(holder))
+
+        memoryService.create(MemoryDraft(title = "", summary = "", transcription = "Call the insurance company"))
+        runCurrent()
+
+        assertEquals(1, resultIds(holder).size)
+        assertEquals(4, holder.uiState.value.memories.size)
+    }
+
+    @Test
+    fun resultsDoNotChangeWhileTheDetailIsOpenAndAreRecalculatedOnReturn() = runTest {
+        val memoryService = FakeMemoryService(libraryMemories(), EpochClock { 0L })
+        val holder = holder(this, memoryService)
+        runCurrent()
+        holder.openMemory("budget")
+        runCurrent()
+
+        memoryService.create(MemoryDraft(title = "", summary = "", transcription = "New budget note"))
+        runCurrent()
+
+        assertEquals(listOf("pending", "dentist", "budget"), resultIds(holder))
+        assertEquals(4, holder.uiState.value.memories.size)
+
+        holder.onPagerPageSettled(SavedMemoriesStateHolder.MEMORY_LIST_PAGE)
+        runCurrent()
+
+        assertEquals(4, resultIds(holder).size)
+    }
+
+    private fun libraryMemories(): List<Memory> = listOf(
+        memory("budget", createdAt = 1, transcription = "Quarterly budget numbers", title = "Budget review"),
+        memory("dentist", createdAt = 2, transcription = "Book the dentist", title = "Dentist"),
+        memory("pending", createdAt = 3),
+    )
+
+    private fun memory(
+        id: String,
+        createdAt: Long,
+        title: String = "",
+        transcription: String = "",
+    ): Memory = Memory(
+        id = id,
+        createdAtEpochMillis = createdAt,
+        title = title,
+        summary = "",
+        transcription = transcription,
+        transcriptionStatus = if (transcription.isBlank()) TranscriptionStatus.PENDING else TranscriptionStatus.DONE,
+    )
+
+    private fun resultIds(holder: SavedMemoriesStateHolder): List<String> =
+        holder.uiState.value.searchResults.memories.map(Memory::id)
+
+    private fun holder(scope: TestScope, memories: List<Memory>): SavedMemoriesStateHolder =
+        holder(scope, FakeMemoryService(memories, EpochClock { 0L }))
+
+    private fun holder(scope: TestScope, memoryService: FakeMemoryService): SavedMemoriesStateHolder =
+        SavedMemoriesStateHolder(
+            memoryService = memoryService,
+            mediaSessionService = FakeMediaSession(),
+            summaryModelMissing = MutableStateFlow(false),
+            pagerState = PagerState(pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT }),
+            memoriesListState = LazyListState(),
+            detailScrollState = ScrollState(0),
+            scope = scope.backgroundScope,
+            searchDispatcher = StandardTestDispatcher(scope.testScheduler),
+        )
+
+    private class FakeMediaSession : MediaSessionService {
+        override val state: StateFlow<MediaSessionState> = MutableStateFlow(MediaSessionState.Idle)
+
+        override fun startRecording(holdToRecord: Boolean) = Unit
+
+        override fun stopRecording(): RecordingResult? = null
+
+        override fun requestPlayback(target: PlaybackTarget): Either<PlaybackError, PlaybackRequest> =
+            PlaybackError.MemoryNotFound.left()
+
+        override fun confirmPendingPlayback(): Either<PlaybackError, PlaybackRequest> =
+            PlaybackError.NoPendingConfirmation.left()
+
+        override fun cancelPendingPlayback(): Boolean = false
+
+        override fun stopPlayback() = Unit
+
+        override fun dismissRecordingError() = Unit
+
+        override fun close() = Unit
+    }
+}

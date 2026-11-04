@@ -151,7 +151,7 @@ Move to the index only if one of these is true on the reference mid-range device
 
 ### 6.4 Performance plan for in-memory search
 
-- Build a lowercase copy of each memory's searchable text once, and reuse it until the memory changes. Cache by memory id and by a hash of the text. Without this, each keystroke allocates a new lowercase copy of every transcript.
+- Build a lowercase copy of each memory's searchable text once, and reuse it until the memory changes. The cache is keyed by memory id. A copy is reused only while the title, summary, and transcript still equal the values it was made from. The comparison is by value, not by hash, so a hash collision cannot return stale text. Without this, each keystroke allocates a new lowercase copy of every transcript.
 - Run the filter on `Dispatchers.Default` (`flowOn`).
 - Keep the 150 ms delay for typed text only. Chips apply at once.
 - Measure with a generated library of 500 and 1,000 memories (instrumented test, §11).
@@ -161,8 +161,9 @@ Move to the index only if one of these is true on the reference mid-range device
 | File | Change |
 |---|---|
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemorySearch.kt` (new) | Pure matcher: normalise the query, split into terms, match terms against title, summary, and transcript, and filter by categories. Holds the cache from §6.4. |
-| `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt` | Hold the query and the selected category ids in `SavedMemoriesUiState`. Derive the result set from `getState()`, the query (debounced by 150 ms for typing), and the selection. Freeze the result set while the detail view is open (AC-5.1). Replace `memoriesScrollState: ScrollState` with a `LazyListState`, so the list can be a `LazyColumn`. |
+| `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt` | Hold the query and the selected category ids in `SavedMemoriesUiState`. Derive the result set from `getState()`, the query (debounced by 150 ms for typing), and the selection. Freeze the result set while the detail view is open (AC-5.1). Replace `memoriesScrollState: ScrollState` with `memoriesListState: LazyListState` (renamed, because the old name held a `ScrollState`), so the list can be a `LazyColumn`. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt` | Replace the `verticalScroll` column in `MemoryListScreen` (line 246) with a `LazyColumn`. Add the search field, the chip row (`LazyRow` of `FilterChip`), the count line, and the no-results state. Hide the keyboard on list scroll. Register back handling for the query. |
+| `composeApp/src/commonMain/kotlin/org/deer/borrowai/MemorySearchControls.kt` (new) | The search field (with the Clear search button and the counter), the count line, and the drawn search and close icons. |
 | `composeApp/src/commonMain/composeResources/values/memory_strings.xml` | New strings: search label, placeholder, count lines, chip labels, no-results texts, hints, and button labels. |
 | `composeApp/src/commonTest/kotlin/org/deer/borrowai/data/domain/MemorySearchTest.kt` (new) | Unit tests for the matcher (§11). |
 
@@ -259,6 +260,7 @@ The filter row hides when the library has no categories in use.
 | Q-4 | Should results show which field matched? | **Open.** A follow-up, not v1. |
 | Q-5 | Should results be ordered by relevance? | **Decided: no** for v1. Newest first. |
 | Q-6 | Should the list become a `LazyColumn` before or with search? | **Decided: with search** (§6.5). |
+| Q-7 | Has the 1,000-memory benchmark (§6.3, §11) been run on a mid-range device? | **Open.** Not run in the build session, so the phase 4 decision is still open. Record the 95th percentile here before deciding on phase 4. |
 
 Test and measurement:
 

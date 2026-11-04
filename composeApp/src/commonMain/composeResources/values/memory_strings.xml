@@ -17,4 +17,13 @@
     <string name="memory_playback_request_failed_message">Playback could not be started. Try again.</string>
     <string name="memory_playback_recording_unavailable_message">The recording for this memory is not available on this device.</string>
     <string name="memory_summary_model_missing">Summaries are paused because the summary model is not downloaded yet. Model setup status is shown on the capture screen.</string>
+    <string name="memory_search_label">Search memories</string>
+    <string name="memory_search_clear">Clear search</string>
+    <string name="memory_search_limit_reached">Only the first %1$d characters are searched.</string>
+    <string name="memory_search_counter">%1$d/%2$d</string>
+    <plurals name="memory_count_all">
+        <item quantity="one">%1$d memory</item>
+        <item quantity="other">%1$d memories</item>
+    </plurals>
+    <string name="memory_count_filtered">Showing %1$d of %2$d</string>
 </resources>
