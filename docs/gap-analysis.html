@@ -31,7 +31,7 @@
 <ul>
 <li><strong>Android:</strong> recording in a foreground service, live transcript (Whisper tiny, English), batch transcript (Whisper base or large-v3 by RAM tier), one-paragraph summary and AI categories (Gemma 4 E2B/E4B or Qwen3 0.6B through LiteRT-LM, optional GPU), saved list, memory detail with "Play recording", background activity pill, and a Settings screen.</li>
 <li><strong>iOS:</strong> recording, playback, saved list, microphone permission. Nothing else is wired (<code>site/content/platforms.md</code>).</li>
-<li><strong>Data:</strong> Couchbase Lite, local only. Soft delete and purge exist in the service layer. A speaker data layer exists with no UI.</li>
+<li><strong>Data:</strong> Couchbase Lite, local only. Soft delete and purge exist in the service layer. A speaker data layer exists. Its read-only UI is built on Android, but no speech model is pinned, so no analysis runs.</li>
 <li><strong>Settings:</strong> two switches (<code>AppSettingsService.kt:7-12</code>, <code>SettingsScreen.kt</code>).</li>
 </ul>
 <h2 id="2-missing-features">2. Missing features</h2>
@@ -160,8 +160,8 @@
 </tr>
 <tr>
 <td>G21</td>
-<td><strong>Transcripts have no timestamps or speakers.</strong> <code>transcription</code> is one string. Speaker recognition is planned, but has no UI.</td>
-<td><code>Memory.kt</code> (<code>transcription: String</code>); <code>SPEAKER_RECOGNITION.md:3</code> ("Planning")</td>
+<td><strong>Transcripts have no timestamps or speakers.</strong> <code>transcription</code> is one string. Speaker recognition has a read-only UI on Android, but no speech model is pinned, so no speakers are found yet.</td>
+<td><code>Memory.kt</code> (<code>transcription: String</code>); <code>SPEAKER_RECOGNITION.md:3</code> ("In progress")</td>
 <td>Blocks tap-to-seek, chapters, and "who said what".</td>
 <td>M-L</td>
 </tr>
@@ -262,7 +262,7 @@
 <td>P8</td>
 <td>Speaker labels</td>
 <td>Google Recorder, Otter</td>
-<td>Planned, no UI (G21)</td>
+<td>Read-only UI on Android, no analysis yet (G21)</td>
 <td>M-L</td>
 </tr>
 </tbody>
