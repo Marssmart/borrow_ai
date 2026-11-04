@@ -101,8 +101,8 @@ import org.jetbrains.compose.resources.stringResource
 private const val TITLE_COUNTER_THRESHOLD = 60
 
 /**
- * Full-screen editor for a memory's title, summary, and transcript. Categories are not editable here yet, so
- * [MemoryEdit] carries their current values unchanged. [onSave] reports the outcome through its callback.
+ * Full-screen editor for a memory's title, summary, transcript, and categories. [MemoryEdit] carries only the fields the
+ * user changed, and every other field keeps its live value. [onSave] reports the outcome through its callback.
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -128,6 +128,7 @@ internal fun MemoryEditScreen(
     var newDescription by remember { mutableStateOf("") }
     var creatingBusy by remember { mutableStateOf(false) }
     var createFailed by remember { mutableStateOf(false) }
+    var createDuplicate by remember { mutableStateOf(false) }
     // The summary the editor opened with. A different live summary means a new one was written during the edit.
     val summaryAtEntry by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
     var saving by remember { mutableStateOf(false) }
@@ -437,9 +438,15 @@ internal fun MemoryEditScreen(
                             )
                         },
                     )
-                    if (createFailed) {
+                    if (createFailed || createDuplicate) {
                         Text(
-                            stringResource(Res.string.memory_edit_category_failed),
+                            stringResource(
+                                if (createDuplicate) {
+                                    Res.string.memory_edit_category_duplicate
+                                } else {
+                                    Res.string.memory_edit_category_failed
+                                },
+                            ),
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
@@ -452,10 +459,13 @@ internal fun MemoryEditScreen(
                     onClick = {
                         creatingBusy = true
                         createFailed = false
+                        createDuplicate = false
                         onCreateCategory(trimmedName, newDescription.trim()) { result ->
                             creatingBusy = false
                             result.fold(
-                                ifLeft = { createFailed = true },
+                                ifLeft = { error ->
+                                    if (error is MemoryError.InvalidInput) createDuplicate = true else createFailed = true
+                                },
                                 ifRight = { category ->
                                     creating = false
                                     newName = ""

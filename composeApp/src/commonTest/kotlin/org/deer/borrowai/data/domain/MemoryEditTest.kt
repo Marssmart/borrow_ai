@@ -192,6 +192,7 @@ class MemoryEditTest {
     @Test
     fun categoryNameTakenIgnoresCaseAndSurroundingSpaces() {
         assertTrue(categoryNameTaken("  work ", listOf("Work", "Home")))
+        assertTrue(categoryNameTaken("work", listOf(" Work ", "Home")))
         assertFalse(categoryNameTaken("Office", listOf("Work", "Home")))
     }
 

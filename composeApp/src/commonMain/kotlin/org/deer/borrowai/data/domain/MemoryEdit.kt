@@ -43,7 +43,7 @@ fun Memory.withEdit(edit: MemoryEdit): Memory {
 
 /** True when [name] matches an existing category name, ignoring case. The service does not check this, so the UI does. */
 fun categoryNameTaken(name: String, existingNames: Collection<String>): Boolean =
-    existingNames.any { it.equals(name.trim(), ignoreCase = true) }
+    existingNames.any { it.trim().equals(name.trim(), ignoreCase = true) }
 
 /** The edit that keeps every field of this memory as it is. An editor starts from it and changes only what it shows. */
 fun Memory.currentEdit(): MemoryEdit = MemoryEdit(title, summary, transcription, categories)
