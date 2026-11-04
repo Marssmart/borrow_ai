@@ -312,6 +312,18 @@
 </tr>
 </tbody>
 </table>
+<h3 id="75-implementation-notes-p2">7.5 Implementation notes (P2)</h3>
+<ul>
+<li><strong>Scope.</strong> This phase edits the title and summary only. <code>MemoryEdit</code> carries the current transcript and categories unchanged, so the service still checks them. Phases 3 and 4 add those fields.</li>
+<li><strong>Overlay, not a pager page.</strong> The editor is drawn over the detail view inside <code>SavedMemoriesScreen</code>, so the pager, the dock, and the detail back handling stay as they were. Cancel and system back both use the same discard check.</li>
+<li><strong>Save path.</strong> <code>SavedMemoriesStateHolder.saveMemoryEdit</code> runs <code>MemoryService.edit</code> through the pending-write gate (<code>launchWrite</code>), so closing the app waits for an in-flight save. The result returns on the holder's scope.</li>
+<li><strong>Failed transcripts.</strong> A title-only edit of a memory whose transcript is failed and blank is refused by the service, with its message shown. Phase 3 lets the user type the transcript in, which fixes this case.</li>
+<li><strong>Untitled.</strong> The detail title shows "Untitled memory" when the title is blank (AC-2.2). The list card is not changed in this phase.</li>
+<li><strong>Tests.</strong> <code>MemoryEditTest</code> covers <code>currentEdit</code> and a title-only edit. <code>SavedMemoriesDeleteTest</code> covers the holder's NotFound and InvalidInput results. The screen is not unit-tested, because the project has no Compose UI test dependency.</li>
+<li><strong>Concurrent changes.</strong> Only fields the user typed in are sent. A summary typed in is refused, with a message, when the memory's summary changed since the editor opened, so a background summary is not overwritten.</li>
+<li><strong>Leaving the editor.</strong> While the editor is open the detail nav bar is hidden, so its Back and Memories buttons cannot skip the discard check. System back and Cancel use the discard check.</li>
+<li><strong>Deleted elsewhere.</strong> A memory removed from the store while it is open closes the editor with "This memory was deleted." The save path's NotFound uses the same notice.</li>
+</ul>
 <hr />
 <h2 id="8-accessibility">8. Accessibility</h2>
 <ul>
@@ -454,6 +466,11 @@
 <td>Q-8</td>
 <td>Should a new summary or category list replace user text without asking?</td>
 <td><strong>Decided: no.</strong> It asks first (AC-6.4).</td>
+</tr>
+<tr>
+<td>Q-9</td>
+<td>Do the editor screens (the overlay over the detail view, the Cancel and discard prompt, the save, failure, and deleted states, and the focus on Keep editing) look and behave as §7 describes on a device, and does TalkBack read the fields and errors?</td>
+<td><strong>Open.</strong> The save rules are unit-tested. The screens are not. Not run on a device.</td>
 </tr>
 </tbody>
 </table>

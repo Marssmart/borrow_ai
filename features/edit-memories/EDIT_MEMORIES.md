@@ -215,6 +215,18 @@ Returning an error would make the job log a failure and count an attempt. Return
 | Failed | Editor open, changes kept. Message "Couldn't save. Your changes are still here." and **Retry**. |
 | Deleted elsewhere | Editor closes. Snackbar "This memory was deleted." |
 
+### 7.5 Implementation notes (P2)
+
+- **Scope.** This phase edits the title and summary only. `MemoryEdit` carries the current transcript and categories unchanged, so the service still checks them. Phases 3 and 4 add those fields.
+- **Overlay, not a pager page.** The editor is drawn over the detail view inside `SavedMemoriesScreen`, so the pager, the dock, and the detail back handling stay as they were. Cancel and system back both use the same discard check.
+- **Save path.** `SavedMemoriesStateHolder.saveMemoryEdit` runs `MemoryService.edit` through the pending-write gate (`launchWrite`), so closing the app waits for an in-flight save. The result returns on the holder's scope.
+- **Failed transcripts.** A title-only edit of a memory whose transcript is failed and blank is refused by the service, with its message shown. Phase 3 lets the user type the transcript in, which fixes this case.
+- **Untitled.** The detail title shows "Untitled memory" when the title is blank (AC-2.2). The list card is not changed in this phase.
+- **Tests.** `MemoryEditTest` covers `currentEdit` and a title-only edit. `SavedMemoriesDeleteTest` covers the holder's NotFound and InvalidInput results. The screen is not unit-tested, because the project has no Compose UI test dependency.
+- **Concurrent changes.** Only fields the user typed in are sent. A summary typed in is refused, with a message, when the memory's summary changed since the editor opened, so a background summary is not overwritten.
+- **Leaving the editor.** While the editor is open the detail nav bar is hidden, so its Back and Memories buttons cannot skip the discard check. System back and Cancel use the discard check.
+- **Deleted elsewhere.** A memory removed from the store while it is open closes the editor with "This memory was deleted." The save path's NotFound uses the same notice.
+
 ---
 
 ## 8. Accessibility
@@ -266,6 +278,7 @@ Returning an error would make the job log a failure and count an attempt. Return
 | Q-6 | Should unsaved drafts survive process death? | **Open.** Default: no. |
 | Q-7 | Should the service reject duplicate category names, or only the UI? | **Open.** Default: UI only, for now. |
 | Q-8 | Should a new summary or category list replace user text without asking? | **Decided: no.** It asks first (AC-6.4). |
+| Q-9 | Do the editor screens (the overlay over the detail view, the Cancel and discard prompt, the save, failure, and deleted states, and the focus on Keep editing) look and behave as §7 describes on a device, and does TalkBack read the fields and errors? | **Open.** The save rules are unit-tested. The screens are not. Not run on a device. |
 
 ---
 

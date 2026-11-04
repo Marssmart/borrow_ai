@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +39,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -47,9 +49,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +89,9 @@ import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.memory_delete
 import borrowai.composeapp.generated.resources.memory_dismiss
+import borrowai.composeapp.generated.resources.memory_edit
+import borrowai.composeapp.generated.resources.memory_edit_deleted
+import borrowai.composeapp.generated.resources.memory_untitled
 import borrowai.composeapp.generated.resources.memory_open_details
 import borrowai.composeapp.generated.resources.memory_original_transcription
 import borrowai.composeapp.generated.resources.memory_playback_confirmation_cancel
@@ -113,6 +120,7 @@ internal fun SavedMemoriesScreen(
     onDetailBackRegistered: (() -> Unit) -> Unit,
     onDetailVisibilityChanged: (Boolean) -> Unit,
     onGoToRecord: () -> Unit,
+    onEditingChanged: (Boolean) -> Unit,
 ) {
     val memoryPagerState = rememberPagerState(
         pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
@@ -144,6 +152,9 @@ internal fun SavedMemoriesScreen(
     val playbackSpeed by stateHolder.playbackSpeed.collectAsState()
     val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
     val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
+    // The editor covers the detail view for this memory. Leaving the detail view or saving clears it.
+    var editingMemoryId by remember { mutableStateOf<String?>(null) }
+    val editedMemory = selectedMemory?.takeIf { it.id == editingMemoryId }
 
     // A pending delete is written when this page leaves composition (the Memories tab was left) and when the app stops.
     DisposableEffect(stateHolder) {
@@ -152,6 +163,23 @@ internal fun SavedMemoriesScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { stateHolder.commitPendingDelete() }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val deletedElsewhereMessage = stringResource(Res.string.memory_edit_deleted)
+    val onEditedMemoryDeleted: () -> Unit = {
+        // Runs once per editor session: a second call, after the editor has closed, does nothing.
+        if (editingMemoryId != null) {
+            editingMemoryId = null
+            scope.launch { snackbarHostState.showSnackbar(deletedElsewhereMessage) }
+        }
+        Unit
+    }
+    // A memory removed from the store while it is being edited, by a path other than this editor, closes the editor
+    // with the same notice as a failed save would.
+    LaunchedEffect(editingMemoryId, uiState.memories) {
+        val id = editingMemoryId ?: return@LaunchedEffect
+        if (uiState.memories.none { it.id == id }) onEditedMemoryDeleted()
+    }
+    LaunchedEffect(editingMemoryId) { onEditingChanged(editingMemoryId != null) }
+    DisposableEffect(Unit) { onDispose { onEditingChanged(false) } }
     val headingFocus = remember { FocusRequester() }
     // After a delete, focus moves to the list heading once the list is back on screen.
     LaunchedEffect(uiState.pendingDelete.undoWindow?.requestId) {
@@ -240,11 +268,22 @@ internal fun SavedMemoriesScreen(
                         focusedSpeakerOrdinal = uiState.focusedSpeakerOrdinal,
                         onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
                         onDelete = { stateHolder.deleteFromDetail(memory.id) },
+                        onEdit = { editingMemoryId = memory.id },
                     )
                 }
 
                 else -> Unit
             }
+        }
+        editedMemory?.let { memory ->
+            MemoryEditScreen(
+                memory = memory,
+                onSave = { title, summary, entry, onResult ->
+                    stateHolder.saveMemoryEdit(memory.id, title, summary, entry, onResult)
+                },
+                onClose = { editingMemoryId = null },
+                onDeletedElsewhere = onEditedMemoryDeleted,
+            )
         }
         // Sits above the dock, because this page is already padded for the dock (App.kt).
         MemoryDeleteSnackbarHost(
@@ -579,6 +618,7 @@ private fun MemoryDetailScreen(
     focusedSpeakerOrdinal: Int?,
     onSpeakerFocusHandled: () -> Unit,
     onDelete: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -607,11 +647,17 @@ private fun MemoryDetailScreen(
                             style = MaterialTheme.typography.labelMedium,
                         )
                         Text(
-                            memory.title,
+                            if (memory.title.isBlank()) stringResource(Res.string.memory_untitled) else memory.title,
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                         )
+                    }
+                    FilledTonalButton(
+                        onClick = onEdit,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(stringResource(Res.string.memory_edit))
                     }
                     MemoryMoreActions(onDelete = onDelete)
                 }

@@ -272,19 +272,19 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Edit memories</h1>
       <p class="lede">
-        Design mockups for editing a saved memory on Android: the entry point, the full-screen editor, validation, the AI safeguards, and the save states.
+        Design guide for editing a saved memory on Android. Editing the title and summary is shipped. The transcript and categories are still mockups.
         Full spec: <a href="edit-memories.html">Edit memories design</a>.
       </p>
     </header>
 
     <p class="status-note">
-      <span class="tag" style="background:#fde3c8;color:#8a4b0a">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag" style="background:#d4efe6;color:#13644f">Shipped</span> The Edit button, the full-screen editor for title and summary, their limits, the discard prompt, saving, and the failure and deleted states are shipped on Android. Sections marked Mockup are not built yet: the transcript and category parts of the editor.
       <span class="tag" style="background:#e3e7e9;color:#4a5558">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 1 · Entry and editor</p>
-      <h2>Edit button and full-screen editor <span class="tag" style="background:#fde3c8;color:#8a4b0a">Mockup</span></h2>
+      <p class="eyebrow">Shipped · 1 · Entry and editor</p>
+      <h2>Edit button and full-screen editor <span class="tag" style="background:#d4efe6;color:#13644f">Shipped</span> <span class="tag" style="background:#fde3c8;color:#8a4b0a">Transcript and categories: Mockup</span></h2>
       <p class="section-note">Edit opens a full-screen page inside the Memories tab. The dock stays hidden, and the pager stays locked, as it is in the detail view. Cancel asks before discarding changes.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -363,8 +363,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · Validation</p>
-      <h2>Field rules and messages <span class="tag" style="background:#fde3c8;color:#8a4b0a">Mockup</span></h2>
+      <p class="eyebrow">Shipped · 2 · Validation</p>
+      <h2>Field rules and messages <span class="tag" style="background:#d4efe6;color:#13644f">Title and summary: Shipped</span> <span class="tag" style="background:#fde3c8;color:#8a4b0a">Transcript and categories: Mockup</span></h2>
       <p class="section-note">Save stays disabled until a field is valid and something has changed. Each message sits under its field and is read by TalkBack when focus reaches it.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -474,8 +474,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 4 · Cancel and save</p>
-      <h2>Discard prompt, saving, and failure <span class="tag" style="background:#fde3c8;color:#8a4b0a">Mockup</span></h2>
+      <p class="eyebrow">Shipped · 4 · Cancel and save</p>
+      <h2>Discard prompt, saving, and failure <span class="tag" style="background:#d4efe6;color:#13644f">Shipped</span></h2>
       <p class="section-note">Cancel with changes asks first, and Keep editing is the default. A save that fails keeps every change on screen and offers Retry.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -536,7 +536,7 @@
 
     <section class="section">
       <p class="eyebrow">Rules</p>
-      <h2>Field limits and AI behaviour <span class="tag" style="background:#fde3c8;color:#8a4b0a">Mockup</span></h2>
+      <h2>Field limits and AI behaviour <span class="tag" style="background:#d4efe6;color:#13644f">Title, summary, and AI guards: Shipped</span> <span class="tag" style="background:#fde3c8;color:#8a4b0a">Transcript and categories: Mockup</span></h2>
       <table>
         <thead>
           <tr><th>Field</th><th>Rule</th><th>Status</th><th>What the AI pipeline does</th></tr>

@@ -124,10 +124,13 @@ fun App(services: AppServices) {
                 val navBarInset = WindowInsets.navigationBars
                     .asPaddingValues()
                     .calculateBottomPadding()
+                // The dock or the detail nav bar sits at the bottom. While the editor covers the detail view, no bar is
+                // shown, so the pager takes the full height.
+                val bottomBarShown = !(appUiState.isMemoryDetailVisible && appUiState.isMemoryEditing)
                 HorizontalPager(
                     state = appStateHolder.mainPagerState,
                     modifier = Modifier.fillMaxSize().padding(
-                        bottom = BottomNavDockReserve + navBarInset,
+                        bottom = if (bottomBarShown) BottomNavDockReserve + navBarInset else 0.dp,
                     ),
                     userScrollEnabled = !appUiState.isMemoryDetailVisible,
                 ) { page ->
@@ -145,6 +148,7 @@ fun App(services: AppServices) {
                             onDetailBackRegistered = appStateHolder::registerMemoryDetailBack,
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                             onGoToRecord = { appStateHolder.navigateToPage(AppShellStateHolder.CAPTURE_PAGE) },
+                            onEditingChanged = appStateHolder::setMemoryEditing,
                         )
 
                         AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen(
@@ -169,10 +173,12 @@ fun App(services: AppServices) {
                         .padding(top = 8.dp),
                 )
                 if (appUiState.isMemoryDetailVisible) {
-                    MemoryDetailNavBar(
-                        onBack = appStateHolder::backFromMemoryDetail,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
+                    if (!appUiState.isMemoryEditing) {
+                        MemoryDetailNavBar(
+                            onBack = appStateHolder::backFromMemoryDetail,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 } else {
                     BottomNavBar(
                         selectedPage = appStateHolder.mainPagerState.targetPage,

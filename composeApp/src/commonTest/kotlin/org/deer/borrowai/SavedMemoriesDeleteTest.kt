@@ -259,6 +259,34 @@ class SavedMemoriesDeleteTest {
         assertTrue(holder.uiState.value.showsEmptyMemories)
     }
 
+    @Test
+    fun savingAnEditOfAMissingMemoryReportsNotFound() = runTest {
+        val holder = holder(memoryService(memory("a", createdAt = 1)))
+        runCurrent()
+        val errors = mutableListOf<MemoryError?>()
+
+        holder.saveMemoryEdit("missing", "t", null, "") { result ->
+            errors += result.fold(ifLeft = { it }, ifRight = { null })
+        }
+        runCurrent()
+
+        assertEquals(listOf<MemoryError?>(MemoryError.NotFound("missing")), errors)
+    }
+
+    @Test
+    fun savingAnInvalidEditReportsInvalidInput() = runTest {
+        val holder = holder(memoryService(memory("a", createdAt = 1)))
+        runCurrent()
+        val errors = mutableListOf<MemoryError?>()
+
+        holder.saveMemoryEdit("a", "t", null, "") { result ->
+            errors += result.fold(ifLeft = { it }, ifRight = { null })
+        }
+        runCurrent()
+
+        assertTrue(errors.single() is MemoryError.InvalidInput)
+    }
+
     private fun memory(id: String, createdAt: Long) = Memory(
         id = id,
         createdAtEpochMillis = createdAt,

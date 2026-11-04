@@ -2,6 +2,8 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
+import arrow.core.Either
+import arrow.core.raise.either
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +34,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.currentEdit
 import org.deer.borrowai.data.domain.MemorySearch
 import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.domain.MemorySearcher
@@ -39,11 +42,14 @@ import org.deer.borrowai.data.domain.categoriesInUse
 import org.deer.borrowai.data.domain.effectiveCategoryFilter
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.SpeakerService
+
+private const val SUMMARY_WRITTEN_AGAIN = "The summary was written again while you were editing."
 
 internal data class SavedMemoriesUiState(
     val memories: List<Memory> = emptyList(),
@@ -212,6 +218,34 @@ internal class SavedMemoriesStateHolder(
 
     fun clearFocusedSpeaker() {
         mutableUiState.update { it.copy(focusedSpeakerOrdinal = null) }
+    }
+
+    /**
+     * Saves the fields the user changed. Each write reads the live memory first, so a transcript, category, or summary
+     * write that landed while the editor was open is kept. A null field is left as it is. A typed summary is refused
+     * when the memory's summary changed since the editor opened ([summaryAtEntry]). [onResult] runs on the holder's scope.
+     */
+    fun saveMemoryEdit(
+        memoryId: String,
+        title: String?,
+        summary: String?,
+        summaryAtEntry: String,
+        onResult: (Either<MemoryError, Unit>) -> Unit,
+    ) {
+        launchWrite {
+            val result = either {
+                val current = memoryService.findById(memoryId).bind()
+                if (summary != null && current.summary != summaryAtEntry) {
+                    raise(MemoryError.InvalidInput(SUMMARY_WRITTEN_AGAIN))
+                }
+                val edit = current.currentEdit().copy(
+                    title = title ?: current.title,
+                    summary = summary ?: current.summary,
+                )
+                memoryService.edit(memoryId, edit).bind()
+            }
+            scope.launch { onResult(result) }
+        }
     }
 
     private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {

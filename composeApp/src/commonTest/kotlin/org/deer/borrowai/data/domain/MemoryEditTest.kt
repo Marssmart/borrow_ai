@@ -172,6 +172,23 @@ class MemoryEditTest {
         assertEquals(0, requested.categorizationAttempts)
     }
 
+    @Test
+    fun currentEditKeepsEveryFieldOfTheMemory() {
+        val memory = memory(summary = "s", transcription = "t", categories = listOf(2))
+
+        assertEquals(MemoryEdit("", "s", "t", listOf(2)), memory.currentEdit())
+    }
+
+    @Test
+    fun titleOnlyEditMarksNothingAsUserWritten() {
+        val memory = memory(summary = "s", categories = listOf(2))
+        val updated = memory.withEdit(memory.currentEdit().copy(title = "renamed"))
+
+        assertEquals("renamed", updated.title)
+        assertFalse(updated.summaryEditedByUser)
+        assertFalse(updated.categoriesEditedByUser)
+    }
+
     private fun edit(
         title: String = "",
         summary: String = "",

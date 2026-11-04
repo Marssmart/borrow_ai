@@ -4,6 +4,15 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.19.0]
+
+- Added an Edit memory button to the memory detail view on Android. It opens a full-screen editor for the title and summary.
+- The title can be up to 80 characters, with a counter from 60. The summary can be up to 4,000 characters. Save is enabled only for a valid change. Clearing the summary asks for a new one to be written.
+- Cancel and the system back button ask before discarding changes. A save that fails keeps the text and offers Retry. A memory deleted elsewhere closes the editor with a message.
+- A memory with no title shows "Untitled memory" in the detail view.
+- Editing the transcript and categories is not available yet.
+- Updated Android and iOS versioning to 1.19.0 (build 78).
+
 ## [1.18.1]
 
 - Updated Android and iOS versioning to 1.18.1 (build 77).
