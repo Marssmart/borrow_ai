@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.5]
+
+- Added a GPU support design doc under `features/gpu-support/`. It covers GPU and NPU options for transcription and summarization, with a CPU fallback.
+- Updated Android and iOS versioning to 1.9.5 (build 61).
+
 ## [1.9.4]
 
 - Updated the native-developer agent so every implemented feature must be included in the visual guide.
