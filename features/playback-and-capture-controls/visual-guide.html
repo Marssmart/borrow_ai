@@ -325,14 +325,14 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Playback and capture controls</h1>
       <p class="lede">
-        Playback and recording controls on Android. The playback panel ships in phase 1, and the speed menu and interruptions ship in phase 2. Recording pause and resume and duration labels are design mockups.
+        Playback and recording controls on Android. The playback panel ships in phase 1, and the speed menu and interruptions ship in phase 2. Recording pause and resume is a design mockup. The duration label ships in phase 3.
         Full spec: <a href="playback-and-capture-controls.html">Playback and capture controls design</a>.
       </p>
     </header>
 
     <p class="status-note">
       <span class="tag tag-shipped">Shipped</span> The playback panel (seek bar, skips of 15 seconds, play or pause) and the list-card Pause state are built in phase 1. The speed menu, the paused notice, and the headset pause are built in phase 2.
-      <span class="tag tag-mock">Mockup</span> Dashed outlines mark what is still a mockup: recording pause and resume, and the duration label.
+      <span class="tag tag-mock">Mockup</span> Dashed outlines mark what is still a mockup: recording pause and resume.
       <span class="tag tag-android">Android only</span> The playback controls are Android only. iOS keeps the play and stop button. Background playback with notification controls is a later phase (P5), not shown here.
     </p>
 
@@ -504,14 +504,14 @@
 
     <section class="section">
       <p class="eyebrow">Screen · 4 · List cards</p>
-      <h2>Play or pause, and the duration label <span class="tag tag-shipped">Pause shipped</span> <span class="tag tag-mock">Duration label: mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total. Shipped: the Pause state. Dashed: the duration label, which comes in phase 3.</p>
+      <h2>Play or pause, and the duration label <span class="tag tag-shipped">Pause and duration label shipped</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total. Shipped: the Pause state and the duration label (phase 3).</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Saved memories</div>
             <div class="list-card">
-              <div class="list-head"><span class="list-date">3 Nov 2026 · 08:14</span><span class="duration-label mockup-only">1:05</span></div>
+              <div class="list-head"><span class="list-date">3 Nov 2026 · 08:14</span><span class="duration-label">1:05</span></div>
               <div class="list-summary">Meet at the station at nine. Bring the tent, check the bus times.</div>
               <div class="list-actions"><span class="pill-btn">Pause</span></div>
             </div>
@@ -543,7 +543,7 @@
           <tr><td>Headset unplugged</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Playback pauses at the same position. No notice. Play resumes it.</td><td>The player's position, frozen.</td></tr>
           <tr><td>Paused by another app</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Play button and the notice.</td><td>The player's position, frozen.</td></tr>
           <tr><td>Speed changed</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>The speed button shows the new speed, such as 1.5×. The position and the playing or paused state are kept.</td><td>The player's position, unchanged.</td></tr>
-          <tr><td>Ended</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Paused at the end. Play starts again from 0.</td><td>The player's duration. A stored duration comes in a later phase.</td></tr>
+          <tr><td>Ended</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Paused at the end. Play starts again from 0.</td><td>The player's duration. It is stored, so the list shows it later.</td></tr>
           <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and both skips disabled while the memory is not playing.</td><td>No stored duration. Stored on first play (P3).</td></tr>
           <tr><td>Recording</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
           <tr><td>Recording paused</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>

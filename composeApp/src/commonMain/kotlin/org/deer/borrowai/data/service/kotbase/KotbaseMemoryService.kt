@@ -87,6 +87,7 @@ class KotbaseMemoryService private constructor(
             title = draft.title,
             summary = draft.summary,
             summaryStatus = summaryStatusFor(draft.summary),
+            durationMillis = draft.durationMillis,
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
             transcriptionStatus = transcriptionStatus,

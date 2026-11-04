@@ -75,6 +75,7 @@ class KotbaseMemoryServiceTest {
         val withDuration = service.create(
             MemoryDraft("Timed", "", "", "recordings/timed.m4a", durationMillis = 3_500L),
         ).getOrNull()!!
+        assertEquals(3_500L, withDuration.durationMillis)
         val legacy = service.create(MemoryDraft("Legacy", "", "", "recordings/legacy.m4a")).getOrNull()!!
         assertEquals(null, legacy.durationMillis)
 
