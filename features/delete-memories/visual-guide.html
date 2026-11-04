@@ -304,20 +304,20 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Delete memories</h1>
       <p class="lede">
-        Shipped and mockup screens for deleting a saved memory on Android: the entry points, the Undo snackbar, the empty library, and the error state. Shipped items are tagged Shipped. Mockup items are not built yet.
+        Screens for deleting a saved memory on Android: the entry points, the Undo snackbar, the empty library, and the error state. Each one is built and tagged Shipped.
         Full spec: <a href="delete-memories.html">Delete memories design</a>.
       </p>
     </header>
 
     <p class="status-note">
-      <span class="tag tag-shipped">Shipped</span> The More actions menu, the Undo snackbar and error, the empty library, and focus after a delete are shipped on Android. Sections marked Mockup are not built yet, including the TalkBack custom action and the long-press shortcut. The layout uses Material 3 components. iOS is not designed here.
+      <span class="tag tag-shipped">Shipped</span> The More actions menu, the long-press shortcut, the TalkBack custom action, the Undo snackbar and error, the empty library, and focus after a delete are shipped on Android. The layout uses Material 3 components. iOS is not designed here.
       <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
     <section class="section">
-      <p class="eyebrow">Shipped and mockup · 1 · Entry points</p>
-      <h2>Detail menu and TalkBack action <span class="tag tag-shipped">Menu shipped</span> <span class="tag tag-mock">TalkBack action: Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The primary route is the More actions menu in the detail header. Every list card also exposes a TalkBack custom action, so the delete does not depend on a gesture.</p>
+      <p class="eyebrow">Shipped · 1 · Entry points</p>
+      <h2>Detail menu, long-press, and TalkBack action <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The primary route is the More actions menu in the detail header. Long-pressing a list card starts the same delete, and every card also exposes a TalkBack custom action, so no route depends on a gesture alone.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">

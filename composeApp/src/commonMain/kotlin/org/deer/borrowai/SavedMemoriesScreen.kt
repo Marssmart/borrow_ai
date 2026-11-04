@@ -5,7 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,6 +59,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +83,7 @@ import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
+import borrowai.composeapp.generated.resources.memory_delete
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_open_details
 import borrowai.composeapp.generated.resources.memory_original_transcription
@@ -200,6 +204,7 @@ internal fun SavedMemoriesScreen(
                     playbackControlsAvailable = stateHolder.playbackControlsAvailable,
                     onOpenMemory = stateHolder::openMemory,
                     onOpenMemoryAtSpeaker = stateHolder::openMemoryAtSpeaker,
+                    onDeleteMemory = stateHolder::requestDelete,
                     onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
                     onSearchTextChanged = stateHolder::onSearchTextChanged,
                     onSearchSubmit = stateHolder::submitSearch,
@@ -318,6 +323,7 @@ private fun MemoryListScreen(
     playbackControlsAvailable: Boolean,
     onOpenMemory: (String) -> Unit,
     onOpenMemoryAtSpeaker: (String, Int?) -> Unit,
+    onDeleteMemory: (String) -> Unit,
     onPlayRecording: (String) -> Unit,
     onSearchTextChanged: (String) -> Unit,
     onSearchSubmit: () -> Unit,
@@ -408,6 +414,7 @@ private fun MemoryListScreen(
                     onOpen = { onOpenMemory(memory.id) },
                     onOpenSpeaker = { ordinal -> onOpenMemoryAtSpeaker(memory.id, ordinal) },
                     onPlayRecording = { onPlayRecording(memory.id) },
+                    onDelete = { onDeleteMemory(memory.id) },
                 )
             }
             if (showEmptyState) {
@@ -427,7 +434,9 @@ private fun MemoryCard(
     onOpen: () -> Unit,
     onOpenSpeaker: (Int?) -> Unit,
     onPlayRecording: () -> Unit,
+    onDelete: () -> Unit,
 ) {
+    val deleteLabel = stringResource(Res.string.memory_delete)
     val hasTranscript = memory.transcription.isNotBlank()
     val isFailed = !hasTranscript && memory.transcriptionStatus == TranscriptionStatus.FAILED
     val isPending = !hasTranscript && (
@@ -443,10 +452,14 @@ private fun MemoryCard(
                     Modifier
                 },
             )
-            .clickable(
+            .combinedClickable(
                 onClickLabel = stringResource(Res.string.memory_open_details),
                 onClick = onOpen,
+                onLongClick = onDelete,
             )
+            .semantics {
+                customActions = listOf(CustomAccessibilityAction(deleteLabel) { onDelete(); true })
+            }
             .animateContentSize(tween(SavedMemoriesStateHolder.MEMORY_CONTENT_SIZE_ANIMATION_MILLIS)),
         shape = SavedMemoriesStateHolder.MEMORY_CARD_SHAPE,
         colors = CardDefaults.cardColors(

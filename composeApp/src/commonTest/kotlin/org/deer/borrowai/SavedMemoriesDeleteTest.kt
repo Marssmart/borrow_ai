@@ -201,6 +201,20 @@ class SavedMemoriesDeleteTest {
     }
 
     @Test
+    fun deleteFromTheListKeepsTheListOpen() = runTest {
+        val service = memoryService(memory("a", createdAt = 1), memory("b", createdAt = 2))
+        val holder = holder(service)
+        runCurrent()
+
+        holder.requestDelete("a")
+        runCurrent()
+
+        assertNull(holder.uiState.value.selectedMemoryId)
+        assertEquals(SavedMemoriesStateHolder.MEMORY_LIST_PAGE, holder.pagerState.currentPage)
+        assertEquals(listOf("b"), visibleIds(holder))
+    }
+
+    @Test
     fun emptyStateShowsOnlyWhenNothingIsVisibleAndNoSaveIsRunning() = runTest {
         val service = memoryService(memory("a", createdAt = 1))
         val media = FakeMediaSession()

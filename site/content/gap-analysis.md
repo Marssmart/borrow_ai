@@ -2,7 +2,7 @@
 
 Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, `site/content/*`, `features/*`, and `CHANGELOG.md`. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.
 
-**Status at 1.16.0:** G4 phases 1 and 2 are merged (#75 and 1.14.0), and the accessibility phase is open. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.
+**Status at 1.17.0:** G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.
 
 Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.
 
