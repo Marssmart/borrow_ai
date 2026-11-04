@@ -2,7 +2,7 @@
 
 Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, `site/content/*`, `features/*`, and `CHANGELOG.md`. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.
 
-**Status at 1.17.0:** G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.
+**Status at 1.17.0:** G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, stored durations are in playback phase 3, and recording pause remains. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.
 
 Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.
 
@@ -23,7 +23,7 @@ Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L
 | G7 | **Titles are never generated.** `title` is saved as `""`, and the summary prompt asks for no title. The list renders an empty title line. | `RecordingMediaSessionService.kt:320`; `RecordingReconciler.kt:84`; `SavedMemoriesScreen.kt:324`, `:416` | Every card looks unfinished. | S |
 | G8 | **No export or share.** No share sheet, file export, or transcript or audio export. | No match for `ACTION_SEND`, `UIActivityViewController`, or share in `composeApp` or `iosApp` | Users cannot get their data out, which fails the "your data is yours" promise. | M |
 | G9 | **No backup or restore by the app.** Only OS backups, and they include memories (see G15). | `backup_rules.xml`; `data_extraction_rules.xml` | No controlled way to move to a new phone. | M |
-| G11 | **Thin playback and capture controls.** No seek bar, skip, speed, pause and resume, bookmarks, input level, or max length. Durations are not stored. | `AudioPlayer.kt` (`play`, `stop`, interruption only); `AudioRecorder.kt` (`start`, `stop`); `Memory.kt` has no duration | Basic expectations of a recorder. | M |
+| G11 | **Thin playback and capture controls.** No seek bar, skip, speed, pause and resume, bookmarks, input level, or max length. Stored durations are in playback phase 3. | `AudioPlayer.kt` (`play`, `stop`, interruption only); `AudioRecorder.kt` (`start`, `stop`); recording pause is open | Basic expectations of a recorder. | M |
 | G12 | **English only.** Transcription is forced to English (`TRANSCRIPTION_LANGUAGE = "en"`) even though the models are multilingual. The UI has only `values/`, with no other locales. | `WhisperModelConfigFactory.kt:6`, used by `AndroidLiveTranscriber.kt:332` and `AndroidBatchTranscriber.kt:202`; `composeResources/values/` only | Non-English speech is transcribed badly or wrongly. A language picker is cheap. | S (setting) / M (UI strings) |
 | G13 | **Settings is thin.** No theme, language, model management (see sizes, delete, re-download), storage use, LLM choice, data controls, privacy page, or about screen. | `SettingsScreen.kt`; `AppSettings` | Users cannot manage what the app stores or downloads. | M |
 | G14 | **Light theme only.** One `lightColorScheme`, no dark mode. | `App.kt:34`, `App.kt:82` | Common expectation; cheap to add. | S |
@@ -80,7 +80,7 @@ Covered by gaps above, so not repeated: search (G6), export (G8), speed and paus
 ## 5. Suggested sequencing
 
 1. **Quick fixes (about a week):** G4 accessibility, G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.
-2. **Core usability (two to four weeks):** G6 keyboard and back polish, G5 edit and recategorize, G11 stored durations, G8 export, G12 language setting, G19 manual retry.
+2. **Core usability (two to four weeks):** G6 keyboard and back polish, G5 edit and recategorize, G8 export, G12 language setting, G19 manual retry.
 3. **Differentiators:** U2 privacy ledger (cheap, on-brand), then U1 offline Ask, U3 speaker UI, U4 commitments.
 
 ## 6. Decisions needed

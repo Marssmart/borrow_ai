@@ -292,6 +292,17 @@ These decisions refine §8.3 and §8.4. They were made when P2 was built.
 - Speaker samples (speaker recognition spec, section 8.3) play through the same player. A sample has no pause, so an interruption stops it, and nothing resumes it. A sample plays at the session speed. The wake-up before its end is scaled by that speed, so a sample stops at its end at any speed.
 - The instrumented tests for `AndroidAudioPlayer` in §13 are still not written. They need a device and an audio fixture.
 
+### 8.8 Phase 3 as built
+
+These decisions refine §8.2 and §11. They were made when P3 was built.
+
+- `Memory.durationMillis` and `MemoryDraft.durationMillis` are nullable. A new recording stores its duration when it is saved. `AudioDurationReader` reads the finished `.m4a` with `MediaMetadataRetriever`. If the read fails, the memory is saved with no duration, and nothing is estimated.
+- A memory with no stored duration gets one on its first play (Q-7). The player supplies the value once the file is prepared. The write is `MemoryService.recordDuration`, and it is write-once. A stored duration is never overwritten, so a later play does not change it.
+- The detail panel uses the player's duration while the memory plays or is paused. It falls back to the stored duration when idle. The list card shows the stored duration beside the date when it is known (Q-8).
+- Kotbase stores the value as `durationMillis`, a number column that is removed when the duration is null. Reads accept both missing and present values, so older rows load unchanged.
+- Tests: `RecordingMediaSessionServiceTest` covers the saved duration, the first-play write, and no overwrite. `KotbaseMemoryServiceTest` covers the round trip, reopen, and write-once. The Kotbase test compiles here but has not run, because instrumented runs are on hold.
+- The audio duration read on a real device is an open check. It has not been seen on a device, so the list label and the first-play write are unverified on hardware.
+
 ---
 
 ## 9. Platform split
@@ -346,7 +357,7 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 | Q-5 | Should background playback and notification controls ship in v1? | **Decided: no.** P5, with its own design. |
 | Q-6 | Should a headset unplugged pause playback in v1? | **Open.** Default yes, built in P2 with a receiver for `ACTION_AUDIO_BECOMING_NOISY` (§8.7). Test on devices. |
 | Q-7 | Should legacy durations be filled in by a launch job, not on first play? | **Decided: first play only.** No extra file reads. |
-| Q-8 | Should list cards show durations? | **Open.** Default: yes, in P3. |
+| Q-8 | Should list cards show durations? | **Decided: yes, in P3.** The label shows the stored duration when it is known. |
 | Q-9 | Should icons come from Material Icons Extended, or from `Canvas` drawings? | **Open.** Default: `Canvas`, as the app already does. |
 | Q-10 | For P5, use Media3 or keep `MediaPlayer` with a `MediaSession`? | **Open.** Check the Media3 minSdk against 24 first. The name `MediaSessionService` is already used by the domain interface, so Media3 classes need aliases. |
 | Q-11 | Does `MediaPlayer` play from 0 after a seek to 0 that follows its completion? | **Open.** Device check for P1. The service seeks to 0 before it starts the player, so the default matches §5.1. |
@@ -362,7 +373,7 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 |---|---|---|
 | P1 Playback controls | Pause and resume, seek bar, time labels, skip ±15 seconds, position from the player, 250 ms ticks | US-1, US-2, US-4 met on Android. commonTest green (§13). |
 | P2 Speed and interruptions | Speed menu, focus loss pauses, transient resume, notice, headset unplug (Q-6) | US-3 and AC-6.1, AC-6.2 met on a device with API 24 and on one with API 34 or later. |
-| P3 Duration | `durationMillis` stored on save, stored on first play, "Duration unknown", list durations (Q-8) | US-7 met. Kotbase round-trip tests green. |
+| P3 Duration | `durationMillis` stored on save, stored on first play, "Duration unknown", list durations (Q-8) | US-7 met in JVM tests. Kotbase tests compile; the run is on hold. |
 | P4 Recording pause and resume | Recorder pause and resume, active elapsed time, live transcriber pause, notification text, capture controls, recorder error listener | US-5 and AC-6.4 met on device, including the call test (Q-2). |
 | P5 Background playback (separate design) | Media session, media playback foreground service, notification and lock-screen controls, notification permission on Android 13 and later | A separate design document is approved first. |
 

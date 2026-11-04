@@ -213,6 +213,9 @@ class KotbaseMemoryService private constructor(
     override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withSummary(summary) }
 
+    override suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit> =
+        updateActive(id) { if (it.durationMillis == null) it.copy(durationMillis = durationMillis) else it }
+
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withGaveUp() }
 
@@ -390,6 +393,7 @@ class KotbaseMemoryService private constructor(
             SelectResult.property(COLUMN_SUMMARY),
             SelectResult.property(COLUMN_TRANSCRIPTION),
             SelectResult.property(COLUMN_RECORDING_PATH),
+            SelectResult.property(COLUMN_DURATION_MILLIS),
             SelectResult.property(COLUMN_DELETED),
             SelectResult.property(COLUMN_TRANSCRIPTION_STATUS),
             SelectResult.property(COLUMN_TRANSCRIPTION_DONE),
@@ -459,6 +463,7 @@ class KotbaseMemoryService private constructor(
                 summary = getString(COLUMN_SUMMARY).orEmpty(),
                 transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
                 recordingPath = getString(COLUMN_RECORDING_PATH),
+                durationMillis = (getValue(COLUMN_DURATION_MILLIS) as? Number)?.toLong(),
                 deleted = getBoolean(COLUMN_DELETED),
                 transcriptionStatus = transcriptionStatusOf(
                     getString(COLUMN_TRANSCRIPTION_STATUS),
@@ -491,6 +496,7 @@ class KotbaseMemoryService private constructor(
         setString(COLUMN_SUMMARY, summary)
         setString(COLUMN_TRANSCRIPTION, transcription)
         setString(COLUMN_RECORDING_PATH, recordingPath)
+        if (durationMillis != null) setLong(COLUMN_DURATION_MILLIS, durationMillis) else remove(COLUMN_DURATION_MILLIS)
         setBoolean(COLUMN_DELETED, deleted)
         setString(COLUMN_TRANSCRIPTION_STATUS, transcriptionStatus.name)
         setLong(COLUMN_TRANSCRIPTION_ATTEMPTS, transcriptionAttempts.toLong())
@@ -515,6 +521,7 @@ class KotbaseMemoryService private constructor(
             summary = getString(COLUMN_SUMMARY).orEmpty(),
             transcription = getString(COLUMN_TRANSCRIPTION).orEmpty(),
             recordingPath = getString(COLUMN_RECORDING_PATH),
+            durationMillis = if (contains(COLUMN_DURATION_MILLIS)) getLong(COLUMN_DURATION_MILLIS) else null,
             deleted = getBoolean(COLUMN_DELETED),
             transcriptionStatus = transcriptionStatusOf(
                 getString(COLUMN_TRANSCRIPTION_STATUS),
@@ -591,6 +598,7 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_SUMMARY = "summary"
         private const val COLUMN_TRANSCRIPTION = "transcription"
         private const val COLUMN_RECORDING_PATH = "recordingPath"
+        private const val COLUMN_DURATION_MILLIS = "durationMillis"
         private const val COLUMN_DELETED = "deleted"
         private const val COLUMN_TRANSCRIPTION_STATUS = "transcriptionStatus"
         private const val COLUMN_TRANSCRIPTION_DONE = "transcriptionDone"

@@ -498,6 +498,13 @@ private fun MemoryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
+                    memory.durationMillis?.let { durationMillis ->
+                        Text(
+                            formatPlaybackTime(durationMillis),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             }
 
@@ -618,7 +625,7 @@ private fun MemoryDetailScreen(
                 if (playbackControlsAvailable) {
                     PlaybackPanel(
                         playback = playback,
-                        durationMillis = playback?.durationMillis,
+                        durationMillis = playback?.durationMillis ?: memory.durationMillis,
                         onTogglePlayback = onPlayRecording,
                         onSeek = onSeekPlayback,
                         onSkip = onSkipPlayback,

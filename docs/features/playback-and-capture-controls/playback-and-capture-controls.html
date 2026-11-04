@@ -413,6 +413,16 @@
 <li>Speaker samples (speaker recognition spec, section 8.3) play through the same player. A sample has no pause, so an interruption stops it, and nothing resumes it. A sample plays at the session speed. The wake-up before its end is scaled by that speed, so a sample stops at its end at any speed.</li>
 <li>The instrumented tests for <code>AndroidAudioPlayer</code> in §13 are still not written. They need a device and an audio fixture.</li>
 </ul>
+<h3 id="88-phase-3-as-built">8.8 Phase 3 as built</h3>
+<p>These decisions refine §8.2 and §11. They were made when P3 was built.</p>
+<ul>
+<li><code>Memory.durationMillis</code> and <code>MemoryDraft.durationMillis</code> are nullable. A new recording stores its duration when it is saved. <code>AudioDurationReader</code> reads the finished <code>.m4a</code> with <code>MediaMetadataRetriever</code>. If the read fails, the memory is saved with no duration, and nothing is estimated.</li>
+<li>A memory with no stored duration gets one on its first play (Q-7). The player supplies the value once the file is prepared. The write is <code>MemoryService.recordDuration</code>, and it is write-once. A stored duration is never overwritten, so a later play does not change it.</li>
+<li>The detail panel uses the player's duration while the memory plays or is paused. It falls back to the stored duration when idle. The list card shows the stored duration beside the date when it is known (Q-8).</li>
+<li>Kotbase stores the value as <code>durationMillis</code>, a number column that is removed when the duration is null. Reads accept both missing and present values, so older rows load unchanged.</li>
+<li>Tests: <code>RecordingMediaSessionServiceTest</code> covers the saved duration, the first-play write, and no overwrite. <code>KotbaseMemoryServiceTest</code> covers the round trip, reopen, and write-once. The Kotbase test compiles here but has not run, because instrumented runs are on hold.</li>
+<li>The audio duration read on a real device is an open check. It has not been seen on a device, so the list label and the first-play write are unverified on hardware.</li>
+</ul>
 <hr />
 <h2 id="9-platform-split">9. Platform split</h2>
 <table>
@@ -601,7 +611,7 @@
 <tr>
 <td>Q-8</td>
 <td>Should list cards show durations?</td>
-<td><strong>Open.</strong> Default: yes, in P3.</td>
+<td><strong>Decided: yes, in P3.</strong> The label shows the stored duration when it is known.</td>
 </tr>
 <tr>
 <td>Q-9</td>
@@ -659,7 +669,7 @@
 <tr>
 <td>P3 Duration</td>
 <td><code>durationMillis</code> stored on save, stored on first play, "Duration unknown", list durations (Q-8)</td>
-<td>US-7 met. Kotbase round-trip tests green.</td>
+<td>US-7 met in JVM tests. Kotbase tests compile; the run is on hold.</td>
 </tr>
 <tr>
 <td>P4 Recording pause and resume</td>

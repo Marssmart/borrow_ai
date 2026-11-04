@@ -20,6 +20,7 @@ import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
 import org.deer.borrowai.data.service.speech.createLiveTranscriber
 import org.deer.borrowai.data.service.summary.createSummarizer
+import org.deer.borrowai.data.service.recording.AndroidAudioDurationReader
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.MicrophonePermission
@@ -64,6 +65,7 @@ internal class AppServicesViewModel(
             categoryModel = createCategoryModel(runtime = runtime),
             closeModelRuntime = runtime::close,
             onSettingsReady = settings::set,
+            audioDurationReader = AndroidAudioDurationReader(),
         )
     },
 ) : ViewModel() {

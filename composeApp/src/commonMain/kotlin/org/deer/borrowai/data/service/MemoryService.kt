@@ -37,6 +37,9 @@ interface MemoryService {
      */
     suspend fun updateCategories(id: String, categories: List<Int>): Either<MemoryError, Unit>
 
+    /** Stores [durationMillis] for an active memory that has none. A stored duration is never overwritten. */
+    suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit>
+
     /** Marks the memory as deleted. Returns [MemoryError.NotFound] when it is missing or already deleted. */
     suspend fun delete(id: String): Either<MemoryError, Unit>
 

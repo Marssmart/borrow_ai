@@ -67,6 +67,7 @@ class RecordingMediaSessionService(
     private val monotonicMillis: () -> Long = ::monotonicMillisSinceStart,
     private val liveTranscriber: LiveTranscriber? = null,
     private val transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
+    private val durationReader: AudioDurationReader = AudioDurationReader.None,
 ) : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     private val closed = MutableStateFlow(false)
@@ -279,6 +280,10 @@ class RecordingMediaSessionService(
         if (closed.value) {
             stopActivePlayback()
             return PlaybackError.RecordingUnavailable.left()
+        }
+        // A memory saved before durations were stored learns its duration from its first play. recordDuration never overwrites one.
+        if (findMemory(target)?.durationMillis == null) {
+            scope.launch { memoryService.recordDuration(target.memoryId, fileDurationMillis) }
         }
         tickerJob.cancel()
         startPlaybackTicker(stopMillis, startMillis)
@@ -501,6 +506,7 @@ class RecordingMediaSessionService(
         liveTranscriber?.let { transcriber -> runCatching { transcriber.stop() } }
         mutableState.value = MediaSessionState.Idle
         val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
+        var savedDurationMillis: Long? = null
         // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
         // finished file whose memory is still being written.
         val save = scope.launch(start = CoroutineStart.LAZY) {
@@ -511,6 +517,7 @@ class RecordingMediaSessionService(
                         summary = "",
                         transcription = "",
                         recordingPath = recording.relativePath,
+                        durationMillis = savedDurationMillis,
                     ),
                     id = recording.recordingId,
                     transcriptionStatus = TranscriptionStatus.PENDING,
@@ -528,6 +535,7 @@ class RecordingMediaSessionService(
         try {
             recorder.stop()
             fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
+            savedDurationMillis = runCatching { durationReader.durationMillis(recording.absolutePath.toString()) }.getOrNull()
         } catch (exception: Exception) {
             // Any finalize failure leaves no usable file. Cancelling the pending save keeps close() and busy checks from waiting on it.
             discardUnfinishedRecording(recording, save)

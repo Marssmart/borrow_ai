@@ -422,7 +422,7 @@
     <section class="section">
       <p class="eyebrow">Screen · 2 · Legacy memories</p>
       <h2>Duration unknown, never an estimate <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">A memory saved before this release has no stored duration. Idle memories show "Duration unknown" until P3 stores durations. While a memory plays or is paused, its duration comes from the player, and the seek bar and skips work then. Play works from the start.</p>
+      <p class="section-note">A memory saved before this release has no stored duration. Idle memories show "Duration unknown" until they are played once, and the duration is then stored. New memories store their duration on save. While a memory plays or is paused, its duration comes from the player, and the seek bar and skips work then. Play works from the start.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -544,7 +544,7 @@
           <tr><td>Paused by another app</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Play button and the notice.</td><td>The player's position, frozen.</td></tr>
           <tr><td>Speed changed</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>The speed button shows the new speed, such as 1.5×. The position and the playing or paused state are kept.</td><td>The player's position, unchanged.</td></tr>
           <tr><td>Ended</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Paused at the end. Play starts again from 0.</td><td>The player's duration. A stored duration comes in a later phase.</td></tr>
-          <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and both skips disabled while the memory is not playing.</td><td>No stored duration yet. Stored on first play in a later phase.</td></tr>
+          <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and both skips disabled while the memory is not playing.</td><td>No stored duration. Stored on first play (P3).</td></tr>
           <tr><td>Recording</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
           <tr><td>Recording paused</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>
           <tr><td>Recording interrupted</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Recording was interrupted. The audio up to here was saved." (Q-2).</td><td>The file's readable length.</td></tr>
