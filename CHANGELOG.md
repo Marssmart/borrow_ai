@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.9]
+
+- Added the rules for deleting a memory. A delete hides the memory at once and keeps it restorable for 10 seconds. The soft delete is written when that window ends, when the Memories tab is left, when the app goes to the background, or when a second delete starts. Not shown in the app yet; see `features/delete-memories/`.
+- Updated Android and iOS versioning to 1.9.9 (build 65).
+
 ## [1.9.8]
 
 - Added design docs and visual guides for four Android features: delete memories (`features/delete-memories/`), edit memories (`features/edit-memories/`), search and filter (`features/search-and-filter/`), and playback and capture controls (`features/playback-and-capture-controls/`). They are listed on the documentation site's Features page.
