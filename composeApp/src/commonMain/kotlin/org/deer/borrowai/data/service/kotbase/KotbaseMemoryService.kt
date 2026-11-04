@@ -48,6 +48,7 @@ import org.deer.borrowai.data.domain.isTranscriptEditable
 import org.deer.borrowai.data.domain.memoryEditViolation
 import org.deer.borrowai.data.domain.unlessCategoriesEdited
 import org.deer.borrowai.data.domain.unlessSummaryEdited
+import org.deer.borrowai.data.domain.unlessTranscriptChanged
 import org.deer.borrowai.data.domain.withCategorizationRequested
 import org.deer.borrowai.data.domain.withEdit
 import org.deer.borrowai.data.domain.withSummaryRequested
@@ -217,31 +218,62 @@ class KotbaseMemoryService private constructor(
             }
         }
 
-    override suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit> =
-        updateActive(id) { it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = error, empty = false) } }
+    override suspend fun recordFinishedAttempt(
+        id: String,
+        error: String?,
+        basedOnTranscription: String?,
+    ): Either<MemoryError, Unit> = updateActive(id) {
+        it.unlessSummaryEdited { m ->
+            m.unlessTranscriptChanged(basedOnTranscription) { x -> x.afterFinishedAttempt(error = error, empty = false) }
+        }
+    }
 
-    override suspend fun recordEmpty(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.unlessSummaryEdited { m -> m.afterFinishedAttempt(error = null, empty = true) } }
+    override suspend fun recordEmpty(id: String, basedOnTranscription: String?): Either<MemoryError, Unit> =
+        updateActive(id) {
+            it.unlessSummaryEdited { m ->
+                m.unlessTranscriptChanged(basedOnTranscription) { x -> x.afterFinishedAttempt(error = null, empty = true) }
+            }
+        }
 
-    override suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.unlessSummaryEdited { m -> m.withSummary(summary) } }
-
-    override suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit> =
-        updateActive(id) { if (it.durationMillis == null) it.copy(durationMillis = durationMillis) else it }
+    override suspend fun recordSummary(
+        id: String,
+        summary: String,
+        basedOnTranscription: String?,
+    ): Either<MemoryError, Unit> = updateActive(id) {
+        it.unlessSummaryEdited { m -> m.unlessTranscriptChanged(basedOnTranscription) { x -> x.withSummary(summary) } }
+    }
 
     override suspend fun giveUpSummary(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.unlessSummaryEdited { m -> m.withGaveUp() } }
 
-    override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> {
+    override suspend fun recordCategorization(
+        id: String,
+        categories: List<Int>,
+        basedOnTranscription: String?,
+    ): Either<MemoryError, Unit> {
         categoryIdsViolation(categories)?.let { return MemoryError.InvalidInput(it).left() }
-        return updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategories(categories) } }
+        return updateActive(id) {
+            it.unlessCategoriesEdited { m ->
+                m.unlessTranscriptChanged(basedOnTranscription) { x -> x.withCategories(categories) }
+            }
+        }
     }
 
-    override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
-        updateActive(id) { it.unlessCategoriesEdited { m -> m.afterFinishedCategorizationAttempt(empty = empty) } }
+    override suspend fun recordCategorizationAttempt(
+        id: String,
+        empty: Boolean,
+        basedOnTranscription: String?,
+    ): Either<MemoryError, Unit> = updateActive(id) {
+        it.unlessCategoriesEdited { m ->
+            m.unlessTranscriptChanged(basedOnTranscription) { x -> x.afterFinishedCategorizationAttempt(empty = empty) }
+        }
+    }
 
     override suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.unlessCategoriesEdited { m -> m.withCategorizationGaveUp() } }
+
+    override suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit> =
+        updateActive(id) { if (it.durationMillis == null) it.copy(durationMillis = durationMillis) else it }
 
     override suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?> = mutex.withLock {
         either {

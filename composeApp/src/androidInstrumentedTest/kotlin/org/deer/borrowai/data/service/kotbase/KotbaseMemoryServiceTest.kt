@@ -71,7 +71,6 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
-    @Test
     fun durationRoundTripsAcrossReopenAndIsWriteOnce() = runTest {
         val service = openService()
         val withDuration = service.create(
@@ -108,6 +107,69 @@ class KotbaseMemoryServiceTest {
         assertEquals(listOf(3), updated?.categories)
         assertEquals(created.createdAtEpochMillis, updated?.createdAtEpochMillis)
         assertEquals(listOf(updated), service.getState().value)
+    }
+
+    @Test
+    fun editMarkersAndGuardedWritesHoldAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript")).getOrNull()!!
+        assertTrue(first.edit(created.id, MemoryEdit("Note", "mine", "Transcript", listOf(1))).isRight())
+        val edited = first.findById(created.id).getOrNull()!!
+        assertTrue(edited.summaryEditedByUser)
+        assertTrue(edited.categoriesEditedByUser)
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertTrue(found.summaryEditedByUser)
+        assertTrue(found.categoriesEditedByUser)
+
+        assertTrue(reopened.recordSummary(created.id, "ai", basedOnTranscription = "Transcript").isRight())
+        assertTrue(reopened.recordCategorization(created.id, listOf(5), basedOnTranscription = "Transcript").isRight())
+        assertTrue(reopened.recordFinishedAttempt(created.id, "boom", basedOnTranscription = "Transcript").isRight())
+        val guarded = reopened.findById(created.id).getOrNull()!!
+        assertEquals("mine", guarded.summary)
+        assertEquals(SummaryStatus.SUMMARIZED, guarded.summaryStatus)
+        assertEquals(0, guarded.summaryAttempts)
+        assertEquals(listOf(1), guarded.categories)
+        assertEquals(0, guarded.categorizationAttempts)
+    }
+
+    @Test
+    fun staleTranscriptSnapshotIsDroppedAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Old text")).getOrNull()!!
+        assertTrue(first.edit(created.id, MemoryEdit("Note", "", "New text", emptyList())).isRight())
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        assertTrue(reopened.recordSummary(created.id, "from old", basedOnTranscription = "Old text").isRight())
+
+        assertEquals("", reopened.findById(created.id).getOrNull()?.summary)
+    }
+
+    @Test
+    fun transcriptEditIsRefusedWhileBeingCreatedAcrossReopen() = runTest {
+        val first = openService()
+        val pending = first.create(
+            MemoryDraft("Pending", "", "", "recordings/p.m4a"),
+            transcriptionStatus = TranscriptionStatus.PENDING,
+        ).getOrNull()!!
+        val inProgress = first.create(
+            MemoryDraft("Working", "", "", "recordings/w.m4a"),
+            transcriptionStatus = TranscriptionStatus.IN_PROGRESS,
+        ).getOrNull()!!
+
+        assertTrue(first.edit(pending.id, MemoryEdit("Pending", "", "typed", emptyList())).isLeft())
+        assertTrue(first.edit(inProgress.id, MemoryEdit("Working", "", "typed", emptyList())).isLeft())
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        assertEquals("", reopened.findById(pending.id).getOrNull()?.transcription)
+        assertEquals("", reopened.findById(inProgress.id).getOrNull()?.transcription)
     }
 
     @Test
@@ -446,7 +508,7 @@ class KotbaseMemoryServiceTest {
             .getOrNull()!!
         assertEquals(Either.Right(Unit), first.recordCategorizationAttempt(created.id, empty = false))
 
-        first.edit(created.id, MemoryEdit("Cleared", "", "Transcript", emptyList()))
+        assertTrue(first.edit(created.id, MemoryEdit("Cleared", "", "Transcript", emptyList())).isRight())
 
         requireNotNull(database).close()
         database = Database(databaseName)

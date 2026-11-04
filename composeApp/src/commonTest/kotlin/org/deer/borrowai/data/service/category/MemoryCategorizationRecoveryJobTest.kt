@@ -308,10 +308,16 @@ class MemoryCategorizationRecoveryJobTest {
 
     /** Delegates everything to [delegate] except the category writers, which always fail. */
     private class FailingCategoryWrites(private val delegate: FakeMemoryService) : MemoryService by delegate {
-        override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> =
-            MemoryError.Persistence(IllegalStateException("disk full")).left()
+        override suspend fun recordCategorization(
+            id: String,
+            categories: List<Int>,
+            basedOnTranscription: String?,
+        ): Either<MemoryError, Unit> = MemoryError.Persistence(IllegalStateException("disk full")).left()
 
-        override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
-            MemoryError.Persistence(IllegalStateException("disk full")).left()
+        override suspend fun recordCategorizationAttempt(
+            id: String,
+            empty: Boolean,
+            basedOnTranscription: String?,
+        ): Either<MemoryError, Unit> = MemoryError.Persistence(IllegalStateException("disk full")).left()
     }
 }

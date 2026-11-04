@@ -80,25 +80,41 @@ interface MemoryService {
      * Counts one finished summarization attempt that did not produce a summary. [error] is stored as the
      * last error when it is not null. The memory gives up once the limit is reached.
      */
-    suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit>
+    suspend fun recordFinishedAttempt(
+        id: String,
+        error: String?,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Counts one finished attempt that produced a blank summary. Retried until the limit is reached. */
-    suspend fun recordEmpty(id: String): Either<MemoryError, Unit>
+    suspend fun recordEmpty(id: String, basedOnTranscription: String? = null): Either<MemoryError, Unit>
 
     /** Stores [summary] on an active memory and marks it as summarized. */
-    suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit>
+    suspend fun recordSummary(
+        id: String,
+        summary: String,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
     suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
 
     /** Stores [categories] on an active memory and marks its categorization as done. */
-    suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit>
+    suspend fun recordCategorization(
+        id: String,
+        categories: List<Int>,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /**
      * Counts one finished categorization attempt that produced no categories. [empty] marks a blank transcription.
      * The memory gives up once the limit is reached.
      */
-    suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit>
+    suspend fun recordCategorizationAttempt(
+        id: String,
+        empty: Boolean,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Stops retrying an active memory's categorization by setting its status to GAVE_UP. */
     suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit>

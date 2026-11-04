@@ -241,8 +241,8 @@ fun categorizationStatusFor(categories: List<Int>): CategorizationStatus =
 
 /**
  * The memory with categories set by the user. An unchanged list keeps the existing status and attempts. A changed
- * list resets them to match the new list. Clearing the list makes the memory pending again, so the recovery job
- * fills it in.
+ * list resets them to match the new list. Clearing the list keeps it cleared: the memory is not retryable, so the
+ * recovery job does not refill it. Only [requestCategorization] hands the categories back to the job.
  */
 fun Memory.withUserCategories(ids: List<Int>): Memory =
     if (ids == categories) {
@@ -285,6 +285,13 @@ fun Memory.withCategorizationRequested(): Memory = copy(
 /** Applies [change] unless the user chose the categories. User categories are returned unchanged. */
 fun Memory.unlessCategoriesEdited(change: (Memory) -> Memory): Memory =
     if (categoriesEditedByUser) this else change(this)
+
+/**
+ * Applies [change] only when the transcript still matches [basedOn], the text a recovery job read before it started.
+ * A transcript edited since then makes that job's result stale, so it is dropped. A null [basedOn] skips the check.
+ */
+fun Memory.unlessTranscriptChanged(basedOn: String?, change: (Memory) -> Memory): Memory =
+    if (basedOn != null && basedOn != transcription) this else change(this)
 
 fun Memory.claimedForTranscription(): Memory = copy(
     transcriptionStatus = TranscriptionStatus.IN_PROGRESS,

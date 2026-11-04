@@ -69,6 +69,45 @@ class MemorySummaryRecoveryJobTest {
     private suspend fun FakeMemoryService.get(id: String): Memory = findById(id).getOrNull()!!
 
     @Test
+    fun summaryOfReplacedTranscriptIsNotStored() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Summary("summary of old text")
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "replaced text", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals("", stored.summary)
+        assertEquals(SummaryStatus.PENDING, stored.summaryStatus)
+        assertEquals(0, stored.summaryAttempts)
+    }
+
+    @Test
+    fun failedAttemptForReplacedTranscriptDoesNotCount() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Failed(RuntimeException("boom"))
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "replaced text", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        assertEquals(0, service.get("a").summaryAttempts)
+    }
+
+    @Test
     fun summaryFinishingAfterUserEditIsNotWritten() = runTest {
         val service = service(memory("a"))
         val release = CompletableDeferred<Unit>()
