@@ -1,6 +1,6 @@
 # Search and filter
 
-Status: Phase 1 built (search and count). Phases 2 and 3 are next (draft v0.1)
+Status: Phase 1 built on Android. Its exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phases 2 and 3 are next (draft v0.1)
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 
