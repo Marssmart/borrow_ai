@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 
@@ -28,8 +29,19 @@ interface MemoryService {
         transcriptionStatus: TranscriptionStatus = TranscriptionStatus.DONE,
     ): Either<MemoryError, Memory>
 
-    /** Replaces the content of an active memory. Returns [MemoryError.NotFound] when it is missing or deleted. */
-    suspend fun update(id: String, draft: MemoryDraft): Either<MemoryError, Unit>
+    /**
+     * Saves the edited fields of an active memory in one write. A summary or category list that changed is marked as
+     * the user's, so the recovery jobs leave it alone. A transcript change is refused while it is still being created.
+     * Returns [MemoryError.NotFound] when the memory is missing or deleted, and [MemoryError.InvalidInput] when a rule
+     * fails.
+     */
+    suspend fun edit(id: String, edit: MemoryEdit): Either<MemoryError, Unit>
+
+    /** Clears the user's summary marker and sets the summary back to pending, so a new one is written. */
+    suspend fun requestSummary(id: String): Either<MemoryError, Unit>
+
+    /** Clears the user's category marker and sets the categories back to pending, so new ones are chosen. */
+    suspend fun requestCategorization(id: String): Either<MemoryError, Unit>
 
     /**
      * Replaces only the category ids of an active memory. Every other field, including the summary status, is kept.
@@ -68,25 +80,41 @@ interface MemoryService {
      * Counts one finished summarization attempt that did not produce a summary. [error] is stored as the
      * last error when it is not null. The memory gives up once the limit is reached.
      */
-    suspend fun recordFinishedAttempt(id: String, error: String?): Either<MemoryError, Unit>
+    suspend fun recordFinishedAttempt(
+        id: String,
+        error: String?,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Counts one finished attempt that produced a blank summary. Retried until the limit is reached. */
-    suspend fun recordEmpty(id: String): Either<MemoryError, Unit>
+    suspend fun recordEmpty(id: String, basedOnTranscription: String? = null): Either<MemoryError, Unit>
 
     /** Stores [summary] on an active memory and marks it as summarized. */
-    suspend fun recordSummary(id: String, summary: String): Either<MemoryError, Unit>
+    suspend fun recordSummary(
+        id: String,
+        summary: String,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Stops retrying an active memory by setting its attempt count to the limit and its status to GAVE_UP. */
     suspend fun giveUpSummary(id: String): Either<MemoryError, Unit>
 
     /** Stores [categories] on an active memory and marks its categorization as done. */
-    suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit>
+    suspend fun recordCategorization(
+        id: String,
+        categories: List<Int>,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /**
      * Counts one finished categorization attempt that produced no categories. [empty] marks a blank transcription.
      * The memory gives up once the limit is reached.
      */
-    suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit>
+    suspend fun recordCategorizationAttempt(
+        id: String,
+        empty: Boolean,
+        basedOnTranscription: String? = null,
+    ): Either<MemoryError, Unit>
 
     /** Stops retrying an active memory's categorization by setting its status to GAVE_UP. */
     suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit>

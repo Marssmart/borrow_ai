@@ -77,23 +77,24 @@ class MemorySummaryRecoveryJob(
     private suspend fun process(memory: Memory): Outcome {
         // No transcript means nothing to summarize: skip without calling the summarizer or counting an attempt.
         if (memory.transcription.isBlank()) return Outcome.NOT_STORED
+        val basedOn = memory.transcription
         return when (val result = summarize(memory.transcription)) {
             is SummaryResult.Summary -> if (result.text.isBlank()) {
-                memoryService.recordEmpty(memory.id)
+                memoryService.recordEmpty(memory.id, basedOn)
                 Outcome.NOT_STORED
-            } else if (memoryService.recordSummary(memory.id, result.text).isRight()) {
+            } else if (memoryService.recordSummary(memory.id, result.text, basedOn).isRight()) {
                 Outcome.STORED
             } else {
                 Outcome.NOT_STORED
             }
             SummaryResult.Empty -> {
-                memoryService.recordEmpty(memory.id)
+                memoryService.recordEmpty(memory.id, basedOn)
                 Outcome.NOT_STORED
             }
             SummaryResult.Unavailable -> Outcome.NOT_STORED
             SummaryResult.ModelMissing -> Outcome.MODEL_MISSING
             is SummaryResult.Failed -> {
-                memoryService.recordFinishedAttempt(memory.id, result.cause.describeForStorage())
+                memoryService.recordFinishedAttempt(memory.id, result.cause.describeForStorage(), basedOn)
                 Outcome.NOT_STORED
             }
         }

@@ -67,13 +67,14 @@ class MemoryCategorizationRecoveryJob(
 
     private enum class Outcome { STORED, NOT_STORED, MODEL_MISSING, STORE_FAILED }
 
-    private suspend fun process(memory: Memory): Outcome =
-        when (val result = categorize(memory.transcription)) {
+    private suspend fun process(memory: Memory): Outcome {
+        val basedOn = memory.transcription
+        return when (val result = categorize(basedOn)) {
             is CategorizationResult.Categories -> {
                 result.backfillFailure?.let {
                     logCategorization("Backfill failed for ${memory.id}; storing ${result.ids.size} categories.", it)
                 }
-                if (memoryService.recordCategorization(memory.id, result.ids).isRight()) {
+                if (memoryService.recordCategorization(memory.id, result.ids, basedOn).isRight()) {
                     logCategorization("Stored ${result.ids.size} categories for ${memory.id}.")
                     Outcome.STORED
                 } else {
@@ -81,7 +82,7 @@ class MemoryCategorizationRecoveryJob(
                     Outcome.STORE_FAILED
                 }
             }
-            CategorizationResult.Empty -> recordAttempt(memory.id, empty = true, reason = "empty transcription")
+            CategorizationResult.Empty -> recordAttempt(memory.id, basedOn, empty = true, reason = "empty transcription")
             CategorizationResult.Unavailable -> {
                 logCategorization("Categorizer unavailable on this build; skipped ${memory.id}.")
                 Outcome.NOT_STORED
@@ -91,17 +92,19 @@ class MemoryCategorizationRecoveryJob(
                 Outcome.MODEL_MISSING
             }
             is CategorizationResult.Failed ->
-                recordAttempt(memory.id, empty = false, reason = "categorizer failed", cause = result.cause)
+                recordAttempt(memory.id, basedOn, empty = false, reason = "categorizer failed", cause = result.cause)
         }
+    }
 
     private suspend fun recordAttempt(
         id: String,
+        basedOn: String,
         empty: Boolean,
         reason: String,
         cause: Throwable? = null,
     ): Outcome {
         logCategorization("No categories for $id ($reason); recording attempt.", cause)
-        return if (memoryService.recordCategorizationAttempt(id, empty).isRight()) {
+        return if (memoryService.recordCategorizationAttempt(id, empty, basedOn).isRight()) {
             Outcome.NOT_STORED
         } else {
             logCategorization("Could not record categorization attempt for $id.")

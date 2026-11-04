@@ -81,10 +81,11 @@ class MemoryCategorizationStatusTest {
     }
 
     @Test
-    fun clearingUserCategoriesMakesMemoryPendingAgain() {
+    fun clearingUserCategoriesKeepsThemClearedAndNotRetryable() {
         val cleared = memory(categories = listOf(1), status = CategorizationStatus.CATEGORIZED)
             .withUserCategories(emptyList())
         assertEquals(CategorizationStatus.PENDING, cleared.categorizationStatus)
-        assertTrue(cleared.isCategorizationRetryable)
+        assertTrue(cleared.categoriesEditedByUser)
+        assertFalse(cleared.isCategorizationRetryable)
     }
 }

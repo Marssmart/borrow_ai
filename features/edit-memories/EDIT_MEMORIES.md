@@ -154,7 +154,7 @@ As a user, I want to correct a memory from the screen where I read it.
 | Transcript | 1 to 50,000 characters, not blank, only when status is done or failed | New limit and rule |
 | Categories | At most 3 distinct ids (`categoryIdsViolation`, `Memory.kt`). New names 1 to 15 characters. Descriptions up to 100. | Existing limits, plus a UI duplicate check |
 
-The rules live in a new pure file, `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt` (new). It holds a `MemoryEdit` value and a `memoryEditViolation(edit)` function, which returns the first failing rule, or null.
+The rules live in a new pure file, `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt` (new). It holds a `MemoryEdit` value and a `memoryEditViolation(edit, transcriptionStatus)` function, which returns the first failing rule, or null. The transcript rules depend on the status, as §6.5 explains.
 
 ### 6.3 Service changes
 
@@ -170,6 +170,15 @@ The rules live in a new pure file, `composeApp/src/commonMain/kotlin/org/deer/bo
 ### 6.4 Why `Right` for a guarded write?
 
 Returning an error would make the job log a failure and count an attempt. Returning `Right` tells the job it is finished, and it stops. The memory is never changed, so the user's text is safe either way. A new `MemoryError` kind would be cleaner but touches every caller, so Q-4 leaves it open.
+
+### 6.5 Implementation notes (P1)
+
+- **Transcript rule by status.** The transcript rules in §6.2 apply only when the transcript is done or failed (`TranscriptionStatus.isTranscriptEditable`). While it is pending or in progress, `memoryEditViolation` skips the transcript, and `edit` refuses any change to it. This is why the validation takes the status.
+- **One write.** `edit` applies `Memory.withEdit`. A changed summary sets `summaryEditedByUser`. A blank one clears the marker and asks for a new summary instead (AC-3.3). A changed category list sets `categoriesEditedByUser`. A changed transcript keeps the summary and the categories (AC-4.5).
+- **Guards.** Every AI summary write runs through `unlessSummaryEdited`, and every category write through `unlessCategoriesEdited`. A guarded write returns the memory unchanged. `FakeMemoryService` uses the same guards, so the race tests exercise them.
+- **Stale results.** A recovery job passes the transcript it read (`basedOnTranscription`) to each result write. If the transcript changed since, the write is dropped as a guarded write: nothing is stored and no attempt is counted. This covers the case where a job is already running when the user edits the transcript.
+- **Cleared categories stay cleared.** Clearing the list sets the marker, so the categorization job does not refill it (AC-5.5). The old rule, which made a cleared memory retryable, is replaced.
+- **Tests.** `MemoryEditTest` covers the limits, the status rule, the markers, and the guards. The race tests are in `MemorySummaryRecoveryJobTest` and `MemoryCategorizationRecoveryJobTest`. The instrumented `KotbaseMemoryServiceTest` now calls `edit`. It was compiled, not run, because device runs are on hold.
 
 ---
 

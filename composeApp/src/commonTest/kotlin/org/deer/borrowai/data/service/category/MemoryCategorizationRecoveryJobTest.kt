@@ -2,8 +2,10 @@ package org.deer.borrowai.data.service.category
 
 import arrow.core.Either
 import arrow.core.left
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,6 +14,7 @@ import org.deer.borrowai.data.domain.CategorizationStatus
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_CATEGORIZATION_ATTEMPTS
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.MemoryError
@@ -70,6 +73,47 @@ class MemoryCategorizationRecoveryJobTest {
     )
 
     private suspend fun FakeMemoryService.get(id: String): Memory = findById(id).getOrNull()!!
+
+    @Test
+    fun categoriesFinishingAfterUserChoiceAreNotWritten() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val categorizer = ScriptedCategorizer {
+            release.await()
+            CategorizationResult.Categories(listOf(5))
+        }
+        val recovery = async { job(service, categorizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "hello there", listOf(1)))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals(listOf(1), stored.categories)
+        assertTrue(stored.categoriesEditedByUser)
+    }
+
+    @Test
+    fun failedAttemptFinishingAfterUserChoiceLeavesCategoriesAndAttemptsAlone() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val categorizer = ScriptedCategorizer {
+            release.await()
+            CategorizationResult.Failed(IllegalStateException("boom"))
+        }
+        val recovery = async { job(service, categorizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "hello there", listOf(1)))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals(0, stored.categorizationAttempts)
+        assertEquals(CategorizationStatus.CATEGORIZED, stored.categorizationStatus)
+        assertEquals(listOf(1), stored.categories)
+    }
 
     @Test
     fun storesCategoriesAndMarksMemoryCategorized() = runTest {
@@ -264,10 +308,16 @@ class MemoryCategorizationRecoveryJobTest {
 
     /** Delegates everything to [delegate] except the category writers, which always fail. */
     private class FailingCategoryWrites(private val delegate: FakeMemoryService) : MemoryService by delegate {
-        override suspend fun recordCategorization(id: String, categories: List<Int>): Either<MemoryError, Unit> =
-            MemoryError.Persistence(IllegalStateException("disk full")).left()
+        override suspend fun recordCategorization(
+            id: String,
+            categories: List<Int>,
+            basedOnTranscription: String?,
+        ): Either<MemoryError, Unit> = MemoryError.Persistence(IllegalStateException("disk full")).left()
 
-        override suspend fun recordCategorizationAttempt(id: String, empty: Boolean): Either<MemoryError, Unit> =
-            MemoryError.Persistence(IllegalStateException("disk full")).left()
+        override suspend fun recordCategorizationAttempt(
+            id: String,
+            empty: Boolean,
+            basedOnTranscription: String?,
+        ): Either<MemoryError, Unit> = MemoryError.Persistence(IllegalStateException("disk full")).left()
     }
 }

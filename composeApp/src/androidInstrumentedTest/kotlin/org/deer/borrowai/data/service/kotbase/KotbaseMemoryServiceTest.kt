@@ -17,6 +17,7 @@ import org.deer.borrowai.data.domain.MAX_CATEGORIZATION_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
@@ -91,26 +92,91 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
-    fun updateReplacesFieldsAndKeepsCreationTime() = runTest {
+    fun editReplacesFieldsAndKeepsCreationTime() = runTest {
         val service = openService()
         val created = service.create(MemoryDraft("Old", "Old summary", "Old text")).getOrNull()!!
 
         assertTrue(
-            service.update(created.id, MemoryDraft("New", "New summary", "New text", "recordings/b.m4a")).isRight(),
+            service.edit(created.id, MemoryEdit("New", "New summary", "New text", listOf(3))).isRight(),
         )
 
         val updated = service.findById(created.id).getOrNull()
         assertEquals("New", updated?.title)
-        assertEquals("recordings/b.m4a", updated?.recordingPath)
+        assertEquals("New summary", updated?.summary)
+        assertEquals("New text", updated?.transcription)
+        assertEquals(listOf(3), updated?.categories)
         assertEquals(created.createdAtEpochMillis, updated?.createdAtEpochMillis)
         assertEquals(listOf(updated), service.getState().value)
     }
 
     @Test
-    fun updateMissingIdReturnsLeft() = runTest {
+    fun editMarkersAndGuardedWritesHoldAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Transcript")).getOrNull()!!
+        assertTrue(first.edit(created.id, MemoryEdit("Note", "mine", "Transcript", listOf(1))).isRight())
+        val edited = first.findById(created.id).getOrNull()!!
+        assertTrue(edited.summaryEditedByUser)
+        assertTrue(edited.categoriesEditedByUser)
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        val found = reopened.findById(created.id).getOrNull()!!
+        assertTrue(found.summaryEditedByUser)
+        assertTrue(found.categoriesEditedByUser)
+
+        assertTrue(reopened.recordSummary(created.id, "ai", basedOnTranscription = "Transcript").isRight())
+        assertTrue(reopened.recordCategorization(created.id, listOf(5), basedOnTranscription = "Transcript").isRight())
+        assertTrue(reopened.recordFinishedAttempt(created.id, "boom", basedOnTranscription = "Transcript").isRight())
+        val guarded = reopened.findById(created.id).getOrNull()!!
+        assertEquals("mine", guarded.summary)
+        assertEquals(SummaryStatus.SUMMARIZED, guarded.summaryStatus)
+        assertEquals(0, guarded.summaryAttempts)
+        assertEquals(listOf(1), guarded.categories)
+        assertEquals(0, guarded.categorizationAttempts)
+    }
+
+    @Test
+    fun staleTranscriptSnapshotIsDroppedAcrossReopen() = runTest {
+        val first = openService()
+        val created = first.create(MemoryDraft("Note", "", "Old text")).getOrNull()!!
+        assertTrue(first.edit(created.id, MemoryEdit("Note", "", "New text", emptyList())).isRight())
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        assertTrue(reopened.recordSummary(created.id, "from old", basedOnTranscription = "Old text").isRight())
+
+        assertEquals("", reopened.findById(created.id).getOrNull()?.summary)
+    }
+
+    @Test
+    fun transcriptEditIsRefusedWhileBeingCreatedAcrossReopen() = runTest {
+        val first = openService()
+        val pending = first.create(
+            MemoryDraft("Pending", "", "", "recordings/p.m4a"),
+            transcriptionStatus = TranscriptionStatus.PENDING,
+        ).getOrNull()!!
+        val inProgress = first.create(
+            MemoryDraft("Working", "", "", "recordings/w.m4a"),
+            transcriptionStatus = TranscriptionStatus.IN_PROGRESS,
+        ).getOrNull()!!
+
+        assertTrue(first.edit(pending.id, MemoryEdit("Pending", "", "typed", emptyList())).isLeft())
+        assertTrue(first.edit(inProgress.id, MemoryEdit("Working", "", "typed", emptyList())).isLeft())
+
+        requireNotNull(database).close()
+        database = Database(databaseName)
+        val reopened = openService()
+        assertEquals("", reopened.findById(pending.id).getOrNull()?.transcription)
+        assertEquals("", reopened.findById(inProgress.id).getOrNull()?.transcription)
+    }
+
+    @Test
+    fun editMissingIdReturnsLeft() = runTest {
         val service = openService()
 
-        assertTrue(service.update("missing", MemoryDraft("t", "s", "x")).isLeft())
+        assertTrue(service.edit("missing", MemoryEdit("t", "s", "x", emptyList())).isLeft())
         assertTrue(service.getState().value.isEmpty())
     }
 
@@ -169,7 +235,7 @@ class KotbaseMemoryServiceTest {
         assertEquals(MemoryError.Malformed("bad-1"), service.findById("bad-1").errorOrNull())
         assertEquals(
             MemoryError.Malformed("bad-1"),
-            service.update("bad-1", MemoryDraft("t", "s", "x")).errorOrNull(),
+            service.edit("bad-1", MemoryEdit("t", "s", "x", emptyList())).errorOrNull(),
         )
         assertEquals(MemoryError.Malformed("bad-1"), service.delete("bad-1").errorOrNull())
         assertEquals(MemoryError.Malformed("bad-1"), service.findAll().errorOrNull())
@@ -227,16 +293,16 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
-    fun categoriesRoundTripAndReplaceOnUpdate() = runTest {
+    fun categoriesRoundTripAndReplaceOnEdit() = runTest {
         val service = openService()
-        val created = service.create(MemoryDraft("Tagged", "", "", categories = listOf(2, 5, 9))).getOrNull()!!
+        val created = service.create(MemoryDraft("Tagged", "", "Transcript", categories = listOf(2, 5, 9))).getOrNull()!!
 
         assertEquals(listOf(2, 5, 9), service.findById(created.id).getOrNull()?.categories)
 
-        service.update(created.id, MemoryDraft("Tagged", "", "", categories = listOf(7)))
+        service.edit(created.id, MemoryEdit("Tagged", "", "Transcript", listOf(7)))
         assertEquals(listOf(7), service.findById(created.id).getOrNull()?.categories)
 
-        service.update(created.id, MemoryDraft("Tagged", "", "", categories = emptyList()))
+        service.edit(created.id, MemoryEdit("Tagged", "", "Transcript", emptyList()))
         assertEquals(emptyList(), service.findById(created.id).getOrNull()?.categories)
     }
 
@@ -442,7 +508,7 @@ class KotbaseMemoryServiceTest {
             .getOrNull()!!
         assertEquals(Either.Right(Unit), first.recordCategorizationAttempt(created.id, empty = false))
 
-        first.update(created.id, MemoryDraft("Cleared", "", "Transcript", "recordings/c3.m4a", categories = emptyList()))
+        assertTrue(first.edit(created.id, MemoryEdit("Cleared", "", "Transcript", emptyList())).isRight())
 
         requireNotNull(database).close()
         database = Database(databaseName)

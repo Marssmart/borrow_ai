@@ -13,6 +13,7 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerLink
@@ -126,12 +127,12 @@ class DeletedMemoryPurgerTest {
     }
 
     @Test
-    fun audioOrphanedByUpdateIsRemovedBeforeReconcileCanRecreateMemory() = runTest {
+    fun audioOfEditedMemoryIsRemovedBeforeReconcileCanRecreateMemory() = runTest {
         val fs = FakeFileSystem()
         fs.addRecording("abc.m4a")
         val memories = memories()
         memories.createMemory(MemoryDraft("t", "s", "x", "recordings/abc.m4a"), id = "abc")
-        memories.update("abc", MemoryDraft("edited", "", ""))
+        memories.edit("abc", MemoryEdit("edited", "", "x", emptyList()))
         memories.delete("abc")
 
         assertEquals(1, DeletedMemoryPurger(memories, root, { false }, fs, FakeSpeakerService()).purge())

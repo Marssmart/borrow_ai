@@ -11,6 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
@@ -66,6 +67,87 @@ class MemorySummaryRecoveryJobTest {
     )
 
     private suspend fun FakeMemoryService.get(id: String): Memory = findById(id).getOrNull()!!
+
+    @Test
+    fun summaryOfReplacedTranscriptIsNotStored() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Summary("summary of old text")
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "replaced text", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals("", stored.summary)
+        assertEquals(SummaryStatus.PENDING, stored.summaryStatus)
+        assertEquals(0, stored.summaryAttempts)
+    }
+
+    @Test
+    fun failedAttemptForReplacedTranscriptDoesNotCount() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Failed(RuntimeException("boom"))
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "", "replaced text", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        assertEquals(0, service.get("a").summaryAttempts)
+    }
+
+    @Test
+    fun summaryFinishingAfterUserEditIsNotWritten() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Summary("AI summary")
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "My summary", "hello there", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals("My summary", stored.summary)
+        assertTrue(stored.summaryEditedByUser)
+        assertEquals(SummaryStatus.SUMMARIZED, stored.summaryStatus)
+    }
+
+    @Test
+    fun failedAttemptFinishingAfterUserEditLeavesSummaryAndAttemptsAlone() = runTest {
+        val service = service(memory("a"))
+        val release = CompletableDeferred<Unit>()
+        val summarizer = ScriptedSummarizer {
+            release.await()
+            SummaryResult.Failed(RuntimeException("boom"))
+        }
+        val recovery = async { job(service, summarizer).recover() }
+        runCurrent()
+
+        service.edit("a", MemoryEdit("Title a", "My summary", "hello there", emptyList()))
+        release.complete(Unit)
+        recovery.await()
+
+        val stored = service.get("a")
+        assertEquals(0, stored.summaryAttempts)
+        assertEquals(SummaryStatus.SUMMARIZED, stored.summaryStatus)
+        assertEquals("My summary", stored.summary)
+    }
 
     @Test
     fun storesSummaryAndMarksMemorySummarized() = runTest {

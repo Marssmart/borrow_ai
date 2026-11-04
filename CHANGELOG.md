@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.18.1]
+
+- Updated Android and iOS versioning to 1.18.1 (build 77).
+- Internal: a memory's summary and categories can now be marked as written by the user, and the AI summary and categorization jobs leave marked text alone. Transcript edits are validated against the transcription status. This release changes no screen.
+
 ## [1.18.0]
 
 - Each new memory stores its duration when it is saved, read from the audio file, so pauses are not counted.
