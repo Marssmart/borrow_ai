@@ -29,8 +29,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +42,7 @@ import borrowai.composeapp.generated.resources.memory_pause_recording
 import borrowai.composeapp.generated.resources.memory_play_recording
 import borrowai.composeapp.generated.resources.memory_playback_back_15
 import borrowai.composeapp.generated.resources.memory_playback_forward_15
+import borrowai.composeapp.generated.resources.memory_playback_paused_by_other_app
 import borrowai.composeapp.generated.resources.memory_playback_position_elapsed
 import borrowai.composeapp.generated.resources.memory_playback_position_of
 import org.deer.borrowai.data.service.MediaSessionState
@@ -49,17 +52,20 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Seek bar, time labels, skip buttons, and the play or pause button in the memory detail view. [playback] is this
- * memory's playback, playing or paused, or null when it is not the active playback. The seek bar and the skips need
- * an active playback, and the seek bar and the forward skip also need a known [durationMillis].
+ * Seek bar, time labels, skip buttons, the play or pause button, and the speed button in the memory detail view.
+ * [playback] is this memory's playback, playing or paused, or null when it is not the active playback. The seek bar
+ * and the skips need an active playback, and the seek bar and the forward skip also need a known [durationMillis].
+ * The paused notice shows when another app paused the playback.
  */
 @Composable
 internal fun PlaybackPanel(
     playback: MediaSessionState.Playing?,
     durationMillis: Long?,
+    speed: Float,
     onTogglePlayback: () -> Unit,
     onSeek: (Long) -> Unit,
     onSkip: (Long) -> Unit,
+    onSpeedSelected: (Float) -> Unit,
 ) {
     val knownDurationMillis = durationMillis?.takeIf { it > 0L }
     val isPlaying = playback != null && !playback.paused
@@ -111,18 +117,33 @@ internal fun PlaybackPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
         ) {
-            SkipButton(forward = false, enabled = playback != null, onClick = { onSkip(-SKIP_MILLIS) })
-            Spacer(Modifier.width(PLAYBACK_CONTROL_SPACING))
-            FilledIconButton(
-                onClick = onTogglePlayback,
-                modifier = Modifier.size(PLAY_BUTTON_SIZE).semantics { contentDescription = playLabel },
+            // The transport shares the row with the speed button, so the two never overlap on narrow screens.
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                PlayPauseGlyph(playing = isPlaying, color = LocalContentColor.current)
+                SkipButton(forward = false, enabled = playback != null, onClick = { onSkip(-SKIP_MILLIS) })
+                Spacer(Modifier.width(PLAYBACK_CONTROL_SPACING))
+                FilledIconButton(
+                    onClick = onTogglePlayback,
+                    modifier = Modifier.size(PLAY_BUTTON_SIZE).semantics { contentDescription = playLabel },
+                ) {
+                    PlayPauseGlyph(playing = isPlaying, color = LocalContentColor.current)
+                }
+                Spacer(Modifier.width(PLAYBACK_CONTROL_SPACING))
+                SkipButton(forward = true, enabled = canSeek, onClick = { onSkip(SKIP_MILLIS) })
             }
-            Spacer(Modifier.width(PLAYBACK_CONTROL_SPACING))
-            SkipButton(forward = true, enabled = canSeek, onClick = { onSkip(SKIP_MILLIS) })
+            PlaybackSpeedButton(speed = speed, onSpeedSelected = onSpeedSelected)
+        }
+        if (playback?.pausedByOtherApp == true) {
+            Text(
+                stringResource(Res.string.memory_playback_paused_by_other_app),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
     }
 }

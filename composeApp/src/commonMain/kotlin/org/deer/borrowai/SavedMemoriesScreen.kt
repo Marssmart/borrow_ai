@@ -137,6 +137,7 @@ internal fun SavedMemoriesScreen(
         )
     }
     val uiState by stateHolder.uiState.collectAsState()
+    val playbackSpeed by stateHolder.playbackSpeed.collectAsState()
     val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
     val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
 
@@ -224,6 +225,8 @@ internal fun SavedMemoriesScreen(
                         },
                         onSeekPlayback = stateHolder::seekPlayback,
                         onSkipPlayback = stateHolder::skipPlayback,
+                        playbackSpeed = playbackSpeed,
+                        onSetPlaybackSpeed = stateHolder::setPlaybackSpeed,
                         services = services,
                         playingSample = (uiState.mediaSessionState as? MediaSessionState.Playing)
                             ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
@@ -285,7 +288,7 @@ internal fun SavedMemoriesScreen(
                             PlaybackError.RecordingUnavailable ->
                                 Res.string.memory_playback_recording_unavailable_message
 
-                            PlaybackError.ResumeFailed ->
+                            PlaybackError.ResumeFailed, PlaybackError.AudioFocusHeld ->
                                 Res.string.memory_playback_resume_failed_message
                         },
                     ),
@@ -547,6 +550,8 @@ private fun MemoryDetailScreen(
     onPlayRecording: () -> Unit,
     onSeekPlayback: (Long) -> Unit,
     onSkipPlayback: (Long) -> Unit,
+    playbackSpeed: Float,
+    onSetPlaybackSpeed: (Float) -> Unit,
     playingSample: PlaybackTarget?,
     onPlaySample: (PlaybackTarget) -> Unit,
     focusedSpeakerOrdinal: Int?,
@@ -604,6 +609,8 @@ private fun MemoryDetailScreen(
                         onTogglePlayback = onPlayRecording,
                         onSeek = onSeekPlayback,
                         onSkip = onSkipPlayback,
+                        speed = playbackSpeed,
+                        onSpeedSelected = onSetPlaybackSpeed,
                     )
                 } else {
                     AudioPlaybackButtons(

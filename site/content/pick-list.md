@@ -2,11 +2,11 @@
 
 **Scope: Android only.** Removed as iOS-only: G1, G2, G3, G10. Removed as non-Android surfaces: P14, P16. Narrowed to Android: G15, G20, G24, P4, U7. Use the IDs to pick work, for example "G4, G7, U2". The evidence for each G and U item is in the [gap analysis](gap-analysis.html). Peer features come from the competitor research in the gap analysis (Appendix A), unless marked "market", which means general market knowledge that was not checked in the research.
 
-**Status at 1.14.0:** G4 phases 1 and 2 are merged (#75 and 1.14.0), and the accessibility phase is open. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77). G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.
+**Status at 1.16.0:** G4 phases 1 and 2 are merged (#75 and 1.14.0), and the accessibility phase is open. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77), and speed is in playback phase 2. G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.
 
 Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks. Items marked "verify on device" are inferred from code paths.
 
-**Recommended first picks:** G7, G14, G16, G17 (quick wins), then G4 (accessibility), G11 (speed and durations), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.
+**Recommended first picks:** G7, G14, G16, G17 (quick wins), then G4 (accessibility), G11 (durations and recording pause), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.
 
 ## A. Missing core features (G)
 
@@ -15,7 +15,7 @@ Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more th
 - [ ] **G7** Automatic titles (blank today). · S
 - [ ] **G8** Export and share: audio (m4a), transcript (txt, md, and srt once timestamps exist), summary. · M
 - [ ] **G9** Backup and restore that the user controls. · M
-- [ ] **G11** Seek bar, skip ±15 s, playback speed, pause and resume recording, and a duration on each memory. Partly done: pause, seek, and skip are merged (#77). Still open: speed, stored durations, and recording pause. · M
+- [ ] **G11** Seek bar, skip ±15 s, playback speed, pause and resume recording, and a duration on each memory. Partly done: pause, seek, skip (#77), and speed (playback phase 2). Still open: stored durations and recording pause. · M
 - [ ] **G12** Transcription language setting (forced to English today). · S
 - [ ] **G13** Real Settings screen: model sizes and removal, storage used, LLM choice, data controls. · M
 - [ ] **G14** Dark theme (light-only today). · S

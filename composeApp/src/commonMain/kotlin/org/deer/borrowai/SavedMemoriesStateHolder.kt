@@ -138,6 +138,9 @@ internal class SavedMemoriesStateHolder(
     /** When false, playback has no pause, seek, or skip, so the detail view shows only play and stop. */
     val playbackControlsAvailable: Boolean get() = mediaSessionService.playbackControlsAvailable
 
+    /** The playback speed for this app session. The speed menu shows it, also while nothing plays. */
+    val playbackSpeed: StateFlow<Float> get() = mediaSessionService.playbackSpeed
+
     init {
         scope.launch {
             memoryService.getState().collect { memories ->
@@ -293,6 +296,10 @@ internal class SavedMemoriesStateHolder(
 
     fun skipPlayback(deltaMillis: Long) {
         mediaSessionService.skipPlayback(deltaMillis)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        mediaSessionService.setPlaybackSpeed(speed)
     }
 
     fun confirmPendingPlayback() {
@@ -467,6 +474,8 @@ internal class SavedMemoriesStateHolder(
     }
 
     private fun setPlaybackError(error: PlaybackError) {
+        // The paused notice explains a resume that another app's audio focus refused, so no dialog opens for it.
+        if (error == PlaybackError.AudioFocusHeld) return
         mutableUiState.update { it.copy(playbackError = error) }
     }
 

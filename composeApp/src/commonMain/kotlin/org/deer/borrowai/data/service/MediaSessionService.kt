@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.deer.borrowai.data.domain.Memory
@@ -76,6 +77,10 @@ sealed interface MediaSessionState {
         val elapsedMillis: Long,
         val durationMillis: Long,
         val paused: Boolean = false,
+        /** True when another app took the audio focus and paused playback. The paused notice shows it. */
+        val pausedByOtherApp: Boolean = false,
+        /** The playback speed of this memory, which is the session speed. */
+        val speed: Float = 1f,
     ) : MediaSessionState
 
     /** A recording could not start or be saved. The UI shows it until [MediaSessionService.dismissRecordingError]. */
@@ -101,8 +106,13 @@ sealed interface PlaybackError {
 
     data object NoPendingConfirmation : PlaybackError
 
-    /** Paused playback could not resume, for example because another app holds the audio focus. It stays paused. */
+    /** Paused playback could not resume for a reason other than the audio focus. It stays paused. */
     data object ResumeFailed : PlaybackError
+
+    /**
+     * Paused playback could not resume because another app holds the audio focus. It stays paused, with the notice.
+     */
+    data object AudioFocusHeld : PlaybackError
 }
 
 interface MediaSessionService {
@@ -161,6 +171,16 @@ interface MediaSessionService {
     /** Moves the playback position by [deltaMillis], clamped to the start and the end of the recording. */
     fun skipPlayback(deltaMillis: Long) {}
 
+    /**
+     * The playback speed for every memory in this app session. It starts at 1x. Platforms without speed control
+     * keep it at 1x.
+     */
+    val playbackSpeed: StateFlow<Float>
+        get() = DefaultPlaybackSpeed
+
+    /** Sets the playback speed. It applies at once to the playing memory and to every memory played after it. */
+    fun setPlaybackSpeed(speed: Float) {}
+
     /** Clears a [MediaSessionState.Failed] state back to Idle after the user has seen it. */
     fun dismissRecordingError()
 
@@ -169,3 +189,5 @@ interface MediaSessionService {
 
     fun close()
 }
+
+internal val DefaultPlaybackSpeed: StateFlow<Float> = MutableStateFlow(1f)

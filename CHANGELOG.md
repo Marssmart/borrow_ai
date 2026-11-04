@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.16.0]
+
+- Added a playback speed menu (0.75x, 1x, 1.25x, 1.5x, and 2x) to the memory detail view. The speed applies at once, keeps the position and the playing or paused state, and resets to 1x when the app starts.
+- Playback now pauses instead of stopping when another app starts audio or a headset is unplugged. A notice explains a pause caused by another app, and a transient interruption resumes only if playback was running.
+- Speaker samples play at the chosen speed and stop when another app starts audio.
+- Updated Android and iOS versioning to 1.16.0 (build 74).
+
 ## [1.15.0]
 
 - Added a no-results message on Android when a search or category filter matches no memories. It names the search, says what is searched, and offers Clear search and Clear filters where they apply.
