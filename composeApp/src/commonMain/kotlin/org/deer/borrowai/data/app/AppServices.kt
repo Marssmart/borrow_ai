@@ -28,8 +28,13 @@ import org.deer.borrowai.data.service.category.DefaultMemoryCategorizer
 import org.deer.borrowai.data.service.category.MemoryCategorizationRecoveryJob
 import org.deer.borrowai.data.service.category.MemoryCategorizer
 import org.deer.borrowai.data.service.category.UnavailableMemoryCategorizer
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
+import org.deer.borrowai.data.service.background.activeBackgroundActivities
+import org.deer.borrowai.data.service.kotbase.KotbaseAppSettingsService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseSpeakerService
+import org.deer.borrowai.data.service.settings.AppSettingsService
 import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
 import org.deer.borrowai.data.service.model.ModelDevice
@@ -81,6 +86,10 @@ class AppServices internal constructor(
     private val shutdownSpeakerAnalysis: suspend () -> Unit = {},
     /** True while the summary model file is missing, so recovery cannot summarize anything. */
     val summaryModelMissing: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow(),
+    /** User preferences, such as whether the background activity indicator is shown. */
+    val appSettings: AppSettingsService,
+    /** The background work running now, including model downloads. Empty when the app is idle. */
+    val backgroundActivities: StateFlow<Set<BackgroundActivity>> = MutableStateFlow(emptySet<BackgroundActivity>()).asStateFlow(),
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -208,6 +217,11 @@ class AppServices internal constructor(
                     ifLeft = { error -> throw IllegalStateException("Speaker store failed to open: $error") },
                     ifRight = { it },
                 )
+                val appSettings = KotbaseAppSettingsService.open(database).fold(
+                    ifLeft = { error -> throw IllegalStateException("Settings store failed to open: $error") },
+                    ifRight = { it },
+                )
+                val activityTracker = BackgroundActivityTracker()
                 val httpClient = createPlatformModelHttpClient()
                 // Closed when the graph completes, including the failure path where cancel() runs below.
                 graphJob.invokeOnCompletion { httpClient.close() }
@@ -234,6 +248,7 @@ class AppServices internal constructor(
                         runCategorizationRecovery()
                     },
                     onTranscriptionSucceeded = { memoryId -> onSpeakerTranscriptionSucceeded(memoryId) },
+                    activityTracker = activityTracker,
                 )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
@@ -253,6 +268,7 @@ class AppServices internal constructor(
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     scope = graphScope,
+                    activityTracker = activityTracker,
                 )
                 onSpeakerTranscriptionSucceeded = speakerRunner::onTranscriptionSucceeded
                 val reconcilerJob = RecordingReconciler(
@@ -261,12 +277,14 @@ class AppServices internal constructor(
                     isRecording = { mediaSession.isBusy },
                     epochClock = epochClock,
                     transcriptionScheduler = transcriptionScheduler,
+                    activityTracker = activityTracker,
                 ).start(scope = graphScope)
                 val purgerJob = DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     speakerService = speakers,
+                    activityTracker = activityTracker,
                 ).start(scope = graphScope)
                 // Recovers transcriptions left unfinished by an earlier run, such as a crash or a failed attempt.
                 transcriptionScheduler.enqueueSweep()
@@ -274,6 +292,7 @@ class AppServices internal constructor(
                     memoryService = memories,
                     summarizer = summarizer,
                     isRecording = { mediaSession.isBusy },
+                    activityTracker = activityTracker,
                 )
                 val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
                 runSummaryRecovery = { graphScope.launch(callbackGroup) { summaryRecovery.recover() } }
@@ -284,6 +303,7 @@ class AppServices internal constructor(
                     memoryService = memories,
                     categorizer = categorizer,
                     isRecording = { mediaSession.isBusy },
+                    activityTracker = activityTracker,
                 )
                 val categorizationRecoveryJob = categorizationRecovery.start(scope = graphScope)
                 runCategorizationRecovery = {
@@ -314,6 +334,10 @@ class AppServices internal constructor(
                     shutdownSpeakerAnalysis = speakerRunner::shutdown,
                     summaryModelMissing = summaryModelMissingNotice(summaryRecovery.summaryModelMissing, modelSetup.state)
                         .stateIn(graphScope, SharingStarted.Eagerly, false),
+                    appSettings = appSettings,
+                    backgroundActivities = combine(activityTracker.activities, modelSetup.state) { tracked, model ->
+                        activeBackgroundActivities(tracked, model)
+                    }.stateIn(graphScope, SharingStarted.Eagerly, emptySet()),
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

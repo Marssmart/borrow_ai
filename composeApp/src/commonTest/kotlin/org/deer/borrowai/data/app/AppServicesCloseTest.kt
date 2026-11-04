@@ -21,6 +21,7 @@ import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
 import org.deer.borrowai.data.service.PlaybackError
+import org.deer.borrowai.data.service.settings.FakeAppSettingsService
 import org.deer.borrowai.data.service.PlaybackRequest
 import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.RecordingResult
@@ -121,6 +122,7 @@ class AppServicesCloseTest {
             modelSetup = UnusedModelSetup,
             memories = FakeMemoryService(epochClock = clock),
             speakers = FakeSpeakerService(),
+            appSettings = FakeAppSettingsService(),
             mediaSession = media,
             transcriptionRunner = TranscriptionWorkRunner(
                 memoryService = FakeMemoryService(epochClock = clock),

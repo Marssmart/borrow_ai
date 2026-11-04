@@ -13,6 +13,8 @@ import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
  * Pairs raw recordings with memories. A recording file is named `<id>.m4a`, and its memory is saved with
@@ -26,6 +28,7 @@ class RecordingReconciler(
     private val epochClock: EpochClock,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val transcriptionScheduler: TranscriptionScheduler = TranscriptionScheduler.None,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     /** Creates memories for orphaned recordings. Returns how many were created. */
     suspend fun reconcile(): Int {
@@ -75,16 +78,18 @@ class RecordingReconciler(
                     ifRight = { false },
                 )
                 if (!isMissing) continue
-                val result = memoryService.create(
-                    draft = MemoryDraft(
-                        title = "",
-                        summary = "",
-                        transcription = "",
-                        recordingPath = relativePath,
-                    ),
-                    id = id,
-                    transcriptionStatus = TranscriptionStatus.PENDING,
-                )
+                val result = activityTracker.track(BackgroundActivity.CLEANUP) {
+                    memoryService.create(
+                        draft = MemoryDraft(
+                            title = "",
+                            summary = "",
+                            transcription = "",
+                            recordingPath = relativePath,
+                        ),
+                        id = id,
+                        transcriptionStatus = TranscriptionStatus.PENDING,
+                    )
+                }
                 if (result.isRight()) created++
             } catch (exception: CancellationException) {
                 throw exception

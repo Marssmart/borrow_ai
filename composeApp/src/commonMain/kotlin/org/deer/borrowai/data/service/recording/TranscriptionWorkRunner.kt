@@ -5,6 +5,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.Path
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /** Dispatches the background transcription jobs. Platforms provide the implementation (WorkManager on Android). */
 interface TranscriptionScheduler {
@@ -34,6 +36,7 @@ class TranscriptionWorkRunner(
     private val onTranscriptionFinished: () -> Unit = {},
     /** Called with the memory id after its transcript is saved. A failure there never fails the transcription. */
     private val onTranscriptionSucceeded: suspend (memoryId: String) -> Unit = {},
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     /** Held for the whole of a drain. The sweep takes it too, so it never requeues rows a live drain is working on. */
     private val drainLock = Mutex()
@@ -91,7 +94,9 @@ class TranscriptionWorkRunner(
                     null
                 } else {
                     try {
-                        transcriber.transcribe(recordingsRoot / relativePath)
+                        activityTracker.track(BackgroundActivity.TRANSCRIPTION) {
+                            transcriber.transcribe(recordingsRoot / relativePath)
+                        }
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {

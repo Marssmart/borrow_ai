@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
  * Summarizes memories that were saved without a summary. Each memory is tried at most
@@ -25,6 +27,7 @@ class MemorySummaryRecoveryJob(
     private val summarizer: MemorySummarizer,
     private val isRecording: () -> Boolean,
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     private val modelMissing = MutableStateFlow(false)
 
@@ -48,7 +51,7 @@ class MemorySummaryRecoveryJob(
                 break
             }
             val outcome = try {
-                process(memory)
+                activityTracker.track(BackgroundActivity.SUMMARY) { process(memory) }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
