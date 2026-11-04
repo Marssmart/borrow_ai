@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pick list — BorrowAI docs</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html">BorrowAI</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="models-and-privacy.html">Models and privacy</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="features/index.html">Features</a>
+      <a href="design/index.html">Design guides</a>
+      <a href="gap-analysis.html">Gap analysis</a>
+      <a href="developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="pick-list">Pick list</h1>
+<p><strong>Scope: Android only.</strong> Removed as iOS-only: G1, G2, G3, G10. Removed as non-Android surfaces: P14, P16. Narrowed to Android: G15, G20, G24, P4, U7. Use the IDs to pick work, for example "G4, G7, U2". The evidence for each G and U item is in the <a href="gap-analysis.html">gap analysis</a>. Peer features come from the competitor research in the gap analysis (Appendix A), unless marked "market", which means general market knowledge that was not checked in the research.</p>
+<p><strong>Status at 1.9.10:</strong> G4 phase 1 is merged (#75). G6 (#76) and G11 (#77) are in review. G5 has a merged design (#74). Items are checked off when their work is merged.</p>
+<p>Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks. Items marked "verify on device" are inferred from code paths.</p>
+<p><strong>Recommended first picks:</strong> G4, G7, G14, G16, G17 (quick wins), then G6, G5, G11, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.</p>
+<h2 id="a-missing-core-features-g">A. Missing core features (G)</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" /><strong>G4</strong> Delete memories. The service exists, the UI does not. · S</label></li>
+<li><label><input type="checkbox" /><strong>G5</strong> Edit title, summary, transcript, and categories. The service exists, the UI does not. · M</label></li>
+<li><label><input type="checkbox" /><strong>G6</strong> Search titles, summaries, and transcripts, plus a category filter. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G7</strong> Automatic titles (blank today). · S</label></li>
+<li><label><input type="checkbox" /><strong>G8</strong> Export and share: audio (m4a), transcript (txt, md, and srt once timestamps exist), summary. · M</label></li>
+<li><label><input type="checkbox" /><strong>G9</strong> Backup and restore that the user controls. · M</label></li>
+<li><label><input type="checkbox" /><strong>G11</strong> Seek bar, skip ±15 s, playback speed, pause and resume recording, and a duration on each memory. · M</label></li>
+<li><label><input type="checkbox" /><strong>G12</strong> Transcription language setting (forced to English today). · S</label></li>
+<li><label><input type="checkbox" /><strong>G13</strong> Real Settings screen: model sizes and removal, storage used, LLM choice, data controls. · M</label></li>
+<li><label><input type="checkbox" /><strong>G14</strong> Dark theme (light-only today). · S</label></li>
+<li><label><input type="checkbox" /><strong>G15</strong> Decide and document Android backup behaviour. Auto Backup and device transfer include memories today, which conflicts with "never leaves the phone". · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G16</strong> Request notification permission on Android 13+ so the recording notification shows (verify on device). · S</label></li>
+<li><label><input type="checkbox" /><strong>G17</strong> Licenses and attribution screen (Gemma, Whisper, sherpa-onnx, LiteRT-LM). · S</label></li>
+<li><label><input type="checkbox" /><strong>G18</strong> Onboarding: privacy model, storage needed, Wi-Fi and download choices. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G19</strong> Manual retry for failed transcription, summary, and categories. · S</label></li>
+<li><label><input type="checkbox" /><strong>G20</strong> Import audio files and share-in from other apps (Android intents and document picker). · M</label></li>
+<li><label><input type="checkbox" /><strong>G21</strong> Transcript timestamps and speaker labels. The speaker UI is planned but not built. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>G22</strong> Summary formats: meeting notes, to-dos, journal entry. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G23</strong> User-managed categories: create, rename, pin, filter. · M</label></li>
+<li><label><input type="checkbox" /><strong>G24</strong> Android home-screen widget, Quick Settings tile, and app shortcuts for one-tap capture. · M</label></li>
+<li><label><input type="checkbox" /><strong>G25</strong> App lock with biometrics or passcode. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G26</strong> Large-library performance. All memories sit in one in-memory list (<code>MemoryService.getState</code>). Test with 1,000+ memories and paginate if needed. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G27</strong> Recently deleted (30-day trash with restore), built on the existing soft delete. · S (after G4)</label></li>
+<li><label><input type="checkbox" /><strong>G28</strong> Multi-select with bulk delete, export, and categorize. · M</label></li>
+<li><label><input type="checkbox" /><strong>G29</strong> Sort options and date groups (Today, This week). The list is newest-first only. · S</label></li>
+<li><label><input type="checkbox" /><strong>G30</strong> Recording quality and format settings. <code>AudioRecorder</code> takes only a file path. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G31</strong> Storage management: size per memory, total use, auto-delete audio after N days while keeping the transcript. · M</label></li>
+<li><label><input type="checkbox" /><strong>G32</strong> Battery-, thermal-, and charge-aware processing: run transcription and LLM work while charging or idle, and pause when the device overheats. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G33</strong> Screen privacy: block screenshots and app-switcher previews on memory screens (no <code>FLAG_SECURE</code> today). · S</label></li>
+<li><label><input type="checkbox" /><strong>G34</strong> Local diagnostics bundle for bug reports. Nothing leaves the phone until the user shares it. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>G35</strong> Accessibility pass beyond the capture button: list, detail, settings, large text, reading order. · S–M</label></li>
+</ul>
+<h2 id="b-peer-features-we-lack-p">B. Peer features we lack (P)</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" /><strong>P1</strong> Cross-device sync. Peers: Apple Voice Memos and Just Press Record (iCloud), Google Recorder (opt-in), Otter, Plaud, Bee, Voicenotes, Day One. · L</label></li>
+<li><label><input type="checkbox" /><strong>P2</strong> Trim and skip silence. Peers: Apple Voice Memos, Just Press Record, Easy Voice Recorder. · M</label></li>
+<li><label><input type="checkbox" /><strong>P3</strong> Bookmarks while recording. Peers: Plaud, Bee. Needs G21 for seeking. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>P4</strong> Wear OS app for capture and playback. Apple Watch peers are out of scope. · L</label></li>
+<li><label><input type="checkbox" /><strong>P5</strong> Integrations and API (Notion, Slack, Zapier, CRM). Peers: Otter, Plaud, Bee, Voicenotes, Day One. · M per integration</label></li>
+<li><label><input type="checkbox" /><strong>P6</strong> AI chat over recordings, cloud version (offline version is U1). Peers: Otter, Plaud, Bee, Voicenotes, Day One. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>P7</strong> Action items and reminders, cloud version (offline version is U4). Peers: Otter, Plaud, Bee, Voicenotes. · M</label></li>
+<li><label><input type="checkbox" /><strong>P8</strong> Speaker labels (same as G21). Peers: Google Recorder, Otter. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>P9</strong> Calendar integration: auto-name by meeting, attach memories to events. Market. · M</label></li>
+<li><label><input type="checkbox" /><strong>P10</strong> Enhance recording with noise reduction. Market. · M</label></li>
+<li><label><input type="checkbox" /><strong>P11</strong> Daily prompts and streaks for voice journaling. Peers: Day One, Rosebud. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>P12</strong> Mood and pattern insights, opt-in and on-device only (sensitive data). Peer: Rosebud. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>P13</strong> Draft documents or emails from past memories. Peer: Plaud. Needs U1. · L</label></li>
+<li><label><input type="checkbox" /><strong>P15</strong> Team sharing and comments. Market. Conflicts with local-first, so decide first. · L</label></li>
+</ul>
+<h2 id="c-unique-differentiators-u">C. Unique differentiators (U)</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" /><strong>U1</strong> Offline "Ask your memories" with the on-device Gemma model. No AI-chat peer is confirmed on-device. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>U2</strong> Verifiable privacy ledger: log every outbound request, show "0 bytes of memories uploaded", and offer an airplane-mode self-test. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>U3</strong> Offline speaker memory: who said what, with voiceprints kept on the phone. Already planned. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>U4</strong> Commitment tracker: detect promises and to-dos, then offer local reminders. · M</label></li>
+<li><label><input type="checkbox" /><strong>U5</strong> Memory echoes: resurface related memories (same category, same person, a year ago) through local notifications. · S–M</label></li>
+<li><label><input type="checkbox" /><strong>U6</strong> Encrypted vault: app lock plus encryption at rest. Check Couchbase Lite edition for encryption. · M</label></li>
+<li><label><input type="checkbox" /><strong>U7</strong> Lend a memory: end-to-end encrypted device-to-device share (QR or Nearby Share). · L</label></li>
+<li><label><input type="checkbox" /><strong>U8</strong> Smart chapters for long recordings, with jump links. · M–L</label></li>
+<li><label><input type="checkbox" /><strong>U9</strong> Bring your own on-device model, checksum-verified. · M</label></li>
+<li><label><input type="checkbox" /><strong>U10</strong> Meeting mode: calendar-aware naming, attendees from speaker chips, one action list per meeting. · M</label></li>
+<li><label><input type="checkbox" /><strong>U11</strong> "Bookmark that" spoken during recording, detected in the live transcript. · M</label></li>
+<li><label><input type="checkbox" /><strong>U12</strong> Voice-first accessibility mode: eyes-free capture and spoken status. · M</label></li>
+<li><label><input type="checkbox" /><strong>U13</strong> Memory graph: people, places, and topics linked across memories, all on-device. · L</label></li>
+<li><label><input type="checkbox" /><strong>U14</strong> Local-first multi-device sync with end-to-end encryption, as the privacy-preserving alternative to P1. · L</label></li>
+</ul>
+<h2 id="in-flight-not-gaps">In flight (not gaps)</h2>
+<ul>
+<li>Speaker recognition: data layer shipped in 1.8.0. The UI is in progress, and the speech model is still planned (<code>features/speaker-recognition/SPEAKER_RECOGNITION.md</code>).</li>
+<li>GPU acceleration for the Android LLM: shipped in 1.9.7 (<code>features/gpu-support/GPU_SUPPORT.md</code>).</li>
+<li>Background activity indicator: shipped in 1.9.1.</li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

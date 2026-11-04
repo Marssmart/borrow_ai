@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gap analysis — BorrowAI docs</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html">BorrowAI</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="models-and-privacy.html">Models and privacy</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="features/index.html">Features</a>
+      <a href="design/index.html">Design guides</a>
+      <a href="gap-analysis.html" aria-current="page">Gap analysis</a>
+      <a href="developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="gap-analysis">Gap analysis</h1>
+<p>Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, <code>site/content/*</code>, <code>features/*</code>, and <code>CHANGELOG.md</code>. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.</p>
+<p><strong>Status at 1.9.10:</strong> G4 phase 1 is merged (#75). G6 search (#76) and G11 playback (#77) are in review. G5 has a merged design (#74) and no implementation yet. The speaker recognition UI is in progress. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
+<p>Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.</p>
+<h2 id="1-what-exists-today">1. What exists today</h2>
+<ul>
+<li><strong>Android:</strong> recording in a foreground service, live transcript (Whisper tiny, English), batch transcript (Whisper base or large-v3 by RAM tier), one-paragraph summary and AI categories (Gemma 4 E2B/E4B or Qwen3 0.6B through LiteRT-LM, optional GPU), saved list, memory detail with "Play recording", background activity pill, and a Settings screen.</li>
+<li><strong>iOS:</strong> recording, playback, saved list, microphone permission. Nothing else is wired (<code>site/content/platforms.md</code>).</li>
+<li><strong>Data:</strong> Couchbase Lite, local only. Soft delete and purge exist in the service layer. A speaker data layer exists with no UI.</li>
+<li><strong>Settings:</strong> two switches (<code>AppSettingsService.kt:7-12</code>, <code>SettingsScreen.kt</code>).</li>
+</ul>
+<h2 id="2-missing-features">2. Missing features</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Gap</th>
+<th>Evidence</th>
+<th>Why it matters</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G4</td>
+<td><strong>No way to delete a memory.</strong> Soft delete and purge exist, but no UI calls <code>MemoryService.delete</code>.</td>
+<td><code>MemoryService.kt:41</code>; <code>KotbaseMemoryService.kt:158</code>; no UI caller</td>
+<td>Users cannot remove a recording or transcript, which matters for privacy.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G5</td>
+<td><strong>No edit.</strong> Title, summary, transcript, and categories cannot be changed in the UI. The service supports it through <code>update</code>, <code>updateCategories</code>, and <code>withEditedSummary</code>.</td>
+<td><code>MemoryService.kt</code>; <code>Memory.kt</code> (<code>withEditedSummary</code>, <code>withUserCategories</code>); no UI caller</td>
+<td>Wrong AI output is permanent.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G6</td>
+<td><strong>No search, no filter.</strong> Nothing searches titles, summaries, or transcripts. Categories cannot be used to filter.</td>
+<td>No match for "search" in <code>commonMain</code> or the list state holder</td>
+<td>Recall is the core job of a memory app.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>G7</td>
+<td><strong>Titles are never generated.</strong> <code>title</code> is saved as <code>""</code>, and the summary prompt asks for no title. The list renders an empty title line.</td>
+<td><code>RecordingMediaSessionService.kt:320</code>; <code>RecordingReconciler.kt:84</code>; <code>SavedMemoriesScreen.kt:324</code>, <code>:416</code></td>
+<td>Every card looks unfinished.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G8</td>
+<td><strong>No export or share.</strong> No share sheet, file export, or transcript or audio export.</td>
+<td>No match for <code>ACTION_SEND</code>, <code>UIActivityViewController</code>, or share in <code>composeApp</code> or <code>iosApp</code></td>
+<td>Users cannot get their data out, which fails the "your data is yours" promise.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G9</td>
+<td><strong>No backup or restore by the app.</strong> Only OS backups, and they include memories (see G15).</td>
+<td><code>backup_rules.xml</code>; <code>data_extraction_rules.xml</code></td>
+<td>No controlled way to move to a new phone.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G11</td>
+<td><strong>Thin playback and capture controls.</strong> No seek bar, skip, speed, pause and resume, bookmarks, input level, or max length. Durations are not stored.</td>
+<td><code>AudioPlayer.kt</code> (<code>play</code>, <code>stop</code>, interruption only); <code>AudioRecorder.kt</code> (<code>start</code>, <code>stop</code>); <code>Memory.kt</code> has no duration</td>
+<td>Basic expectations of a recorder.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G12</td>
+<td><strong>English only.</strong> Transcription is forced to English (<code>TRANSCRIPTION_LANGUAGE = "en"</code>) even though the models are multilingual. The UI has only <code>values/</code>, with no other locales.</td>
+<td><code>WhisperModelConfigFactory.kt:6</code>, used by <code>AndroidLiveTranscriber.kt:332</code> and <code>AndroidBatchTranscriber.kt:202</code>; <code>composeResources/values/</code> only</td>
+<td>Non-English speech is transcribed badly or wrongly. A language picker is cheap.</td>
+<td>S (setting) / M (UI strings)</td>
+</tr>
+<tr>
+<td>G13</td>
+<td><strong>Settings is thin.</strong> No theme, language, model management (see sizes, delete, re-download), storage use, LLM choice, data controls, privacy page, or about screen.</td>
+<td><code>SettingsScreen.kt</code>; <code>AppSettings</code></td>
+<td>Users cannot manage what the app stores or downloads.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G14</td>
+<td><strong>Light theme only.</strong> One <code>lightColorScheme</code>, no dark mode.</td>
+<td><code>App.kt:34</code>, <code>App.kt:82</code></td>
+<td>Common expectation; cheap to add.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G15</td>
+<td><strong>Privacy claim vs OS backups.</strong> The docs say audio and transcripts "do not leave the phone". Android auto-backup and device transfer include the database and recordings (only <code>models/</code> is excluded).</td>
+<td><code>index.md:3</code>; <code>AndroidManifest.xml:11-12</code>; <code>data_extraction_rules.xml:4-9</code>; <code>backup_rules.xml:4</code></td>
+<td>Either the claim is wrong or backup is an unexplained leak. Decide, document, and offer an opt-out or encryption.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>G16</td>
+<td><strong>Recording notification may be hidden on Android 13+.</strong> <code>POST_NOTIFICATIONS</code> is not requested, and targetSdk is 36.</td>
+<td><code>AndroidManifest.xml:3-7</code>; <code>build.gradle.kts:107</code>; <code>MicrophoneForegroundService.kt:38</code></td>
+<td>The "recording now" signal may not appear, which is a privacy and trust issue.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G17</td>
+<td><strong>No licenses or attribution screen.</strong> The app ships Gemma, Whisper, sherpa-onnx, and LiteRT-LM. Check each license's notice obligations (Gemma has its own terms).</td>
+<td>No match for licen, attribution, or open source</td>
+<td>Compliance risk.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G18</td>
+<td><strong>No onboarding.</strong> First launch starts multi-GB downloads with no explanation of the privacy model, storage needed, or the Wi-Fi choice.</td>
+<td>No match for onboard or welcome</td>
+<td>First-run drop-off and surprise.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>G19</td>
+<td><strong>No manual retry.</strong> Failed transcription, summary, or categorization retries only automatically (limits: transcription 5, summary 10, categories 3).</td>
+<td><code>Memory.kt</code> limits; no retry in UI</td>
+<td>Users cannot recover a bad memory themselves.</td>
+<td>S</td>
+</tr>
+<tr>
+<td>G20</td>
+<td><strong>No import or share-in.</strong> Audio from other apps (for example WhatsApp voice notes) cannot be brought in.</td>
+<td>No document picker or <code>ACTION_SEND</code> intent filter</td>
+<td>A large, easy intake source is closed.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G21</td>
+<td><strong>Transcripts have no timestamps or speakers.</strong> <code>transcription</code> is one string. Speaker recognition is planned, but has no UI.</td>
+<td><code>Memory.kt</code> (<code>transcription: String</code>); <code>SPEAKER_RECOGNITION.md:3</code> ("Planning")</td>
+<td>Blocks tap-to-seek, chapters, and "who said what".</td>
+<td>M-L</td>
+</tr>
+<tr>
+<td>G22</td>
+<td><strong>One summary format.</strong> The prompt asks for one short summary. No meeting notes, action items, or journal templates.</td>
+<td><code>SummaryPrompt.kt</code> (no title or format instructions); changelog 1.3.0</td>
+<td>Less useful for the most common note types.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>G23</td>
+<td><strong>Categories are AI-only.</strong> They cannot be renamed, created, or pinned by the user. At most three per memory.</td>
+<td>Changelog 1.5.0 and 1.6.0; <code>MemoryService.createCategory</code> has only the categorizer as caller</td>
+<td>Users cannot shape their own structure.</td>
+<td>M (with G5)</td>
+</tr>
+<tr>
+<td>G24</td>
+<td><strong>No widgets or app shortcuts.</strong> No home-screen widget, Quick Settings tile, or app shortcut for one-tap capture.</td>
+<td>Grep for widget, Glance, shortcut, and QuickSettings: no matches</td>
+<td>One-tap capture is the main reason people use this kind of app.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>G25</td>
+<td><strong>No app lock.</strong> No biometric or passcode lock for a database of private audio.</td>
+<td>Grep for biometric, FaceID, and LocalAuthentication: no matches</td>
+<td>Expected for sensitive audio.</td>
+<td>S-M</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-peer-features-we-lack">3. Peer features we lack</h2>
+<p>Source: web research as of Nov 2026 (matrix in appendix A). "Unknown" in the matrix means unconfirmed, not absent.</p>
+<p>Covered by gaps above, so not repeated: search (G6), export (G8), speed and pause (G11), quick capture and widgets (G24), multi-language (G12), user-managed folders (G23), AI summary (we have it on Android).</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+<th>Peers that have it</th>
+<th>Us</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1</td>
+<td>Cross-device sync</td>
+<td>Apple Voice Memos and Just Press Record (iCloud), Google Recorder (opt-in), Otter, Plaud, Bee, Voicenotes, Day One, Easy Voice Recorder (paid)</td>
+<td>None</td>
+<td>L</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>Trim and skip silence</td>
+<td>Apple Voice Memos, Just Press Record, Easy Voice Recorder (skip silence; trim paid), Otter (paid)</td>
+<td>None</td>
+<td>M</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>In-recording bookmarks</td>
+<td>Plaud, Bee</td>
+<td>None</td>
+<td>S-M (needs timestamps, G21)</td>
+</tr>
+<tr>
+<td>P4</td>
+<td>Wear OS app (Apple Watch out of scope)</td>
+<td>Apple Voice Memos, Google Recorder, Just Press Record, Voicenotes, Day One, Easy Voice Recorder</td>
+<td>None</td>
+<td>L</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>Integrations and API (Notion, Slack, Zapier, CRM)</td>
+<td>Otter, Plaud, Bee, Voicenotes, Day One</td>
+<td>None</td>
+<td>M per integration; L for an API</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>AI chat over recordings</td>
+<td>Otter, Plaud, Bee, Voicenotes, Day One</td>
+<td>None (offline version: U1)</td>
+<td>M-L</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>Action items and reminders</td>
+<td>Otter, Plaud, Bee, Voicenotes</td>
+<td>None (offline version: U4)</td>
+<td>M</td>
+</tr>
+<tr>
+<td>P8</td>
+<td>Speaker labels</td>
+<td>Google Recorder, Otter</td>
+<td>Planned, no UI (G21)</td>
+<td>M-L</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3a-peer-picture-in-short">3a. Peer picture in short</h2>
+<ul>
+<li>Most-held features across peers: search, cloud sync, export, AI chat, integrations, speaker labels, folders, action items, playback extras, quick-capture surfaces.</li>
+<li>Every peer with AI chat in the research (Otter, Plaud, Bee, Voicenotes) requires an account and processes in the cloud. Day One's processing is unconfirmed.</li>
+<li>Only Google Recorder and Easy Voice Recorder are on-device in the matrix, and neither offers chat. Google Recorder does on-device summaries.</li>
+<li>Held by only one or two peers: Action Button capture (Just Press Record), sound-event search (Google Recorder), CRM push (Otter), ambient wearable (Bee), journaling with mood tracking (Rosebud).</li>
+</ul>
+<h2 id="4-unique-differentiators">4. Unique differentiators</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Idea</th>
+<th>Builds on</th>
+<th>Why it is distinctive</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1</td>
+<td><strong>Ask your memories, offline.</strong> Q&amp;A over transcripts and summaries with the on-device Gemma model. Start with keyword retrieval, then add embeddings.</td>
+<td>LiteRT-LM runtime with conversations (changelog 1.6.0); Couchbase store</td>
+<td>Every AI-chat peer in the research runs in the cloud and needs an account (Day One unconfirmed). This is a private, offline "chat with your notes".</td>
+<td>M-L</td>
+</tr>
+<tr>
+<td>U2</td>
+<td><strong>Verifiable privacy.</strong> A network ledger that logs every outbound request and shows "0 bytes of memories uploaded". Add an airplane-mode self-test.</td>
+<td><code>ModelNetworkPolicy</code>; <code>ModelSetupLog</code>; <code>PlatformModelHttpClient</code></td>
+<td>Turns the privacy claim into proof users can see.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>U3</td>
+<td><strong>Who said it, offline.</strong> Speaker chips and samples, with voiceprints kept on the phone.</td>
+<td>Speaker data layer (1.8.0); <code>SPEAKER_RECOGNITION.md</code> plan</td>
+<td>A headline feature no cloud-first peer can match on privacy.</td>
+<td>M-L (already planned)</td>
+</tr>
+<tr>
+<td>U4</td>
+<td><strong>Commitment tracker.</strong> Detect promises and to-dos in a memory, then offer a local reminder.</td>
+<td>Existing LLM pipeline; needs notification permission (G16)</td>
+<td>Turns notes into follow-ups without sending audio anywhere.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>U5</td>
+<td><strong>Memory echoes.</strong> Resurface related memories (same category, same person, one year ago) through local notifications.</td>
+<td><code>createdAt</code>; categories</td>
+<td>"On this day" for voice notes, with no cloud profile.</td>
+<td>S-M</td>
+</tr>
+<tr>
+<td>U6</td>
+<td><strong>Encrypted vault.</strong> App lock plus encryption at rest for the database and recordings.</td>
+<td>No lock today (G25); Couchbase Lite (check edition for encryption)</td>
+<td>Positions the app as the safe place for sensitive recordings.</td>
+<td>M</td>
+</tr>
+<tr>
+<td>U7</td>
+<td><strong>Lend a memory.</strong> Send one memory (audio, transcript, summary) to another BorrowAI user, device to device, with end-to-end encryption and no server.</td>
+<td>Export format (G8); peer transfer</td>
+<td>Fits the "borrow" name and needs no cloud.</td>
+<td>L</td>
+</tr>
+<tr>
+<td>U8</td>
+<td><strong>Smart chapters.</strong> Split long recordings into topics with jump links.</td>
+<td>Needs timestamps (G21); LLM pipeline</td>
+<td>Makes hour-long recordings usable.</td>
+<td>M-L</td>
+</tr>
+<tr>
+<td>U9</td>
+<td><strong>Bring your own model.</strong> Let power users load a checksum-verified on-device model.</td>
+<td><code>ModelCatalog</code> pins and SHA-256 checks already exist</td>
+<td>Transparent and customizable on-device AI; niche.</td>
+<td>M</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-suggested-sequencing">5. Suggested sequencing</h2>
+<ol type="1">
+<li><strong>Quick fixes (about a week):</strong> G4 delete, G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.</li>
+<li><strong>Core usability (two to four weeks):</strong> G6 search and filter, G5 edit and recategorize, G11 seek, speed, pause, and duration, G8 export, G12 language setting, G19 manual retry.</li>
+<li><strong>Differentiators:</strong> U2 privacy ledger (cheap, on-brand), then U1 offline Ask, U3 speaker UI, U4 commitments.</li>
+</ol>
+<h2 id="6-decisions-needed">6. Decisions needed</h2>
+<ul>
+<li>Should memories be included in Android Auto Backup? Include and document, or exclude and offer an encrypted export? (G15)</li>
+<li>Keep English only for now, or add a language setting first? (G12)</li>
+<li>Which differentiator to lead with: U1 offline Ask, or U3 offline speakers?</li>
+</ul>
+<h2 id="appendix-a-competitor-matrix-web-research-nov-2026">Appendix A. Competitor matrix (web research, Nov 2026)</h2>
+<p>Abbreviations: AVM Apple Voice Memos, GRC Google Recorder, JPR Just Press Record, OTT Otter.ai, PLD Plaud, L/B Limitless (legacy) / Bee, VNT Voicenotes.com, DAY Day One, EVR Easy Voice Recorder. "Unknown" means not confirmed in official sources.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>AVM</th>
+<th>GRC</th>
+<th>JPR</th>
+<th>OTT</th>
+<th>PLD</th>
+<th>L/B</th>
+<th>VNT</th>
+<th>DAY</th>
+<th>EVR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>On-device processing (core)</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Account required</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Live transcript while recording</td>
+<td>unknown</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+<td>no</td>
+<td>unknown</td>
+</tr>
+<tr>
+<td>Speaker labels</td>
+<td>no</td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>10+ transcription languages</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+</tr>
+<tr>
+<td>AI summary</td>
+<td>no</td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+</tr>
+<tr>
+<td>AI chat or Q&amp;A over history</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Full-text search</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Tags or folders</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+<td>unknown</td>
+<td>yes</td>
+<td>paid</td>
+</tr>
+<tr>
+<td>Action items or reminders</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Cloud sync across devices</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>paid</td>
+</tr>
+<tr>
+<td>Export (txt, pdf, srt)</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Third-party integrations</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Playback speed</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>paid</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Skip silence</td>
+<td>yes</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>paid</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Trim or edit audio</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>paid</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>paid</td>
+</tr>
+<tr>
+<td>In-recording bookmarks</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>unknown</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Widget, lock screen, or quick capture</td>
+<td>unknown</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Watch app</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>no</td>
+<td>no</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Background recording</td>
+<td>unknown</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>yes</td>
+<td>yes</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Pause and resume recording</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>no</td>
+<td>unknown</td>
+<td>unknown</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Pricing</td>
+<td>free</td>
+<td>free</td>
+<td>$6.99 one-time</td>
+<td>free plus subscription</td>
+<td>device plus subscription</td>
+<td>free (sunset) / Bee subscription</td>
+<td>free plus $9 to $24 per month</td>
+<td>free plus $50 to $75 per year</td>
+<td>free plus ads or in-app purchases</td>
+</tr>
+</tbody>
+</table>
+<p>Sources: apps.apple.com (Voice Memos, Just Press Record, Day One); play.google.com (Recorder, Easy Voice Recorder); support.google.com (Recorder); otter.ai and otter.ai/pricing; plaud.ai and plaud.ai/pages/trust; limitless.ai (acquisition notice) and bee.computer; voicenotes.com and voicenotes.com/pricing; dayoneapp.com; Rosebud App Store listing. Apple's Voice Memos support guide was rate-limited during research, so Voice Memos claims rely on the App Store listing. Plaud and Bee subscription prices were not on their public pages.</p>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

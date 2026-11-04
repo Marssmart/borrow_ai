@@ -9,7 +9,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added search to Saved memories. A search field above the list finds a word, or part of a word, in a memory's title, summary, or transcript. Matching ignores case, and every word typed must be found. Results update 150 ms after you stop typing, and the search key applies the search at once. Queries are cut at 100 characters.
 - Saved memories is now a lazy list, so long libraries scroll without building every card at once.
 - Added a count line above the list: "42 memories", or "Showing 3 of 42" while a search is active.
-- Updated Android and iOS versioning to 1.10.0 (build 66).
+- Updated Android and iOS versioning to 1.10.0 (build 67).
+
+## [1.9.10]
+
+- Added a Gap analysis page and a Pick list page to the documentation site. They are built from `site/content/gap-analysis.md` and `site/content/pick-list.md`, and cover the Android-only gaps, peer features, and differentiators behind the feature design work.
+- Updated Android and iOS versioning to 1.9.10 (build 66).
 
 ## [1.9.9]
 
