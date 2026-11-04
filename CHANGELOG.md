@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.12.1]
+
+- Updated the gap analysis and pick list on the documentation site. Status now reflects the merged search, filter, and playback work (#76, #77, #79) and what is still open for each feature.
+- Updated Android and iOS versioning to 1.12.1 (build 70).
+
 ## [1.12.0]
 
 - Added category filter chips to saved memories. Each category used by a memory has a chip with its count, in category order. Selecting several chips shows the memories in any of them, and the chips combine with the search. Clear filters removes the chips and keeps the search.
