@@ -71,6 +71,7 @@ fun App(services: AppServices) {
     }
     val appUiState by appStateHolder.uiState.collectAsState()
     val backgroundActivities by services.backgroundActivities.collectAsState()
+    val transcriptionProgress by services.transcriptionProgress.collectAsState()
     val appSettings by services.appSettings.settings.collectAsState()
     val speakerSettingsHolder = remember(services, scope) {
         SpeakerSettingsStateHolder(services.speakers, services.speakerAnalyzer, scope)
@@ -79,6 +80,7 @@ fun App(services: AppServices) {
     val indicatorState = backgroundActivityIndicatorState(
         activities = backgroundActivities,
         showIndicator = appSettings.showBackgroundActivityIndicator,
+        transcriptionProgressPercent = transcriptionProgress,
     )
     LaunchedEffect(services.modelSetup) {
         services.modelSetup.prepare()

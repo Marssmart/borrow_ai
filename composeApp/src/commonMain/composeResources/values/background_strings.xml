@@ -1,6 +1,7 @@
 <resources>
     <string name="background_activity_model_download">Downloading models</string>
     <string name="background_activity_transcription">Transcribing</string>
+    <string name="background_activity_transcription_progress">Transcribing %1$d%%</string>
     <string name="background_activity_speaker_analysis">Analyzing speakers</string>
     <string name="background_activity_summary">Summarizing</string>
     <string name="background_activity_categorization">Categorizing</string>

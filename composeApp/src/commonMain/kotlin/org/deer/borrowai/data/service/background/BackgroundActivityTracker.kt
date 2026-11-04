@@ -2,6 +2,8 @@ package org.deer.borrowai.data.service.background
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -25,23 +27,44 @@ enum class BackgroundActivity {
  */
 class BackgroundActivityTracker {
     private val counts = MutableStateFlow<Map<BackgroundActivity, Int>>(emptyMap())
+    private val mutableTranscriptionProgress = MutableStateFlow<Int?>(null)
 
     /** The activities with at least one unit of work running. Emits only when that set changes. */
     val activities: Flow<Set<BackgroundActivity>> = counts
         .map { it.keys.toSet() }
         .distinctUntilChanged()
 
+    /** Coarse transcription work completed, or null when progress is unavailable or inactive. */
+    val transcriptionProgress: StateFlow<Int?> = mutableTranscriptionProgress.asStateFlow()
+
     /** Marks [activity] active while [block] runs. The mark is removed when [block] returns, throws, or is cancelled. */
     suspend fun <T> track(activity: BackgroundActivity, block: suspend () -> T): T {
-        counts.update { current -> current + (activity to (current[activity] ?: 0) + 1) }
+        if (activity == BackgroundActivity.TRANSCRIPTION && counts.value[activity] == null) {
+            mutableTranscriptionProgress.value = null
+        }
+        counts.update { current ->
+            val activeCount = current[activity] ?: 0
+            current + (activity to activeCount + 1)
+        }
         try {
             return block()
         } finally {
             counts.update { current ->
                 val remaining = (current[activity] ?: 1) - 1
-                if (remaining > 0) current + (activity to remaining) else current - activity
+                if (remaining > 0) {
+                    current + (activity to remaining)
+                } else {
+                    if (activity == BackgroundActivity.TRANSCRIPTION) mutableTranscriptionProgress.value = null
+                    current - activity
+                }
             }
         }
+    }
+
+    /** Updates the active transcription's coarse percentage; 100 is intentionally not a reportable value. */
+    fun reportTranscriptionProgress(percent: Int) {
+        require(percent in 1..99) { "Transcription progress must be between 1 and 99." }
+        mutableTranscriptionProgress.value = percent
     }
 }
 

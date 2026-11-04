@@ -12,4 +12,14 @@ interface BatchTranscriber {
     suspend fun isAvailable(): Boolean = true
 
     suspend fun transcribe(recordingPath: Path): String?
+
+    /**
+     * Transcribes a recording and optionally reports coarse completion progress as an integer from 1 to 99.
+     * Implementations that cannot determine the expected work may leave [onProgress] unused.
+     */
+    suspend fun transcribe(
+        recordingPath: Path,
+        durationMillis: Long?,
+        onProgress: (percent: Int) -> Unit,
+    ): String? = transcribe(recordingPath)
 }

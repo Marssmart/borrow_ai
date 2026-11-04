@@ -3,6 +3,7 @@ package org.deer.borrowai
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.service.background.BackgroundActivity
 
@@ -72,5 +73,28 @@ class BackgroundActivityIndicatorStateTest {
 
         assertEquals(0, state.hiddenCount)
         assertEquals(listOf(BackgroundActivity.SUMMARY), state.namedActivities)
+    }
+
+    @Test
+    fun transcriptionProgressIsIncludedOnlyForActiveTranscriptionAndNeverReachesOneHundred() {
+        val state = backgroundActivityIndicatorState(
+            activities = setOf(BackgroundActivity.TRANSCRIPTION),
+            showIndicator = true,
+            transcriptionProgressPercent = 54,
+        )
+        val completed = backgroundActivityIndicatorState(
+            activities = setOf(BackgroundActivity.TRANSCRIPTION),
+            showIndicator = true,
+            transcriptionProgressPercent = 100,
+        )
+        val unrelated = backgroundActivityIndicatorState(
+            activities = setOf(BackgroundActivity.SUMMARY),
+            showIndicator = true,
+            transcriptionProgressPercent = 54,
+        )
+
+        assertEquals(54, state.transcriptionProgressPercent)
+        assertNull(completed.transcriptionProgressPercent)
+        assertNull(unrelated.transcriptionProgressPercent)
     }
 }

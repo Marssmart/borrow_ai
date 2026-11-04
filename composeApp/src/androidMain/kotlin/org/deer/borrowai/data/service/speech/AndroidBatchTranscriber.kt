@@ -60,6 +60,12 @@ internal class LazyBatchTranscriber(
 
     override suspend fun transcribe(recordingPath: Path): String? = resolve()?.transcribe(recordingPath)
 
+    override suspend fun transcribe(
+        recordingPath: Path,
+        durationMillis: Long?,
+        onProgress: (percent: Int) -> Unit,
+    ): String? = resolve()?.transcribe(recordingPath, durationMillis, onProgress)
+
     private suspend fun resolve(): BatchTranscriber? {
         // Model verification hashes whole files, so it must not run on the caller's (possibly Main) dispatcher.
         return withContext(Dispatchers.IO) {
@@ -82,16 +88,28 @@ internal class AndroidBatchTranscriber(
 ) : BatchTranscriber {
     private val gate = Mutex()
 
-    override suspend fun transcribe(recordingPath: Path): String? = gate.withLock {
+    override suspend fun transcribe(recordingPath: Path): String? = transcribe(recordingPath, null) {}
+
+    override suspend fun transcribe(
+        recordingPath: Path,
+        durationMillis: Long?,
+        onProgress: (percent: Int) -> Unit,
+    ): String? = gate.withLock {
         withContext(Dispatchers.Default) {
             var recognizer: OfflineRecognizer? = null
             try {
                 val created = createRecognizer()
                 recognizer = created
                 val texts = mutableListOf<String>()
+                val expectedWindows = expectedTranscriptionWindowCount(durationMillis)
+                var completedWindows = 0
                 decodeToWindows(recordingPath.toString()) { window ->
                     val text = decode(created, window)
                     if (text.isNotBlank()) texts += text
+                    completedWindows++
+                    expectedWindows?.let { total ->
+                        onProgress(transcriptionWindowProgressPercent(completedWindows, total))
+                    }
                 }
                 texts.joinToString(" ")
             } catch (failure: CancellationException) {
@@ -230,6 +248,21 @@ internal class AndroidBatchTranscriber(
         const val STALL_TIMEOUT_MS = 30_000L
         const val PCM16_SCALE = 32768f
     }
+}
+
+private const val TRANSCRIPTION_WINDOW_MILLIS = 30_000L
+
+internal fun expectedTranscriptionWindowCount(durationMillis: Long?): Int? {
+    if (durationMillis == null || durationMillis <= 0) return null
+    val wholeWindows = durationMillis / TRANSCRIPTION_WINDOW_MILLIS
+    val remainderWindow = if (durationMillis % TRANSCRIPTION_WINDOW_MILLIS == 0L) 0 else 1
+    return (wholeWindows + remainderWindow).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+}
+
+internal fun transcriptionWindowProgressPercent(completedWindows: Int, expectedWindows: Int): Int {
+    require(completedWindows > 0) { "Completed transcription windows must be positive." }
+    require(expectedWindows > 0) { "Expected transcription windows must be positive." }
+    return (completedWindows.toLong() * 100L / expectedWindows).coerceIn(1L, 99L).toInt()
 }
 
 private const val LOG_TAG = "AndroidBatchTranscriber"

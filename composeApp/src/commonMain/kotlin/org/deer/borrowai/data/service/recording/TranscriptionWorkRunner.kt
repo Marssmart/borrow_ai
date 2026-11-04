@@ -95,7 +95,11 @@ class TranscriptionWorkRunner(
                 } else {
                     try {
                         activityTracker.track(BackgroundActivity.TRANSCRIPTION) {
-                            transcriber.transcribe(recordingsRoot / relativePath)
+                            transcriber.transcribe(
+                                recordingsRoot / relativePath,
+                                memory.durationMillis,
+                                activityTracker::reportTranscriptionProgress,
+                            )
                         }
                     } catch (exception: CancellationException) {
                         throw exception

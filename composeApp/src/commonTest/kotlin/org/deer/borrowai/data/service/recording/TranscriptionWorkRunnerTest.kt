@@ -9,6 +9,7 @@ import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
@@ -16,6 +17,7 @@ import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 class TranscriptionWorkRunnerTest {
     private val root = "/root".toPath()
@@ -32,9 +34,19 @@ class TranscriptionWorkRunnerTest {
 
     private fun memories() = FakeMemoryService(epochClock = EpochClock { 1_800_000_000_000L })
 
-    private suspend fun FakeMemoryService.addPending(id: String, status: TranscriptionStatus = TranscriptionStatus.PENDING) {
+    private suspend fun FakeMemoryService.addPending(
+        id: String,
+        status: TranscriptionStatus = TranscriptionStatus.PENDING,
+        durationMillis: Long? = null,
+    ) {
         create(
-            MemoryDraft(title = "t", summary = "s", transcription = "", recordingPath = "recordings/$id.m4a"),
+            MemoryDraft(
+                title = "t",
+                summary = "s",
+                transcription = "",
+                recordingPath = "recordings/$id.m4a",
+                durationMillis = durationMillis,
+            ),
             id = id,
             transcriptionStatus = status,
         )
@@ -218,6 +230,42 @@ class TranscriptionWorkRunnerTest {
         runner.drain()
 
         assertTrue(notified.isEmpty())
+    }
+
+    @Test
+    fun drainPassesKnownDurationAndTracksProgressUntilTranscriptionFinishes() = runTest {
+        val memories = memories()
+        memories.addPending("a", durationMillis = 90_000L)
+        val tracker = BackgroundActivityTracker()
+        var durationSeen: Long? = null
+        var progressSeen: Int? = null
+        val transcriber = object : BatchTranscriber {
+            override suspend fun transcribe(recordingPath: Path): String? = "text"
+
+            override suspend fun transcribe(
+                recordingPath: Path,
+                durationMillis: Long?,
+                onProgress: (percent: Int) -> Unit,
+            ): String? {
+                durationSeen = durationMillis
+                onProgress(50)
+                progressSeen = tracker.transcriptionProgress.value
+                return "text"
+            }
+        }
+        val runner = TranscriptionWorkRunner(
+            memoryService = memories,
+            recordingsRoot = root,
+            batchTranscriber = transcriber,
+            scheduler = TranscriptionScheduler.None,
+            activityTracker = tracker,
+        )
+
+        assertTrue(runner.drain())
+
+        assertEquals(90_000L, durationSeen)
+        assertEquals(50, progressSeen)
+        assertNull(tracker.transcriptionProgress.value)
     }
 
     @Test

@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.23.0]
+
+- The background transcription indicator shows coarse progress when a recording's duration is known. It remains "Transcribing" when duration is unavailable.
+- Updated Android and iOS versioning to 1.23.0 (build 84).
+
 ## [1.22.2]
 
 - Category names are now checked for duplicates in the memory service, ignoring case and surrounding spaces, so two categories with the same name can no longer be saved, even from concurrent creates. Background categorization reuses a category the editor just created instead of failing.
