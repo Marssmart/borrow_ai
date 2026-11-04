@@ -4,6 +4,15 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.13.0]
+
+- Added speaker chips to Saved memories on Android. Each row shows up to three chips under its summary: a library speaker by name, and an unknown speaker as "Speaker N". Each speaker has its own colour. Tapping a chip opens the memory at that speaker's card, and "+N" counts the speakers beyond three.
+- Added a Speakers section below the transcript of a memory on Android. Each speaker has a card with its name or "Speaker N", its total speech time, and a Play sample button that plays only that speaker's part of the recording. A memory whose recording is missing shows "Audio unavailable" and no button.
+- Added a Speaker recognition row to Settings on Android, with the explanation that voice analysis runs on this device, a Speaker models row, and a switch that stays off until the consent screen ships.
+- Playback now stops at the end of a recording instead of up to 250 milliseconds later.
+- Speaker analysis does not run yet, because no speech model is pinned. Until one is, no memory has speakers and the list and detail look the same.
+- Updated Android and iOS versioning to 1.13.0 (build 71).
+
 ## [1.12.1]
 
 - Updated the gap analysis and pick list on the documentation site. Status now reflects the merged search, filter, and playback work (#76, #77, #79) and what is still open for each feature.
