@@ -33,6 +33,7 @@ NAV = [
     ("platforms.html", "Platforms"),
     ("features/index.html", "Features"),
     ("design/index.html", "Design guides"),
+    ("gap-analysis.html", "Gap analysis"),
     ("developing.html", "Developing"),
 ]
 

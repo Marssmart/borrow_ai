@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.10]
+
+- Added a Gap analysis page and a Pick list page to the documentation site. They are built from `site/content/gap-analysis.md` and `site/content/pick-list.md`, and cover the Android-only gaps, peer features, and differentiators behind the feature design work.
+- Updated Android and iOS versioning to 1.9.10 (build 66).
+
 ## [1.9.9]
 
 - Added the rules for deleting a memory. A delete hides the memory at once and keeps it restorable for 10 seconds. The soft delete is written when that window ends, when the Memories tab is left, when the app goes to the background, or when a second delete starts. Not shown in the app yet; see `features/delete-memories/`.
