@@ -39,4 +39,10 @@
     <string name="capture_live_failed_microphone">Live transcript unavailable: the microphone could not be opened for transcription. Recording continues.</string>
     <string name="capture_live_failed_audio_interrupted">Live transcript stopped: audio input was interrupted. Recording continues.</string>
     <string name="capture_live_failed_transcription">Live transcript stopped after an error. Recording continues.</string>
+    <string name="capture_pause_recording">Pause</string>
+    <string name="capture_resume_recording">Resume</string>
+    <string name="capture_paused_label">PAUSED</string>
+    <string name="capture_pause_recording_description">Pause recording</string>
+    <string name="capture_resume_recording_description">Resume recording</string>
+    <string name="capture_recording_interrupted">Recording was interrupted. The audio up to here was saved.</string>
 </resources>

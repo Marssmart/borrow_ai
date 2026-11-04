@@ -23,7 +23,7 @@ class MicrophoneForegroundService : Service() {
             return START_NOT_STICKY
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ensureChannel()
-        val notification = buildNotification()
+        val notification = buildNotification(paused = intent?.getBooleanExtra(EXTRA_PAUSED, false) == true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
@@ -41,7 +41,7 @@ class MicrophoneForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(paused: Boolean): Notification {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -50,7 +50,7 @@ class MicrophoneForegroundService : Service() {
         }
         return builder
             .setContentTitle(CONTENT_TITLE)
-            .setContentText(CONTENT_TEXT)
+            .setContentText(if (paused) CONTENT_TEXT_PAUSED else CONTENT_TEXT)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .build()
@@ -61,6 +61,8 @@ class MicrophoneForegroundService : Service() {
         private const val CHANNEL_NAME = "Recording"
         private const val CONTENT_TITLE = "Recording audio"
         private const val CONTENT_TEXT = "Borrow AI is recording from the microphone"
+        private const val CONTENT_TEXT_PAUSED = "Recording paused"
+        private const val EXTRA_PAUSED = "org.deer.borrowai.extra.PAUSED"
         private const val NOTIFICATION_ID = 1001
         private const val ACTION_START = "org.deer.borrowai.action.START_MIC"
         private const val ACTION_STOP = "org.deer.borrowai.action.STOP_MIC"
@@ -74,6 +76,15 @@ class MicrophoneForegroundService : Service() {
             } else {
                 context.startService(intent)
             }
+        }
+
+        /** Updates the notification text. The service is already in the foreground, so a plain start is enough. */
+        fun setPaused(context: Context, paused: Boolean) {
+            context.startService(
+                Intent(context, MicrophoneForegroundService::class.java)
+                    .setAction(ACTION_START)
+                    .putExtra(EXTRA_PAUSED, paused),
+            )
         }
 
         fun stop(context: Context) {

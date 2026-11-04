@@ -13,6 +13,19 @@ interface AudioRecorder {
 
     /** Finalizes the file started by [start]. Throws [RecordingUnavailableException] if the file cannot be finalized. */
     fun stop()
+
+    /** False when this recorder cannot pause a capture. Recording pause controls should then be hidden. */
+    val pauseAvailable: Boolean
+        get() = false
+
+    /** Stops writing audio without finalizing the file. Throws [RecordingUnavailableException] if it cannot pause. */
+    fun pause() {}
+
+    /** Continues writing into the same file after [pause]. Throws [RecordingUnavailableException] if it cannot resume. */
+    fun resume() {}
+
+    /** Receives recorder errors that arrive while a capture runs. Called from a platform thread. */
+    fun setErrorListener(listener: () -> Unit) {}
 }
 
 class RecordingUnavailableException(message: String, cause: Throwable? = null) : Exception(message, cause)

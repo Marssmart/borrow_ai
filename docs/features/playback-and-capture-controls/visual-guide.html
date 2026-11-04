@@ -325,14 +325,14 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Playback and capture controls</h1>
       <p class="lede">
-        Playback and recording controls on Android. The playback panel ships in phase 1, and the speed menu and interruptions ship in phase 2. Recording pause and resume are design mockups. The duration label ships in phase 3.
+        Playback and recording controls on Android. The playback panel ships in phase 1, and the speed menu and interruptions ship in phase 2. Recording pause and resume ship in phase 4. The duration label ships in phase 3.
         Full spec: <a href="playback-and-capture-controls.html">Playback and capture controls design</a>.
       </p>
     </header>
 
     <p class="status-note">
       <span class="tag tag-shipped">Shipped</span> The playback panel (seek bar, skips of 15 seconds, play or pause) and the list-card Pause state are built in phase 1. The speed menu, the paused notice, and the headset pause are built in phase 2.
-      <span class="tag tag-mock">Mockup</span> Dashed outlines mark what is still a mockup: recording pause and resume.
+      <span class="tag tag-mock">Mockup</span> Dashed outlines mark what is still a mockup.
       <span class="tag tag-android">Android only</span> The playback controls are Android only. iOS keeps the play and stop button. Background playback with notification controls is a later phase (P5), not shown here.
     </p>
 
@@ -449,8 +449,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 3 · Recording</p>
-      <h2>Pause, resume, and the notification <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="eyebrow">Screen · 3 · Recording</p>
+      <h2>Pause, resume, and the notification <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">Pause appears only in tap-to-record. The elapsed time counts active recording only, and the live transcript and the notification both show the paused state. Hold-to-record has no pause control.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -465,7 +465,7 @@
               <div class="summary-text">so on Sunday we meet at the station around nine and</div>
             </div>
           </div></div>
-          <p class="screen-caption">Recording, tap mode <span class="tag tag-mock">Mockup</span></p>
+          <p class="screen-caption">Recording, tap mode <span class="tag tag-shipped">Shipped</span></p>
         </figure>
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -479,7 +479,7 @@
               <div class="summary-text">so on Sunday we meet at the station around nine and</div>
             </div>
           </div></div>
-          <p class="screen-caption">Recording paused <span class="tag tag-mock">Mockup</span></p>
+          <p class="screen-caption">Recording paused <span class="tag tag-shipped">Shipped</span></p>
         </figure>
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -545,9 +545,9 @@
           <tr><td>Speed changed</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>The speed button shows the new speed, such as 1.5×. The position and the playing or paused state are kept.</td><td>The player's position, unchanged.</td></tr>
           <tr><td>Ended</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Paused at the end. Play starts again from 0.</td><td>The player's duration. It is stored, so the list shows it later.</td></tr>
           <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and both skips disabled while the memory is not playing.</td><td>No stored duration. Stored on first play (P3).</td></tr>
-          <tr><td>Recording</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
-          <tr><td>Recording paused</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>
-          <tr><td>Recording interrupted</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Recording was interrupted. The audio up to here was saved." (Q-2).</td><td>The file's readable length.</td></tr>
+          <tr><td>Recording</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
+          <tr><td>Recording paused</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>
+          <tr><td>Recording interrupted</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Recording was interrupted. The audio up to here was saved." (Q-2).</td><td>The file's readable length.</td></tr>
         </tbody>
       </table>
     </section>

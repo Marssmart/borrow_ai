@@ -53,6 +53,29 @@ class RecordingMediaSessionServiceTest {
     ) : AudioRecorder {
         val startedPaths = mutableListOf<String>()
         var stopCount = 0
+        var pauseCount = 0
+        var resumeCount = 0
+        var pauseRefused = false
+        private var errorListener: (() -> Unit)? = null
+
+        override val pauseAvailable: Boolean = true
+
+        override fun pause() {
+            if (pauseRefused) throw RecordingUnavailableException("pause refused")
+            pauseCount++
+        }
+
+        override fun resume() {
+            resumeCount++
+        }
+
+        override fun setErrorListener(listener: () -> Unit) {
+            errorListener = listener
+        }
+
+        fun emitError() {
+            errorListener?.invoke()
+        }
 
         override fun start(absolutePath: String) {
             if (failOnStart) throw RecordingUnavailableException("no mic")
@@ -294,6 +317,8 @@ class RecordingMediaSessionServiceTest {
     private class FakeLiveTranscriber : LiveTranscriber {
         var starts = 0
         var stops = 0
+        var pauses = 0
+        var resumes = 0
         private var onPartial: ((String) -> Unit)? = null
         private var onFailure: ((LiveTranscriptionFailure) -> Unit)? = null
 
@@ -307,6 +332,14 @@ class RecordingMediaSessionServiceTest {
             stops++
             onPartial = null
             onFailure = null
+        }
+
+        override fun pause() {
+            pauses++
+        }
+
+        override fun resume() {
+            resumes++
         }
 
         fun emit(text: String) {
@@ -1917,6 +1950,189 @@ class RecordingMediaSessionServiceTest {
         runCurrent()
 
         assertEquals(9_000L, memories.getState().value.single().durationMillis)
+    }
+
+    @Test
+    fun pausedTimeIsNotCountedAndTheFileKeepsRecording() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(fileSystem = fs)
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            epochClock = EpochClock { testScheduler.currentTime },
+        )
+
+        service.startRecording()
+        runCurrent()
+        advanceTimeBy(2_000L)
+        runCurrent()
+        service.pauseRecording()
+        advanceTimeBy(5_000L)
+        runCurrent()
+        val paused = assertIs<MediaSessionState.Recording>(service.state.value)
+        assertTrue(paused.paused)
+        assertEquals(2_000L, paused.elapsedMillis)
+
+        service.resumeRecording()
+        runCurrent()
+        advanceTimeBy(1_000L)
+        runCurrent()
+        val result = assertNotNull(service.stopRecording())
+        assertEquals(3_000L, result.elapsedMillis)
+        assertEquals(1, recorder.pauseCount)
+        assertEquals(1, recorder.resumeCount)
+    }
+
+    @Test
+    fun stoppingWhilePausedCountsOnlyActiveTime() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            epochClock = EpochClock { testScheduler.currentTime },
+        )
+
+        service.startRecording()
+        runCurrent()
+        advanceTimeBy(1_000L)
+        service.pauseRecording()
+        advanceTimeBy(3_000L)
+
+        assertEquals(1_000L, assertNotNull(service.stopRecording()).elapsedMillis)
+    }
+
+    @Test
+    fun holdToRecordHasNoPause() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(fileSystem = fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope)
+
+        service.startRecording(holdToRecord = true)
+        runCurrent()
+        service.pauseRecording()
+
+        assertFalse(assertIs<MediaSessionState.Recording>(service.state.value).paused)
+        assertEquals(0, recorder.pauseCount)
+    }
+
+    @Test
+    fun refusedPauseKeepsTheRecordingRunning() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(fileSystem = fs).apply { pauseRefused = true }
+        val transcriber = FakeLiveTranscriber()
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            liveTranscriber = transcriber,
+        )
+
+        service.startRecording()
+        runCurrent()
+        service.pauseRecording()
+
+        assertFalse(assertIs<MediaSessionState.Recording>(service.state.value).paused)
+        assertEquals(0, transcriber.pauses)
+    }
+
+    @Test
+    fun pauseAndResumeAlsoPauseTheLiveTranscriber() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val transcriber = FakeLiveTranscriber()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            liveTranscriber = transcriber,
+        )
+
+        service.startRecording()
+        runCurrent()
+        service.pauseRecording()
+        service.resumeRecording()
+
+        assertEquals(1, transcriber.pauses)
+        assertEquals(1, transcriber.resumes)
+    }
+
+    @Test
+    fun recorderErrorKeepsTheAudioWhenThePartialFileHasADuration() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(failOnStop = true, fileSystem = fs)
+        val service = service(
+            recorder,
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            durationReader = AudioDurationReader { 1_200L },
+        )
+
+        service.startRecording()
+        runCurrent()
+        recorder.emitError()
+        runCurrent()
+        assertTrue(assertIs<MediaSessionState.Recording>(service.state.value).interrupted)
+
+        val result = assertNotNull(service.stopRecording())
+        service.awaitPendingWork()
+
+        assertTrue(result.interrupted)
+        assertEquals(1_200L, memories.getState().value.single().durationMillis)
+        assertTrue(fs.exists(recordingFile))
+    }
+
+    @Test
+    fun recorderErrorThatStillStopsCleanlyDiscardsAFileWithoutADuration() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(fileSystem = fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        recorder.emitError()
+        runCurrent()
+
+        assertNull(service.stopRecording())
+        service.awaitPendingWork()
+        assertTrue(memories.getState().value.isEmpty())
+        assertFalse(fs.exists(recordingFile))
+    }
+
+    @Test
+    fun recorderErrorDiscardsAPartialFileWithoutADuration() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(failOnStop = true, fileSystem = fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        recorder.emitError()
+        runCurrent()
+
+        assertNull(service.stopRecording())
+        service.awaitPendingWork()
+        assertEquals(MediaSessionState.Failed(RecordingError.SaveFailed), service.state.value)
+        assertTrue(memories.getState().value.isEmpty())
+        assertFalse(fs.exists(recordingFile))
     }
 
     private suspend fun savedRecording(memories: FakeMemoryService, fs: FakeFileSystem): Memory {

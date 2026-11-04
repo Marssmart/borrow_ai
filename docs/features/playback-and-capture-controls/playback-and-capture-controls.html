@@ -423,6 +423,18 @@
 <li>Tests: <code>RecordingMediaSessionServiceTest</code> covers the saved duration, the first-play write, and no overwrite. <code>KotbaseMemoryServiceTest</code> covers the round trip, reopen, and write-once. The Kotbase test compiles here but has not run, because instrumented runs are on hold.</li>
 <li>The audio duration read on a real device is an open check. It has not been seen on a device, so the list label and the first-play write are unverified on hardware.</li>
 </ul>
+<h3 id="89-phase-4-as-built">8.9 Phase 4 as built</h3>
+<p>These decisions refine §8.3 and §8.5. They were made when P4 was built.</p>
+<ul>
+<li>Pause is tap-to-record only (AC-5.4). <code>RecordingMediaSessionService.pauseRecording</code> refuses a hold-to-record capture, and the capture screen shows no pause control for it.</li>
+<li>The active elapsed time is the wall clock since the start, minus every paused stretch, including a pause still in progress (AC-5.5). <code>RecordingResult.elapsedMillis</code> uses the same rule, so stopping while paused does not count the pause.</li>
+<li>A refused recorder pause (<code>RecordingUnavailableException</code>) keeps the capture running and leaves the state as Recording. A refused resume keeps the capture paused, so the user can resume again or save.</li>
+<li><code>AndroidAudioRecorder</code> pauses with <code>MediaRecorder.pause()</code> and resumes with <code>resume()</code>. Both exist from API 24, which is minSdk. The notification text changes through <code>MicrophoneForegroundService.setPaused</code> (AC-5.7).</li>
+<li>Deviation from §8.3 and Q-1: the live transcriber does not close its <code>AudioRecord</code> while paused. It keeps reading the microphone and stops feeding the recognizer, and it clears its sample window on each paused read, so the resumed text is not joined to the audio before the pause. The engine is kept. The microphone therefore stays open while paused, and the Android microphone indicator stays on. The owner should review this. The alternative, stopping and restarting the <code>AudioRecord</code>, was not chosen because its read behaviour on pause is not verified.</li>
+<li>Deviation from §6.3 and §7: the screen-reader announcements ("Recording paused", "Recording resumed") and the "Paused at 0:42" state description are not built. TalkBack behaviour is unverified, so it is listed as an open item in the MR.</li>
+<li>Recorder errors (AC-6.4, §8.5): <code>AudioRecorder.setErrorListener</code> receives the <code>OnErrorListener</code> callback, which sets <code>interrupted</code> on the capture and shows "Recording was interrupted. The audio up to here was saved." The save then keeps the partial file only when <code>AudioDurationReader</code> reads a duration from it. Otherwise the capture is discarded as before. Whether a phone call produces this error, and whether the file can be finalised afterwards, is Q-2 and is unverified.</li>
+<li>No instrumented test exists for the recorder pause. The <code>AndroidLiveTranscriber</code> test runs on the JVM (<code>androidUnitTest</code>) with fakes.</li>
+</ul>
 <hr />
 <h2 id="9-platform-split">9. Platform split</h2>
 <table>
@@ -576,7 +588,7 @@
 <tr>
 <td>Q-1</td>
 <td>Can <code>AndroidLiveTranscriber</code> pause without losing its engine state?</td>
-<td><strong>Open.</strong> Default: stop feeding audio and resume feeding it, keeping the engine. Check the engine's API first.</td>
+<td><strong>Decided: keep the engine and stop feeding it while paused.</strong> The microphone stays open for live text (§8.9).</td>
 </tr>
 <tr>
 <td>Q-2</td>
@@ -674,7 +686,7 @@
 <tr>
 <td>P4 Recording pause and resume</td>
 <td>Recorder pause and resume, active elapsed time, live transcriber pause, notification text, capture controls, recorder error listener</td>
-<td>US-5 and AC-6.4 met on device, including the call test (Q-2).</td>
+<td>US-5 met in JVM tests. AC-6.4 and the call test (Q-2) are not verified on a device (§8.9).</td>
 </tr>
 <tr>
 <td>P5 Background playback (separate design)</td>

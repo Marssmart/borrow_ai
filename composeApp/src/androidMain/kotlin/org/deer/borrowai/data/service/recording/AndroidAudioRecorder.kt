@@ -9,12 +9,41 @@ import java.io.IOException
 /** Records microphone audio as AAC in an M4A container using [MediaRecorder]. */
 class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
     private var recorder: MediaRecorder? = null
+    private var errorListener: (() -> Unit)? = null
+
+    // MediaRecorder.pause() and resume() exist from API 24, which is the minimum SDK.
+    override val pauseAvailable: Boolean = true
+
+    override fun setErrorListener(listener: () -> Unit) {
+        errorListener = listener
+    }
+
+    override fun pause() {
+        val mediaRecorder = recorder ?: throw RecordingUnavailableException("No recording to pause")
+        try {
+            mediaRecorder.pause()
+        } catch (exception: RuntimeException) {
+            throw RecordingUnavailableException("Could not pause recording", exception)
+        }
+        MicrophoneForegroundService.setPaused(context, paused = true)
+    }
+
+    override fun resume() {
+        val mediaRecorder = recorder ?: throw RecordingUnavailableException("No recording to resume")
+        try {
+            mediaRecorder.resume()
+        } catch (exception: RuntimeException) {
+            throw RecordingUnavailableException("Could not resume recording", exception)
+        }
+        MicrophoneForegroundService.setPaused(context, paused = false)
+    }
 
     override fun start(absolutePath: String) {
         check(recorder == null) { "Recording already in progress" }
         val file = File(absolutePath)
         file.parentFile?.mkdirs()
         val mediaRecorder = createMediaRecorder()
+        mediaRecorder.setOnErrorListener { _, _, _ -> errorListener?.invoke() }
         try {
             // Start the foreground service before capture so it keeps running after the app is minimized.
             MicrophoneForegroundService.start(context)

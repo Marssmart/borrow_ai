@@ -49,8 +49,11 @@ data class PlaybackTarget(
 }
 
 data class RecordingResult(
+    /** Active recording time, so paused time is not counted. */
     val elapsedMillis: Long,
     val transcription: String,
+    /** True when the recorder reported an error and the saved audio is only what was captured up to it. */
+    val interrupted: Boolean = false,
 )
 
 sealed interface RecordingError {
@@ -70,6 +73,9 @@ sealed interface MediaSessionState {
         val pendingPlayback: PlaybackTarget? = null,
         val holdToRecord: Boolean = false,
         val liveTranscriptionFailure: LiveTranscriptionFailure? = null,
+        val paused: Boolean = false,
+        /** True after the recorder reported an error. The audio captured so far is still kept. */
+        val interrupted: Boolean = false,
     ) : MediaSessionState
 
     data class Playing(
@@ -147,7 +153,17 @@ interface MediaSessionService {
     /** Opens the system screen where the user can grant microphone access. */
     fun openMicrophoneSettings() {}
 
+    /** False when this service cannot pause a recording. Pause controls should then be hidden. */
+    val recordingPauseAvailable: Boolean
+        get() = false
+
     fun startRecording(holdToRecord: Boolean = false)
+
+    /** Pauses the tap-to-record capture. The audio file gets no gap, and the elapsed time stops. */
+    fun pauseRecording() {}
+
+    /** Resumes a paused capture into the same file. */
+    fun resumeRecording() {}
 
     fun stopRecording(): RecordingResult?
 

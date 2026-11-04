@@ -303,6 +303,19 @@ These decisions refine §8.2 and §11. They were made when P3 was built.
 - Tests: `RecordingMediaSessionServiceTest` covers the saved duration, the first-play write, and no overwrite. `KotbaseMemoryServiceTest` covers the round trip, reopen, and write-once. The Kotbase test compiles here but has not run, because instrumented runs are on hold.
 - The audio duration read on a real device is an open check. It has not been seen on a device, so the list label and the first-play write are unverified on hardware.
 
+### 8.9 Phase 4 as built
+
+These decisions refine §8.3 and §8.5. They were made when P4 was built.
+
+- Pause is tap-to-record only (AC-5.4). `RecordingMediaSessionService.pauseRecording` refuses a hold-to-record capture, and the capture screen shows no pause control for it.
+- The active elapsed time is the wall clock since the start, minus every paused stretch, including a pause still in progress (AC-5.5). `RecordingResult.elapsedMillis` uses the same rule, so stopping while paused does not count the pause.
+- A refused recorder pause (`RecordingUnavailableException`) keeps the capture running and leaves the state as Recording. A refused resume keeps the capture paused, so the user can resume again or save.
+- `AndroidAudioRecorder` pauses with `MediaRecorder.pause()` and resumes with `resume()`. Both exist from API 24, which is minSdk. The notification text changes through `MicrophoneForegroundService.setPaused` (AC-5.7).
+- Deviation from §8.3 and Q-1: the live transcriber does not close its `AudioRecord` while paused. It keeps reading the microphone and stops feeding the recognizer, and it clears its sample window on each paused read, so the resumed text is not joined to the audio before the pause. The engine is kept. The microphone therefore stays open while paused, and the Android microphone indicator stays on. The owner should review this. The alternative, stopping and restarting the `AudioRecord`, was not chosen because its read behaviour on pause is not verified.
+- Deviation from §6.3 and §7: the screen-reader announcements ("Recording paused", "Recording resumed") and the "Paused at 0:42" state description are not built. TalkBack behaviour is unverified, so it is listed as an open item in the MR.
+- Recorder errors (AC-6.4, §8.5): `AudioRecorder.setErrorListener` receives the `OnErrorListener` callback, which sets `interrupted` on the capture and shows "Recording was interrupted. The audio up to here was saved." The save then keeps the partial file only when `AudioDurationReader` reads a duration from it. Otherwise the capture is discarded as before. Whether a phone call produces this error, and whether the file can be finalised afterwards, is Q-2 and is unverified.
+- No instrumented test exists for the recorder pause. The `AndroidLiveTranscriber` test runs on the JVM (`androidUnitTest`) with fakes.
+
 ---
 
 ## 9. Platform split
@@ -350,7 +363,7 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 
 | # | Question | Decision |
 |---|---|---|
-| Q-1 | Can `AndroidLiveTranscriber` pause without losing its engine state? | **Open.** Default: stop feeding audio and resume feeding it, keeping the engine. Check the engine's API first. |
+| Q-1 | Can `AndroidLiveTranscriber` pause without losing its engine state? | **Decided: keep the engine and stop feeding it while paused.** The microphone stays open for live text (§8.9). |
 | Q-2 | Does a phone call stop a `MediaRecorder` recording, and can the file be finalised afterwards? | **Open.** Test on devices. Default: keep the partial file when it has a readable duration (§8.5). |
 | Q-3 | Does `setPlaybackParams` start playback when the player is paused? | **Open.** The re-pause is built in P2 (§8.7). Test on devices. |
 | Q-4 | Should the speed be saved between launches? | **Decided: no** for v1 (AC-3.3). |
@@ -374,7 +387,7 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 | P1 Playback controls | Pause and resume, seek bar, time labels, skip ±15 seconds, position from the player, 250 ms ticks | US-1, US-2, US-4 met on Android. commonTest green (§13). |
 | P2 Speed and interruptions | Speed menu, focus loss pauses, transient resume, notice, headset unplug (Q-6) | US-3 and AC-6.1, AC-6.2 met on a device with API 24 and on one with API 34 or later. |
 | P3 Duration | `durationMillis` stored on save, stored on first play, "Duration unknown", list durations (Q-8) | US-7 met in JVM tests. Kotbase tests compile; the run is on hold. |
-| P4 Recording pause and resume | Recorder pause and resume, active elapsed time, live transcriber pause, notification text, capture controls, recorder error listener | US-5 and AC-6.4 met on device, including the call test (Q-2). |
+| P4 Recording pause and resume | Recorder pause and resume, active elapsed time, live transcriber pause, notification text, capture controls, recorder error listener | US-5 met in JVM tests. AC-6.4 and the call test (Q-2) are not verified on a device (§8.9). |
 | P5 Background playback (separate design) | Media session, media playback foreground service, notification and lock-screen controls, notification permission on Android 13 and later | A separate design document is approved first. |
 
 ---

@@ -114,6 +114,14 @@ internal class AndroidLiveTranscriber(
         }
     }
 
+    override fun pause() {
+        synchronized(lock) { session?.setPausedLocked(true) }
+    }
+
+    override fun resume() {
+        synchronized(lock) { session?.setPausedLocked(false) }
+    }
+
     private inner class Session(
         private val previousFinished: CountDownLatch?,
         private val onFailure: (LiveTranscriptionFailure) -> Unit,
@@ -125,6 +133,12 @@ internal class AndroidLiveTranscriber(
         private var active: Boolean = true
         private var failureReported: Boolean = false
         private var record: LiveAudioSource? = null
+        private var paused: Boolean = false
+
+        /** Must be called with [lock] held. */
+        fun setPausedLocked(value: Boolean) {
+            paused = value
+        }
 
         /** Must be called with [lock] held. */
         fun stopLocked() {
@@ -133,6 +147,8 @@ internal class AndroidLiveTranscriber(
         }
 
         private fun isActive(): Boolean = synchronized(lock) { active }
+
+        private fun isPaused(): Boolean = synchronized(lock) { paused }
 
         /**
          * Must be called with [lock] held. Reports at most once per session, and only while the session is still
@@ -260,6 +276,12 @@ internal class AndroidLiveTranscriber(
                     break
                 }
                 if (read == 0) continue
+                if (isPaused()) {
+                    // Clearing the window keeps the text after a resume from being joined to the audio before the pause.
+                    synchronized(windowLock) { window.clear() }
+                    samplesSinceDecode = 0
+                    continue
+                }
                 synchronized(windowLock) { window.appendPcm16(chunk, read) }
                 samplesSinceDecode += read
                 if (samplesSinceDecode < DECODE_INTERVAL_SAMPLES) continue
@@ -275,7 +297,7 @@ internal class AndroidLiveTranscriber(
                             lastText = text
                             // Checked under the lock so stop() guarantees no callback after it returns.
                             synchronized(lock) {
-                                if (active && session === this@Session) onPartial(text)
+                                if (active && !paused && session === this@Session) onPartial(text)
                             }
                         }
                     } catch (t: Throwable) {

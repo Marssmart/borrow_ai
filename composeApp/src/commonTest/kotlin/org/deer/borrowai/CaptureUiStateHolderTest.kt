@@ -32,6 +32,29 @@ class CaptureUiStateHolderTest {
     }
 
     @Test
+    fun togglePausePausesAndResumesTapRecording() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        holder.toggleRecording()
+        holder.togglePause()
+        assertTrue(holder.uiState.value().isPaused)
+        holder.togglePause()
+        assertFalse(holder.uiState.value().isPaused)
+    }
+
+    @Test
+    fun togglePauseIsIgnoredWhileHoldRecording() {
+        val mediaSession = FakeMediaSessionService()
+        val holder = CaptureUiStateHolder(mediaSession)
+
+        holder.startHoldRecording()
+        holder.togglePause()
+        assertFalse(holder.uiState.value().isPaused)
+        holder.stopHoldRecording()
+    }
+
+    @Test
     fun recordingIsBlockedWhenMediaSessionCannotRecord() {
         val mediaSession = FakeMediaSessionService(recordingAvailable = false)
         val holder = CaptureUiStateHolder(mediaSession)
@@ -130,6 +153,18 @@ class CaptureUiStateHolderTest {
                 transcription = "",
                 holdToRecord = holdToRecord,
             )
+        }
+
+        override val recordingPauseAvailable: Boolean = true
+
+        override fun pauseRecording() {
+            val current = mutableState.value as? MediaSessionState.Recording ?: return
+            if (!current.holdToRecord) mutableState.value = current.copy(paused = true)
+        }
+
+        override fun resumeRecording() {
+            val current = mutableState.value as? MediaSessionState.Recording ?: return
+            mutableState.value = current.copy(paused = false)
         }
 
         override fun stopRecording(): RecordingResult? {
