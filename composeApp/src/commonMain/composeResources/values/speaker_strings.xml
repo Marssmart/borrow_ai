@@ -6,6 +6,12 @@
     <string name="speaker_stop_sample">Stop sample</string>
     <string name="speaker_audio_unavailable">Audio unavailable</string>
     <string name="speaker_no_speakers_detected">No speakers detected in this memory.</string>
+    <string name="speaker_pending_description">Analyzing speakers</string>
+    <string name="speaker_more_chip">+%1$d</string>
+    <plurals name="speaker_more_speakers">
+        <item quantity="one">%1$d more speaker</item>
+        <item quantity="other">%1$d more speakers</item>
+    </plurals>
     <string name="settings_speaker_recognition_title">Speaker recognition</string>
     <string name="settings_speaker_recognition_description">Voice analysis runs on this device. Voice samples are stored only in this app.</string>
     <string name="settings_speaker_models_title">Speaker models</string>

@@ -81,6 +81,16 @@ class KotbaseSpeakerServiceTest {
     }
 
     @Test
+    fun createdSpeakersStoreDistinctColours() = runTest {
+        val service = openService()
+        val first = service.createSpeaker("Ana").getOrNull()!!
+        val second = service.createSpeaker("Ben").getOrNull()!!
+
+        val stored = service.findSpeakers().getOrNull()!!.associate { it.id to it.colorIndex }
+        assertEquals(mapOf(first.id to 0, second.id to 1), stored)
+    }
+
+    @Test
     fun namesAreUniqueIgnoringCase() = runTest {
         val service = openService()
         service.createSpeaker("Ana")

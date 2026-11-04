@@ -16,8 +16,9 @@ internal sealed interface SpeakersSectionState {
     data object NoneDetected : SpeakersSectionState
 }
 
-/** One speaker in one memory. [speechMillis] is the speaker's total speech time. */
+/** One speaker in one memory. [ordinal] is the 1-based speaker number, and [speechMillis] is the total speech time. */
 internal data class SpeakerCard(
+    val ordinal: Int,
     val label: SpeakerLabel,
     val speechMillis: Long,
     val audio: SpeakerAudio,
@@ -53,6 +54,7 @@ internal fun speakersSectionState(
     occurrences.isNotEmpty() -> SpeakersSectionState.Cards(
         occurrences.sortedBy { it.ordinal }.map { occurrence ->
             SpeakerCard(
+                ordinal = occurrence.ordinal,
                 label = occurrence.speakerId?.let { namesById[it] }?.let { SpeakerLabel.Named(it) }
                     ?: SpeakerLabel.Unknown(occurrence.ordinal),
                 speechMillis = occurrence.totalSpeechMs,

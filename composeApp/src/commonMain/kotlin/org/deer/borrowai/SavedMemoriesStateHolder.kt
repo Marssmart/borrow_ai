@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
@@ -41,6 +43,7 @@ import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
+import org.deer.borrowai.data.service.SpeakerService
 
 internal data class SavedMemoriesUiState(
     val memories: List<Memory> = emptyList(),
@@ -59,6 +62,10 @@ internal data class SavedMemoriesUiState(
     val deleteFailures: Int = 0,
     /** The category chips the user has selected. A selection of a category no memory uses filters nothing. */
     val selectedCategoryIds: Set<Int> = emptySet(),
+    /** Speaker chips for each memory that shows any, keyed by memory id (section 9.1). */
+    val speakerChips: Map<String, SpeakerChipsState> = emptyMap(),
+    /** The speaker card the detail view scrolls to. A chip tap sets it, and the view clears it once it has scrolled. */
+    val focusedSpeakerOrdinal: Int? = null,
 ) {
     /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
     val visibleMemories: List<Memory>
@@ -85,6 +92,9 @@ private data class SearchRequest(
 internal class SavedMemoriesStateHolder(
     private val memoryService: MemoryService,
     private val mediaSessionService: MediaSessionService,
+    private val speakers: SpeakerService,
+    /** Whether speaker analysis can run now. Pending chips show only while it can (section 9.1). */
+    private val speakerAnalysisActive: suspend () -> Boolean,
     summaryModelMissing: StateFlow<Boolean>,
     val pagerState: PagerState,
     val memoriesListState: LazyListState,
@@ -101,6 +111,7 @@ internal class SavedMemoriesStateHolder(
     private val appliedQuery = MutableStateFlow("")
     private val searcher = MemorySearcher()
     private var searchJob: Job? = null
+    private val speakerChipsMutex = Mutex()
 
     val uiState = mutableUiState.asStateFlow()
 
@@ -115,7 +126,11 @@ internal class SavedMemoriesStateHolder(
             memoryService.getState().collect { memories ->
                 updateMemories(memories)
                 refreshCategoryNames()
+                refreshSpeakerChips()
             }
+        }
+        scope.launch {
+            speakers.changes.collect { refreshSpeakerChips() }
         }
         scope.launch {
             mediaSessionService.state.collect { mediaSessionState ->
@@ -162,17 +177,41 @@ internal class SavedMemoriesStateHolder(
     }
 
     fun openMemory(memoryId: String) {
+        openDetail(memoryId, focusedSpeakerOrdinal = null)
+    }
+
+    /** Opens the detail view scrolled to speaker card [ordinal], or at the top when [ordinal] is null (section 9.1). */
+    fun openMemoryAtSpeaker(memoryId: String, ordinal: Int?) {
+        openDetail(memoryId, focusedSpeakerOrdinal = ordinal)
+    }
+
+    fun clearFocusedSpeaker() {
+        mutableUiState.update { it.copy(focusedSpeakerOrdinal = null) }
+    }
+
+    private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {
         if (uiState.value.memories.none { it.id == memoryId }) return
         mutableUiState.update {
             it.copy(
                 selectedMemoryId = memoryId,
                 detailSwipeEnabled = true,
                 hasOpenedDetail = true,
+                focusedSpeakerOrdinal = null,
             )
         }
         scope.launch {
             detailScrollState.scrollTo(0)
             pagerState.animateScrollToPage(MEMORY_DETAIL_PAGE)
+            // Set after the page has moved, so the reset to the top above cannot undo the scroll to the speaker.
+            if (focusedSpeakerOrdinal != null) {
+                mutableUiState.update { state ->
+                    if (state.selectedMemoryId == memoryId) {
+                        state.copy(focusedSpeakerOrdinal = focusedSpeakerOrdinal)
+                    } else {
+                        state
+                    }
+                }
+            }
         }
     }
 
@@ -364,6 +403,7 @@ internal class SavedMemoriesStateHolder(
                 selectedMemoryId = null,
                 detailSwipeEnabled = false,
                 hasOpenedDetail = false,
+                focusedSpeakerOrdinal = null,
             )
         }
     }
@@ -383,6 +423,18 @@ internal class SavedMemoriesStateHolder(
         memoryService.findCategories().fold({}) { categories ->
             val names = categories.associate { it.id to it.name }
             mutableUiState.update { it.copy(categoryNames = names) }
+        }
+    }
+
+    /** Reloads every memory's chips from one read. Refreshes run one at a time, each reading the newest memories. */
+    private suspend fun refreshSpeakerChips() {
+        speakerChipsMutex.withLock {
+            val chips = loadSpeakerChips(
+                speakers = speakers,
+                memories = uiState.value.memories,
+                analysisActive = speakerAnalysisActive(),
+            )
+            mutableUiState.update { it.copy(speakerChips = chips) }
         }
     }
 

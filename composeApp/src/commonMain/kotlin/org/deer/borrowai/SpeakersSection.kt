@@ -1,12 +1,18 @@
 package org.deer.borrowai
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,7 +33,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Speakers section of a memory detail, below the transcript (US-2). It reloads when the speaker store changes. Callers
- * leave it out where speaker recognition is not supported.
+ * leave it out where speaker recognition is not supported. A list chip sets [focusedSpeakerOrdinal] to scroll to that card.
  */
 @Composable
 internal fun SpeakersSection(
@@ -36,6 +42,8 @@ internal fun SpeakersSection(
     hasRecordingFile: (Memory) -> Boolean,
     playingTarget: PlaybackTarget?,
     onPlaySample: (PlaybackTarget) -> Unit,
+    focusedSpeakerOrdinal: Int?,
+    onSpeakerFocusHandled: () -> Unit,
 ) {
     val state by produceState<SpeakersSectionState?>(initialValue = null, memory, speakers) {
         speakers.changes.onStart { emit(Unit) }.collect {
@@ -44,6 +52,16 @@ internal fun SpeakersSection(
                 memory = memory,
                 audioAvailable = hasRecordingFile(memory),
             )
+        }
+    }
+    val focusRequester = remember { BringIntoViewRequester() }
+    val focusedCardShown = (state as? SpeakersSectionState.Cards)
+        ?.cards?.any { it.ordinal == focusedSpeakerOrdinal } == true
+    // Cleared once the card is in view, so a later reload of the section does not scroll again.
+    LaunchedEffect(focusedSpeakerOrdinal, focusedCardShown) {
+        if (focusedCardShown) {
+            focusRequester.bringIntoView()
+            onSpeakerFocusHandled()
         }
     }
     val section = state ?: return
@@ -57,7 +75,14 @@ internal fun SpeakersSection(
         )
         when (section) {
             is SpeakersSectionState.Cards -> section.cards.forEach { card ->
-                SpeakerCardPanel(card = card, playingTarget = playingTarget, onPlaySample = onPlaySample)
+                val focusModifier = if (card.ordinal == focusedSpeakerOrdinal) {
+                    Modifier.bringIntoViewRequester(focusRequester)
+                } else {
+                    Modifier
+                }
+                Box(focusModifier) {
+                    SpeakerCardPanel(card = card, playingTarget = playingTarget, onPlaySample = onPlaySample)
+                }
             }
 
             SpeakersSectionState.NoneDetected -> AuroraPanel(

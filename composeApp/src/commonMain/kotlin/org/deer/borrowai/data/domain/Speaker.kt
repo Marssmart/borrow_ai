@@ -23,6 +23,8 @@ data class Speaker(
     val createdAtEpochMillis: Long,
     val lastUsedAtEpochMillis: Long,
     val embeddingCount: Int,
+    /** Index into the speaker palette (section 9.7). It is stored, so the speaker keeps its colour in every memory. */
+    val colorIndex: Int = 0,
 ) {
     init {
         require(id.isNotBlank()) { "A speaker id cannot be blank." }
@@ -30,8 +32,25 @@ data class Speaker(
         require(embeddingCount in 0..MAX_EMBEDDINGS_PER_SPEAKER) {
             "A speaker keeps at most $MAX_EMBEDDINGS_PER_SPEAKER embeddings."
         }
+        require(colorIndex in 0 until SPEAKER_PALETTE_SIZE) { "A speaker colour is an index into the palette." }
     }
 }
+
+/** Colours in the speaker palette (section 9.7). */
+const val SPEAKER_PALETTE_SIZE = 8
+
+/** The first palette index not in [taken], or null when every index is taken. */
+fun firstFreeSpeakerColor(taken: Collection<Int>): Int? {
+    val used = taken.toSet()
+    return (0 until SPEAKER_PALETTE_SIZE).firstOrNull { it !in used }
+}
+
+/**
+ * The colour for a speaker added to [existing]: the first index no library speaker uses. When every index is taken, the
+ * count wraps around the palette.
+ */
+fun newSpeakerColorIndex(existing: Collection<Speaker>): Int =
+    firstFreeSpeakerColor(existing.map { it.colorIndex }) ?: (existing.size % SPEAKER_PALETTE_SIZE)
 
 /** Whether an occurrence is linked to a library speaker. A [MANUAL] link is never overwritten by matching (AC-4.3). */
 enum class SpeakerLink { NONE, AUTO, MANUAL }

@@ -16,6 +16,7 @@ import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.newSpeakerColorIndex
 
 /** In-memory [SpeakerService] that follows the same rules as the Kotbase store, for tests that need no database. */
 class FakeSpeakerService(
@@ -71,7 +72,7 @@ class FakeSpeakerService(
                     SpeakerError.NameTaken(trimmed).left()
                 else -> {
                     val now = epochClock.nowEpochMillis()
-                    val speaker = Speaker(nextId(), trimmed, now, now, 0)
+                    val speaker = Speaker(nextId(), trimmed, now, now, 0, colorIndex = newSpeakerColorIndex(speakers.values))
                     speakers[speaker.id] = speaker
                     published()
                     speaker.right()
@@ -123,6 +124,9 @@ class FakeSpeakerService(
         mutex.withLock {
             occurrences.values.filter { it.memoryId == memoryId }.sortedBy { it.ordinal }.right()
         }
+
+    override suspend fun findAllOccurrences(): Either<SpeakerError, List<SpeakerOccurrence>> =
+        mutex.withLock { occurrences.values.toList().right() }
 
     override suspend fun replaceOccurrences(
         memoryId: String,

@@ -192,8 +192,18 @@ class SpeakerDetailsTest {
         assertEquals(
             SpeakersSectionState.Cards(
                 listOf(
-                    SpeakerCard(SpeakerLabel.Named("Priya"), 130_000L, SpeakerAudio.Playable(sample(1_000L, 5_000L))),
-                    SpeakerCard(SpeakerLabel.Unknown(2), 4_000L, SpeakerAudio.Playable(sample(6_000L, 9_000L))),
+                    SpeakerCard(
+                        ordinal = 1,
+                        label = SpeakerLabel.Named("Priya"),
+                        speechMillis = 130_000L,
+                        audio = SpeakerAudio.Playable(sample(1_000L, 5_000L)),
+                    ),
+                    SpeakerCard(
+                        ordinal = 2,
+                        label = SpeakerLabel.Unknown(2),
+                        speechMillis = 4_000L,
+                        audio = SpeakerAudio.Playable(sample(6_000L, 9_000L)),
+                    ),
                 ),
             ),
             section,
