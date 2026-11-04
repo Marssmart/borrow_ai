@@ -3,7 +3,7 @@ package org.deer.borrowai.data.service
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import kotlinx.coroutines.flow.BufferOverflow
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

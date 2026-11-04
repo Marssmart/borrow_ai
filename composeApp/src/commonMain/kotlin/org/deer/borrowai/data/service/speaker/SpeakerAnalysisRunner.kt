@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.Path
@@ -161,7 +162,11 @@ class SpeakerAnalysisRunner(
             } catch (exception: Exception) {
                 return failAttempt(memory.id, exception::class.simpleName ?: "UnknownError")
             }
-            if (drafts.isEmpty()) return skip(memory.id)
+            if (drafts.isEmpty()) {
+                // Rows left by an earlier partial attempt must not stay visible when this rebuild finds no speech.
+                if (speakerService.deleteForMemory(memory.id).isLeft()) return storeFailed()
+                return skip(memory.id)
+            }
             val storeError = speakerService.replaceOccurrences(memory.id, SPEAKER_ANALYSIS_VERSION, drafts).leftOrNull()
             when (storeError) {
                 null -> return complete(memory.id)

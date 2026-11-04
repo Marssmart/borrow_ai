@@ -18,7 +18,9 @@ import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MAX_SPEAKER_ATTEMPTS
+import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
+import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
@@ -313,6 +315,24 @@ class SpeakerAnalysisRunnerTest {
         gate.complete(Unit)
 
         assertFalse(drain.await())
+        assertEquals(SpeakerStatus.SKIPPED, memories.get("a").speakerStatus)
+        assertTrue(speakers.findOccurrences("a").getOrNull()!!.isEmpty())
+    }
+
+    @Test
+    fun rebuildWithNoSpeechClearsRowsLeftByAnEarlierAttempt() = runTest {
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        memories.addAudioMemory("a")
+        speakers.replaceOccurrences(
+            "a",
+            SPEAKER_ANALYSIS_VERSION,
+            listOf(OccurrenceDraft(1, null, SpeakerLink.NONE, 2_000, 0, 2_000, floatArrayOf(1f, 0f, 0f, 0f))),
+        )
+        assertEquals(1, speakers.findOccurrences("a").getOrNull()!!.size)
+
+        assertTrue(runner(memories, speakers, ScriptedAnalyzer(script = { emptyList() }), this).drain())
+
         assertEquals(SpeakerStatus.SKIPPED, memories.get("a").speakerStatus)
         assertTrue(speakers.findOccurrences("a").getOrNull()!!.isEmpty())
     }
