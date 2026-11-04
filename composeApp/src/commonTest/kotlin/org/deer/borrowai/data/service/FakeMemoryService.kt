@@ -8,7 +8,9 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import org.deer.borrowai.data.domain.Category
+import org.deer.borrowai.data.domain.CATEGORY_NAME_TAKEN_MESSAGE
 import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.categoryNameTaken
 import org.deer.borrowai.data.domain.categorizationStatusFor
 import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.Memory
@@ -136,6 +138,9 @@ class FakeMemoryService(
     override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> =
         mutex.withLock {
             try {
+                if (categoryNameTaken(name, categories.values.map(Category::name))) {
+                    return@withLock MemoryError.InvalidInput(CATEGORY_NAME_TAKEN_MESSAGE).left()
+                }
                 val category = Category(
                     id = (categories.keys.maxOrNull() ?: 0) + 1,
                     name = name,

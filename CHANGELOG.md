@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.22.2]
+
+- Category names are now checked for duplicates in the memory service, ignoring case and surrounding spaces, so two categories with the same name can no longer be saved, even from concurrent creates. Background categorization reuses a category the editor just created instead of failing.
+- The new-category dialog clears its duplicate-name error as soon as the name changes.
+- Updated Android and iOS versioning to 1.22.2 (build 83).
+
 ## [1.22.1]
 
 - Fixed speaker colours. Each speaker keeps its own colour when the speaker library is read, and renaming a speaker no longer resets it to the first colour.

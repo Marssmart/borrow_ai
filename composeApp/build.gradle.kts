@@ -106,7 +106,7 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 82
+        versionCode = 83
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

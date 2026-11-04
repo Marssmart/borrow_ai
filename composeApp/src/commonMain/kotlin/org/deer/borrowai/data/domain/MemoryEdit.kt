@@ -45,5 +45,8 @@ fun Memory.withEdit(edit: MemoryEdit): Memory {
 fun categoryNameTaken(name: String, existingNames: Collection<String>): Boolean =
     existingNames.any { it.trim().equals(name.trim(), ignoreCase = true) }
 
+/** Message for an InvalidInput error from createCategory when the name is taken. */
+const val CATEGORY_NAME_TAKEN_MESSAGE = "A category with this name already exists."
+
 /** The edit that keeps every field of this memory as it is. An editor starts from it and changes only what it shows. */
 fun Memory.currentEdit(): MemoryEdit = MemoryEdit(title, summary, transcription, categories)

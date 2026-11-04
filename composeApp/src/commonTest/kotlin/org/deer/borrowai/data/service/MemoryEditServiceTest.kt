@@ -19,6 +19,17 @@ class MemoryEditServiceTest {
         create(MemoryDraft("t", "", "original"), id = "a", transcriptionStatus = status).getOrNull()!!
 
     @Test
+    fun refusesCategoryNameTakenAfterTrimmingAndIgnoringCase() = runTest {
+        val service = service()
+        service.createCategory("Work", "")
+
+        val result = service.createCategory("  work ", "")
+
+        assertTrue(result.isLeft())
+        assertEquals(1, service.findCategories().getOrNull()!!.size)
+    }
+
+    @Test
     fun changedTranscriptIsRefusedWhilePending() = runTest {
         val service = service()
         val created = service.create(TranscriptionStatus.PENDING)

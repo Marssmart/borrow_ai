@@ -23,11 +23,13 @@ import kotbase.Result
 import kotbase.SelectResult
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import org.deer.borrowai.data.domain.CATEGORY_NAME_TAKEN_MESSAGE
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MemoryEdit
+import org.deer.borrowai.data.domain.categoryNameTaken
 import org.deer.borrowai.data.domain.categoryIdsViolation
 import org.deer.borrowai.data.domain.parseCategoriesString
 import org.deer.borrowai.data.domain.toCategoriesString
@@ -202,6 +204,9 @@ class KotbaseMemoryService private constructor(
         mutex.withLock {
             either {
                 val existing = withContext(Dispatchers.Default) { readCategories() }.bind()
+                if (categoryNameTaken(name, existing.map(Category::name))) {
+                    raise(MemoryError.InvalidInput(CATEGORY_NAME_TAKEN_MESSAGE))
+                }
                 val category = try {
                     Category(
                         id = (existing.maxOfOrNull(Category::id) ?: 0) + 1,
