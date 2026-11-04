@@ -626,7 +626,7 @@ private fun MemorySectionIcon(original: Boolean) {
 }
 
 @Composable
-private fun AuroraPanel(
+internal fun AuroraPanel(
     shape: Shape = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_SHAPE,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentPadding: PaddingValues = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_CONTENT_PADDING,
@@ -677,7 +677,7 @@ private fun AudioPlaybackButtons(
 }
 
 @Composable
-private fun PlaybackButton(
+internal fun PlaybackButton(
     playing: Boolean,
     playLabel: StringResource,
     playingLabel: StringResource,
