@@ -146,8 +146,16 @@ class DefaultMemoryCategorizer(
                 }
                 when (val created = memoryService.createCategory(proposal.name, proposal.description)) {
                     is Either.Left -> {
-                        persistenceFailure = persistenceFailure
-                            ?: IllegalStateException("Category create failed: ${created.value}")
+                        // A name taken since the read above (created by the editor) is reused, not a failure.
+                        val taken = (created.value as? MemoryError.InvalidInput)
+                            ?.let { (memoryService.findCategories() as? Either.Right)?.value }
+                            ?.firstOrNull { it.name.trim().equals(proposal.name.trim(), ignoreCase = true) }
+                        if (taken != null) {
+                            ids += taken.id
+                        } else {
+                            persistenceFailure = persistenceFailure
+                                ?: IllegalStateException("Category create failed: ${created.value}")
+                        }
                     }
                     is Either.Right -> ids += created.value.id
                 }

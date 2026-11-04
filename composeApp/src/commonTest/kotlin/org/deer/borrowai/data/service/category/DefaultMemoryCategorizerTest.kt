@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.EpochClock
@@ -69,6 +70,17 @@ class DefaultMemoryCategorizerTest {
             } else {
                 inner.createCategory(name, description)
             }
+    }
+
+    /** Creates [racedName] through the service first, as the editor would, so the categorizer's own create loses. */
+    private class RacingCreateMemoryService(
+        private val inner: MemoryService,
+        private val racedName: String,
+    ) : MemoryService by inner {
+        override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> {
+            if (name == racedName) inner.createCategory(name, "Created by the editor")
+            return inner.createCategory(name, description)
+        }
     }
 
     @Test
@@ -266,6 +278,19 @@ class DefaultMemoryCategorizerTest {
         assertIs<CategorizationResult.Categories>(secondResult)
         assertEquals(listOf("Ada"), service.findCategories().getOrNull()!!.map { it.name })
         assertEquals(firstResult.ids, secondResult.ids)
+    }
+
+    @Test
+    fun `reuses a category the editor created while backfill was creating it`() = runTest {
+        val model = model(backfill = CategoryModelReply.Text("Ada|Pioneer of computing"))
+        val service = RacingCreateMemoryService(service(0), racedName = "Ada")
+
+        val result = DefaultMemoryCategorizer(service, model).categorize("note")
+
+        val categories = assertIs<CategorizationResult.Categories>(result)
+        assertEquals(listOf(1), categories.ids)
+        assertNull(categories.backfillFailure)
+        assertEquals(listOf("Ada"), service.findCategories().getOrNull()!!.map { it.name })
     }
 
     @Test

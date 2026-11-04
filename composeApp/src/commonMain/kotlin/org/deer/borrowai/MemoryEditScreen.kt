@@ -406,6 +406,7 @@ internal fun MemoryEditScreen(
                         onValueChange = {
                             newName = it
                             createFailed = false
+                            createDuplicate = false
                         },
                         label = { Text(stringResource(Res.string.memory_edit_category_name_label)) },
                         singleLine = true,
