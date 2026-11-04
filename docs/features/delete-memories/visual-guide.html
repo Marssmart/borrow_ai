@@ -230,6 +230,7 @@
 
     .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .tag-mock { background: #fde3c8; color: #8a4b0a; }
+    .tag-shipped { background: #d4efe6; color: #13644f; }
     .tag-android { background: #e3e7e9; color: #4a5558; }
     .label-sm { margin-top: 6px; font-size: 9px; font-weight: 800; letter-spacing: .1em; color: #14757b; }
 
@@ -303,19 +304,19 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Delete memories</h1>
       <p class="lede">
-        Design mockups for deleting a saved memory on Android: the entry points, the Undo snackbar, the empty library, and the error state.
+        Shipped and mockup screens for deleting a saved memory on Android: the entry points, the Undo snackbar, the empty library, and the error state. Shipped items are tagged Shipped. Mockup items are not built yet.
         Full spec: <a href="delete-memories.html">Delete memories design</a>.
       </p>
     </header>
 
     <p class="status-note">
-      <span class="tag tag-mock">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag tag-shipped">Shipped</span> The More actions menu, the Undo snackbar and error, the empty library, and focus after a delete are shipped on Android. Sections marked Mockup are not built yet, including the TalkBack custom action and the long-press shortcut. The layout uses Material 3 components. iOS is not designed here.
       <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 1 · Entry points</p>
-      <h2>Detail menu and TalkBack action <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="eyebrow">Shipped and mockup · 1 · Entry points</p>
+      <h2>Detail menu and TalkBack action <span class="tag tag-shipped">Menu shipped</span> <span class="tag tag-mock">TalkBack action: Mockup</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">The primary route is the More actions menu in the detail header. Every list card also exposes a TalkBack custom action, so the delete does not depend on a gesture.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -366,8 +367,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · Undo window</p>
-      <h2>Snackbar and commit failure <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="eyebrow">Shipped · 2 · Undo window</p>
+      <h2>Snackbar and commit failure <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">The memory leaves the list at once. The Undo snackbar sits above the dock for 10 seconds. If the commit fails when the window ends, the memory returns and an error snackbar explains why. It has no action.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -411,8 +412,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 3 · Empty library</p>
-      <h2>Empty state after the last delete <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="eyebrow">Shipped · 3 · Empty library</p>
+      <h2>Empty state after the last delete <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">The empty state replaces the cards only, and the heading stays. It is not shown while a recording is still being saved. Undo can appear above it, and Undo returns to the list.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -449,7 +450,7 @@
 
     <section class="section">
       <p class="eyebrow">Flow · Timing</p>
-      <h2>From tap to purge <span class="tag tag-mock">Mockup</span></h2>
+      <h2>From tap to purge <span class="tag tag-shipped">Shipped</span></h2>
       <p class="section-note">The app hides the memory at once and writes the soft delete only when the Undo window ends. The purger never sees a memory inside the window, so Undo needs no new service method.</p>
       <div class="flow">
         <div class="step"><span class="step-num">1</span><strong>Hide now</strong>Memory leaves the list. Playback stops if it was playing.</div>
@@ -461,7 +462,7 @@
 
     <section class="section">
       <p class="eyebrow">States</p>
-      <h2>What the user sees <span class="tag tag-mock">Mockup</span></h2>
+      <h2>What the user sees <span class="tag tag-shipped">Shipped</span></h2>
       <table>
         <thead>
           <tr><th>State</th><th>What the user sees</th><th>Notes</th></tr>

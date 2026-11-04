@@ -221,6 +221,15 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 - **Background tracking.** The soft-delete write is short and started by the user, so it is not reported as background activity. The purge that follows is still reported as **Cleaning up**.
 - **Playback.** Requesting a delete stops playback of that memory, and cancels a playback confirmation waiting for it.
 
+### 8.4 Implementation notes (P2)
+
+- **More actions.** The project has no icon library, so the button uses the glyph "⋮" in a 48 dp `IconButton`. Its content description is "More actions for this memory", and TalkBack reads that label, not the glyph.
+- **Save gate.** `MediaSessionService.saving` is a cold `Flow` derived from the pending saves. It starts no coroutine, so the save state is always current when collected. The empty state needs no visible memory and no running save (AC-5.3). It also waits until the memory list and the save state have each arrived, so it does not flash on the first frame.
+- **Snackbar precedence.** A new delete dismisses an error still on screen, so its Undo is never queued behind that error. An error that arrives during an Undo window waits until the window ends.
+- **Focus after delete.** The list heading is focusable. Focus moves to it once the pager has settled on the list (AC-7.2). If the heading is not attached, focus stays where it is.
+- **Detail slide.** Deleting from the detail view calls `requestDelete` and then `backToList`. The detail keeps its memory until the slide finishes.
+- **Snackbar placement.** The Undo snackbar is a bottom-aligned child of a `Box` around the pager, with 8 dp of padding. `App.kt` already pads the pager for the dock, so the snackbar sits above the dock. Not seen on a device (Q-6).
+
 ---
 
 ## 9. Platform split
@@ -256,6 +265,7 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 | Q-3 | Should a long recording (for example, over 5 minutes) need a confirmation dialog? | **Open.** Default: no. |
 | Q-4 | Keep the long-press shortcut as well as the TalkBack action? | **Open.** Default: keep both. |
 | Q-5 | Should any memory require a confirmation dialog? | **Decided: no.** Undo is the safety net. |
+| Q-6 | Do the Undo snackbar, the empty state, the error snackbar, and the focus move after a delete look and behave as §6 describes on a device? | **Open.** The state rules are unit-tested; the screens are not. Not run on a device or emulator. Check on a device before phase 3 starts. |
 
 ---
 

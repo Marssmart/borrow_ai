@@ -144,6 +144,7 @@ fun App(services: AppServices) {
                             services = services,
                             onDetailBackRegistered = appStateHolder::registerMemoryDetailBack,
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
+                            onGoToRecord = { appStateHolder.navigateToPage(AppShellStateHolder.CAPTURE_PAGE) },
                         )
 
                         AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen(

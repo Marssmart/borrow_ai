@@ -3,7 +3,9 @@ package org.deer.borrowai.data.service
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
 import org.deer.borrowai.data.service.recording.MicrophoneDenial
@@ -127,6 +129,10 @@ interface MediaSessionService {
     /** Why microphone access was denied, or null when it is granted. Platforms without denial tracking report null. */
     val microphoneDenial: StateFlow<MicrophoneDenial?>
         get() = NoMicrophoneDenial
+
+    /** True while a finished recording is being saved as a memory. The empty memory list waits for it, so a new memory does not flash. */
+    val saving: Flow<Boolean>
+        get() = flowOf(false)
 
     /** Opens the system screen where the user can grant microphone access. */
     fun openMicrophoneSettings() {}

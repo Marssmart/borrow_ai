@@ -335,6 +335,15 @@
 <li><strong>Background tracking.</strong> The soft-delete write is short and started by the user, so it is not reported as background activity. The purge that follows is still reported as <strong>Cleaning up</strong>.</li>
 <li><strong>Playback.</strong> Requesting a delete stops playback of that memory, and cancels a playback confirmation waiting for it.</li>
 </ul>
+<h3 id="84-implementation-notes-p2">8.4 Implementation notes (P2)</h3>
+<ul>
+<li><strong>More actions.</strong> The project has no icon library, so the button uses the glyph "⋮" in a 48 dp <code>IconButton</code>. Its content description is "More actions for this memory", and TalkBack reads that label, not the glyph.</li>
+<li><strong>Save gate.</strong> <code>MediaSessionService.saving</code> is a cold <code>Flow</code> derived from the pending saves. It starts no coroutine, so the save state is always current when collected. The empty state needs no visible memory and no running save (AC-5.3). It also waits until the memory list and the save state have each arrived, so it does not flash on the first frame.</li>
+<li><strong>Snackbar precedence.</strong> A new delete dismisses an error still on screen, so its Undo is never queued behind that error. An error that arrives during an Undo window waits until the window ends.</li>
+<li><strong>Focus after delete.</strong> The list heading is focusable. Focus moves to it once the pager has settled on the list (AC-7.2). If the heading is not attached, focus stays where it is.</li>
+<li><strong>Detail slide.</strong> Deleting from the detail view calls <code>requestDelete</code> and then <code>backToList</code>. The detail keeps its memory until the slide finishes.</li>
+<li><strong>Snackbar placement.</strong> The Undo snackbar is a bottom-aligned child of a <code>Box</code> around the pager, with 8 dp of padding. <code>App.kt</code> already pads the pager for the dock, so the snackbar sits above the dock. Not seen on a device (Q-6).</li>
+</ul>
 <hr />
 <h2 id="9-platform-split">9. Platform split</h2>
 <table>
@@ -446,6 +455,11 @@
 <td>Q-5</td>
 <td>Should any memory require a confirmation dialog?</td>
 <td><strong>Decided: no.</strong> Undo is the safety net.</td>
+</tr>
+<tr>
+<td>Q-6</td>
+<td>Do the Undo snackbar, the empty state, the error snackbar, and the focus move after a delete look and behave as §6 describes on a device?</td>
+<td><strong>Open.</strong> The state rules are unit-tested; the screens are not. Not run on a device or emulator. Check on a device before phase 3 starts.</td>
 </tr>
 </tbody>
 </table>

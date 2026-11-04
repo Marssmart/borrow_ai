@@ -12,9 +12,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -76,6 +79,8 @@ class RecordingMediaSessionService(
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
+    // Cold, so it starts no coroutine: each collector reads the pending saves from its own scope.
+    override val saving: Flow<Boolean> = pendingSaves.map { it.isNotEmpty() }.distinctUntilChanged()
     // Playback is decided per file in requestPlayback (missing, empty, or unplayable files return RecordingUnavailable),
     // so the service itself is always able to attempt playback.
     override val playbackAvailable: Boolean = true
