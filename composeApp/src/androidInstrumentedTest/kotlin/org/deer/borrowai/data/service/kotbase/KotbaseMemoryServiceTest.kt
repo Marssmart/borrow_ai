@@ -17,6 +17,7 @@ import org.deer.borrowai.data.domain.MAX_CATEGORIZATION_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
@@ -510,6 +511,18 @@ class KotbaseMemoryServiceTest {
         saveRawMemory(id = "bad-3", recordingPath = "/absolute/recording.m4a")
 
         assertEquals(MemoryError.Malformed("bad-3"), service.updateCategories("bad-3", listOf(1)).errorOrNull())
+    }
+
+    @Test
+    fun memoriesSavedBeforeSpeakerRecognitionLoadWithSpeakerDefaults() = runTest {
+        saveRawMemory(id = "legacy-1", recordingPath = "recordings/legacy.m4a")
+
+        val memory = openService().findById("legacy-1").getOrNull()!!
+
+        assertEquals(SpeakerStatus.PENDING, memory.speakerStatus)
+        assertEquals(0, memory.speakerAttempts)
+        assertEquals(null, memory.lastSpeakerError)
+        assertEquals(null, memory.speakerAnalysisVersion)
     }
 
     private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {

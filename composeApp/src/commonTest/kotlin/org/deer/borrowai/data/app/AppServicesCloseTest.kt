@@ -15,6 +15,7 @@ import okio.Path
 import okio.Path.Companion.toPath
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.ModelSetupService
@@ -37,6 +38,7 @@ class AppServicesCloseTest {
     private val expectedOrder = listOf(
         "media close",
         "await",
+        "speaker analysis",
         "background jobs",
         "callbacks",
         "summarizer",
@@ -118,6 +120,7 @@ class AppServicesCloseTest {
         return AppServices(
             modelSetup = UnusedModelSetup,
             memories = FakeMemoryService(epochClock = clock),
+            speakers = FakeSpeakerService(),
             mediaSession = media,
             transcriptionRunner = TranscriptionWorkRunner(
                 memoryService = FakeMemoryService(epochClock = clock),
@@ -131,6 +134,7 @@ class AppServicesCloseTest {
             callbackGroup = callbackGroup,
             summarizer = summarizer,
             closeModelRuntime = { events += "runtime" },
+            shutdownSpeakerAnalysis = { events += "speaker analysis" },
             onClose = { events += "database" },
         )
     }

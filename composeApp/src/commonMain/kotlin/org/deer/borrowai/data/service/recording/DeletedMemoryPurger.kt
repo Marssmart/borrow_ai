@@ -10,10 +10,11 @@ import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.SpeakerService
 
 /**
- * Finishes deleting memories that were soft-deleted. For each deleted memory it removes the audio file
- * first, then the record. If the file cannot be removed, the record stays so the next run retries.
+ * Finishes deleting memories that were soft-deleted. For each deleted memory it removes the audio file first, then the
+ * speaker data, then the record. If any step fails, the record stays so the next run retries the rest.
  * Runs at launch and then periodically.
  */
 class DeletedMemoryPurger(
@@ -21,6 +22,7 @@ class DeletedMemoryPurger(
     private val recordingsRoot: Path,
     private val isRecording: () -> Boolean,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val speakerService: SpeakerService,
 ) {
     /** Purges deleted memories. Returns how many were removed. */
     suspend fun purge(): Int {
@@ -48,13 +50,20 @@ class DeletedMemoryPurger(
                     val file = recordingsRoot / relativePath
                     if (fileSystem.exists(file)) fileSystem.delete(file)
                 }
+                // Speaker rows go before the record. Once the record is gone, nothing would find them again.
+                if (speakerService.deleteForMemory(memory.id).isLeft()) continue
                 if (memoryService.purge(memory.id)) purged++
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                // The record stays so the next run retries the audio removal.
+                // The record stays so the next run retries the remaining steps.
             }
         }
+        // Rows whose memory is gone are removed too. A purge that stopped after removing its speaker rows, or a record
+        // removed some other way, would otherwise leave voiceprints behind.
+        memoryService.findAll().getOrNull()
+            ?.mapTo(mutableSetOf(), Memory::id)
+            ?.let { speakerService.deleteRowsWithoutMemory(it) }
         return purged
     }
 

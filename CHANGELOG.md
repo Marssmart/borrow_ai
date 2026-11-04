@@ -4,6 +4,18 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.8.0]
+
+- Added the speaker recognition data layer and analysis pipeline, with no user interface yet. It stores a speaker library and the speakers found in each memory in a separate local collection, clusters speech into speakers, picks a playable sample for each, and links speakers to the library. The feature is off by default, and no speech model is bundled yet, so no analysis runs in this release.
+- Memories gained speaker analysis status fields. Existing memories still load, and the new fields take their defaults.
+- Purging a deleted memory now also removes its speaker data.
+- Updated Android and iOS versioning to 1.8.0 (build 55).
+
+## [1.7.7]
+
+- Recorded the speaker recognition P0 spike results in the feature spec. The sherpa-onnx 1.13.8 Kotlin API exposes offline diarization and speaker embedding extraction, and the candidate model pairs fit the 60 MB download limit. Embedding model licenses and on-device measurements remain open.
+- Updated Android and iOS versioning to 1.7.7 (build 54).
+
 ## [1.7.6]
 
 - Removed the play icon from the memory card header in Saved memories, and the memory date is now left-aligned.

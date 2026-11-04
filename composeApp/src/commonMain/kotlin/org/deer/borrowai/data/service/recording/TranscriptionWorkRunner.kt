@@ -32,6 +32,8 @@ class TranscriptionWorkRunner(
     private val scheduler: TranscriptionScheduler,
     /** Called once a drain has transcribed at least one memory, so the summary job can pick up the new transcripts. */
     private val onTranscriptionFinished: () -> Unit = {},
+    /** Called with the memory id after its transcript is saved. A failure there never fails the transcription. */
+    private val onTranscriptionSucceeded: suspend (memoryId: String) -> Unit = {},
 ) {
     /** Held for the whole of a drain. The sweep takes it too, so it never requeues rows a live drain is working on. */
     private val drainLock = Mutex()
@@ -108,10 +110,22 @@ class TranscriptionWorkRunner(
                     scheduler.enqueueSweep()
                     return false
                 }
+                if (!transcript.isNullOrBlank()) notifySucceeded(memory.id)
                 transcribed++
             }
         } finally {
             if (transcribed > 0) onTranscriptionFinished()
+        }
+    }
+
+    /** Runs the success callback. Its failure is dropped, because the transcript is already saved. */
+    private suspend fun notifySucceeded(memoryId: String) {
+        try {
+            onTranscriptionSucceeded(memoryId)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            // Intentionally empty: the transcription result does not depend on the callback.
         }
     }
 }

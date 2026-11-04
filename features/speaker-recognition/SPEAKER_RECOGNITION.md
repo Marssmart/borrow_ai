@@ -168,8 +168,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 |---|---|---|
 | `id` | String (UUID) | |
 | `name` | String | User-provided, unique case-insensitively. |
-| `createdAt` | Instant | |
-| `lastUsedAt` | Instant | Sort key for the assign sheet. |
+| `createdAt` | Long (epoch millis) | |
+| `lastUsedAt` | Long (epoch millis) | Sort key for the assign sheet. |
 | `embeddingCount` | Int | Capped at 10 by dropping the oldest embeddings. |
 
 **SpeakerEmbedding**
@@ -181,6 +181,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 | `vector` | FloatArray (blob) | Dimension set by the embedding model. Stored with the model version. |
 | `modelVersion` | Int | Embeddings from different versions are never compared. |
 | `sourceOccurrenceId` | String | |
+| `memoryId` | String | Added in P1. Lets deletion and the cap find every embedding of a memory. |
+| `createdAtEpochMillis` | Long (epoch millis) | Added in P1. Orders embeddings for the cap, which drops the oldest. |
 
 **SpeakerOccurrence** (one cluster in one memory)
 
@@ -199,7 +201,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 
 **Rules**
 
-- A memory deleted in `DeletedMemoryPurger` also deletes its occurrences, embeddings with `speakerId == null` tied to it, and no sample file is kept (samples are time ranges, not files, see §8.3).
+- A memory deleted in `DeletedMemoryPurger` also deletes its occurrences and all of its embeddings, including embeddings already attached to a library speaker (AC-6.4, §13). No sample file is kept (samples are time ranges, not files, see §8.3). This corrects the earlier wording, which removed only embeddings with `speakerId == null` and so conflicted with AC-6.4.
 - `recordingPath` stays relative. No absolute paths are stored.
 - All reads and writes return Arrow `Either<MemoryError, T>` (add `SpeakerError` cases under `MemoryError` or a sibling type).
 
@@ -227,7 +229,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 6. Cap clusters at `maxSpeakersPerMemory` (default 8). Extra clusters merge into the nearest one.
 7. For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.
 8. Compute each cluster's centroid. Compare it with every library speaker's embeddings. Use the best score, and link `AUTO` if it is at or above the match threshold and the speaker is not rejected.
-9. Write occurrences, the centroid embedding, and the sample range in one transaction. Set `speakerStatus = DONE` and `speakerAnalysisVersion`.
+9. Write occurrences, the centroid embedding, and the sample range in one batch. Set `speakerStatus = DONE` and `speakerAnalysisVersion`. *Deviation (P1):* the occurrences and embeddings go in one batch, but the DONE write is a separate memory-record write. A crash between the two leaves the memory ANALYZING. The retry rebuilds the same rows, so nothing is lost or duplicated.
 10. Emit a change event so the list and detail views refresh.
 
 ### 7.3 Re-analysis
@@ -236,7 +238,8 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 - Drained by: app launch, in the background at low priority (AC-5.2).
 - Re-analysis recomputes segmentation and clusters, then re-runs matching. It keeps `MANUAL` links where the occurrence's centroid still maps to the same speaker. Otherwise the manual link stays as it was (see AC-5.3). Simple rule for v1: a manual link is never removed by re-analysis.
 - Runs with the same low priority as other background jobs. Pauses while recording.
-- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch.
+- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch. *P1 checks these between memories. The check between speech turns belongs in the analyzer wrapper, and is added in P5 with the first real analyzer.*
+- Notes for later phases. P2 withdrawal must also reset each memory's `speakerStatus` (DONE becomes SKIPPED or PENDING), not only delete the speaker data. P4 re-analysis must include SKIPPED memories as well as PENDING ones.
 - Scope in v1: the drain runs only while the app process is alive. No WorkManager or BGTask job in v1. The queue is persisted, so a killed app loses nothing.
 
 ---
@@ -354,18 +357,20 @@ Clustering and matching are pure Kotlin in `commonMain` so they can be unit-test
 
 Before any production code, run a spike on a branch. The spike answers these questions:
 
-| # | Question | Method | Go / no-go |
-|---|---|---|---|
-| S-1 | Does the sherpa-onnx 1.13.8 Kotlin API expose offline diarization and embedding extraction? | Read the Kotlin API and build a minimal call | Go if both are callable from Kotlin. No-go means use a different runtime or a Kotlin-to-JNI wrapper. |
-| S-2 | Real-time factor on the reference low-end Android device | Run diarization on 5 min of audio | RTF ≤ 0.5 and peak extra memory ≤ 250 MB. |
-| S-3 | Same-speaker match quality | 10 memories, 3 speakers, label by hand | Same-speaker match ≥ 85% at the proposed threshold. |
-| S-4 | Different-speaker false match | Same set, cross-speaker pairs | False match ≤ 5%. |
-| S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. |
-| S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. |
-| S-7 | Launch-gate thresholds | Run a background drain on a low-end device and log battery drop, thermal state, and time to finish | Battery threshold (20%) and stop conditions hold, with no visible drain complaints. Tune if not. |
-| S-8 | Speaker colour palette | Render the 8 colours on a real device in light and dark mode, and run a colour-blind simulation (protanopia, deuteranopia, tritanopia) on a memory with 4+ speakers | Every pair of speakers in one memory is distinguishable by name or state. If not, swap or drop colours. |
+| # | Question | Method | Go / no-go | P0 result | Evidence |
+|---|---|---|---|---|---|
+| S-1 | Does the sherpa-onnx 1.13.8 Kotlin API expose offline diarization and embedding extraction? | Read the Kotlin API and build a minimal call | Go if both are callable from Kotlin. No-go means use a different runtime or a Kotlin-to-JNI wrapper. | **GO** (API level). `OfflineSpeakerDiarization.process(FloatArray)` and `SpeakerEmbeddingExtractor.compute(OnlineStream)` are public in the Kotlin wrappers. Both have file-path constructors (`assetManager` defaults to null). Native symbols are present for all four ABIs. Not executed on device. | AAR `sherpa-onnx-1.13.8.aar` from github.com/k2-fsa/sherpa-onnx v1.13.8, 50,129,134 B, sha256 `633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96`. Checked with `javap` on `classes.jar`, `readelf` on `jni/*/libsherpa-onnx-jni.so`, and upstream `kotlin-api/*.kt` at v1.13.8. Minimal call `S1MinimalCall` compiled with javac against the AAR. No kotlinc on host, and the native library is Android-only, so it did not run. |
+| S-2 | Real-time factor on the reference low-end Android device | Run diarization on 5 min of audio | RTF ≤ 0.5 and peak extra memory ≤ 250 MB. | **Pending device.** Procedure: run diarization on 5 min of audio on the reference low-end Android device, then record RTF and peak extra memory. | No Android device, emulator, or KVM on this host. |
+| S-3 | Same-speaker match quality | 10 memories, 3 speakers, label by hand | Same-speaker match ≥ 85% at the proposed threshold. | **Pending device.** Procedure: label 10 memories with 3 speakers by hand, then measure the same-speaker match rate at the proposed threshold. | No device on this host. |
+| S-4 | Different-speaker false match | Same set, cross-speaker pairs | False match ≤ 5%. | **Pending device.** Procedure: run the same set and measure false matches on cross-speaker pairs. | No device on this host. |
+| S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. | **Open.** Segmentation (pyannote 3.0 int8): MIT, allows commercial use. Embedding models: 3D-Speaker code is Apache-2.0 at repo level, but per-model licenses are on ModelScope. NeMo TitaNet and SpeakerNet: no license found on GitHub, and the NGC page is unreachable. Each embedding model still needs its license verified. | Bundled `LICENSE` in the sherpa segmentation archive (MIT, Copyright 2022 CNRS). Release body of `speaker-recongition-models`: each model has its own license. 3D-Speaker `LICENSE` and README (Apache-2.0, GitHub). huggingface.co, modelscope.cn, catalog.ngc.nvidia.com, and k2-fsa.github.io do not resolve from this host. |
+| S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. | **Met for candidate pairs.** Smallest pair: SpeakerNet 23.41 MB + segmentation 6.96 MB = 30.37 MB. Largest passing embedding: TitaNet-small 40.26 MB, pair 47.22 MB. Over 60 MB alone: ERes2NetV2 71.44 MB, TitaNet-large 101.41 MB, ERes2Net-large 116.06 MB, ERes2Net 220.62 MB. | Asset sizes from `gh api` for `speaker-segmentation-models` and `speaker-recongition-models`. Segmentation archive 6,958,444 B, with `model.int8.onnx` at 1,540,506 B inside. The release publishes only the archive, and `ModelCatalog` pins raw files, so P1 needs an extraction path or another raw source. |
+| S-7 | Launch-gate thresholds | Run a background drain on a low-end device and log battery drop, thermal state, and time to finish | Battery threshold (20%) and stop conditions hold, with no visible drain complaints. Tune if not. | **Pending device.** Procedure: run a background drain on a low-end device and log battery drop, thermal state, and time to finish. | No device on this host. |
+| S-8 | Speaker colour palette | Render the 8 colours on a real device in light and dark mode, and run a colour-blind simulation (protanopia, deuteranopia, tritanopia) on a memory with 4+ speakers | Every pair of speakers in one memory is distinguishable by name or state. If not, swap or drop colours. | **Pending device.** Procedure: render the 8 colours on a real device in light and dark mode, then run protanopia, deuteranopia, and tritanopia simulations on a memory with 4+ speakers. | No device on this host. |
 
 The spike writes its numbers into this file (§11 table, filled in) before implementation starts.
+
+**P0 status (2026-11-02, no device on this host):** S-1 is a go at the API level, and S-6 is met for the candidate pairs. S-5 is open for the embedding models, so no model is chosen or pinned. S-2, S-3, S-4, S-7, and S-8 are pending device. Unit tests were not run: Gradle could not download its distribution from this host because of a JDK TLS trust error.
 
 ---
 
@@ -466,5 +471,5 @@ Use short public-domain or self-recorded clips. No real user audio in the repo.
 - [ ] Unit and instrumented tests green in CI (`./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug`).
 - [ ] Consent screen text (§9.8) matches §13.
 - [ ] Withdrawing consent deletes all speaker data (AC-6.6), tested on device.
-- [ ] CHANGELOG entry and version bump in each MR.
+- [ ] CHANGELOG entry and version bump in each MR. (Done for P1 in 1.8.0, build 55. Applies to each later phase.)
 - [ ] `visual-guide.html` matches the shipped UI, or the differences are noted.

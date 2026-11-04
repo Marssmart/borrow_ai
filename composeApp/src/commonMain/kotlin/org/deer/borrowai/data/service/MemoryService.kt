@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
+import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 
 interface MemoryService {
@@ -86,6 +87,31 @@ interface MemoryService {
 
     /** Stops retrying an active memory's categorization by setting its status to GAVE_UP. */
     suspend fun giveUpCategorization(id: String): Either<MemoryError, Unit>
+
+    /**
+     * Atomically claims the newest memory whose speaker analysis is [SpeakerStatus.PENDING]: sets it to ANALYZING and
+     * counts the attempt. Returns null when nothing is pending.
+     */
+    suspend fun claimNextPendingSpeakerAnalysis(): Either<MemoryError, Memory?>
+
+    /** Marks the speaker analysis of an active memory DONE and stores the [analysisVersion] it was written with. */
+    suspend fun completeSpeakerAnalysis(id: String, analysisVersion: Int): Either<MemoryError, Unit>
+
+    /** Records a failed attempt with [error] as the reason: back to PENDING while attempts remain, otherwise FAILED. */
+    suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit>
+
+    /** Marks an active memory SKIPPED. A finished analysis is kept, so a later change of setting cannot hide it. */
+    suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit>
+
+    /**
+     * Returns analyses left ANALYZING by an interrupted run to PENDING, or to FAILED when their attempts are used up.
+     * Returns how many were requeued.
+     */
+    suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int>
+
+    /** Marks every PENDING speaker analysis SKIPPED. Used while speaker analysis cannot run. Returns how many changed. */
+    suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int>
+
 
     /** Every row of the category master table, ordered by id. */
     suspend fun findCategories(): Either<MemoryError, List<Category>>
