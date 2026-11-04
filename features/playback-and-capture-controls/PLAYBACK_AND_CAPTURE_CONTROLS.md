@@ -252,7 +252,7 @@ No manifest change is needed for v1. The microphone permission and the microphon
 
 ### 8.4 Pausing, audio focus, and the interruption rules
 
-- Pausing (by the user or the platform) releases the audio focus, so other apps can play (AC-4.5).
+- Pausing by the user, an unplugged headset, a permanent loss, or the end of the file releases the audio focus, so other apps can play (AC-4.5). A transient loss keeps the request registered, so the return of the focus is reported (§8.7).
 - Resuming requests the focus again. If the request fails, the memory stays paused and the notice says so.
 - A transient loss (`AUDIOFOCUS_LOSS_TRANSIENT`, and `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`, which speech should not duck) pauses with `TRANSIENT`. The service resumes only when the focus returns, and only if playback was running (AC-6.2).
 - A permanent loss (`AUDIOFOCUS_LOSS`) pauses with `PERMANENT`. Nothing resumes it.
@@ -276,6 +276,21 @@ These decisions refine §8.3 and §8.4. They were made when P1 was built.
 - Seek and skip need an active playback. An idle memory has no position to move, so the seek bar and the skip buttons are disabled for it.
 - P1 stores no duration. The duration exists only while the memory plays or is paused. Once playback stops, the total time shows "Duration unknown" again until P3 stores durations. AC-1.6 and AC-7.2 are P3 targets.
 - The focus listener still stops playback until P2 (§8.4). Instrumented tests for `AndroidAudioPlayer` (§13) are not in P1, because they need a device and an audio fixture.
+
+### 8.7 Phase 2 as built
+
+These decisions refine §8.3 and §8.4. They were made when P2 was built.
+
+- `AudioPlayer.setInterruptionHandler` takes a `PlaybackInterruption`. The enum has `TRANSIENT` and `PERMANENT` from §8.3, and two more values. `FOCUS_REGAINED` tells the service that a transient loss ended, so it can resume (AC-6.2). `OUTPUT_UNPLUGGED` is sent when the audio output becomes noisy, such as a headset unplug (AC-6.3). Lambdas that do not name the argument still compile. Function references do not, so they must take the new parameter.
+- A transient loss keeps the audio focus request registered. Abandoning it would stop the platform from reporting that the focus came back. A user pause, a headset unplug, a permanent loss, and the end of the file all release the focus (AC-4.5).
+- `AudioFocusHeldException`, a `PlaybackUnavailableException`, marks a play or resume that another app's focus refused. A refused resume leaves the memory paused, sets `Playing.pausedByOtherApp`, and returns `PlaybackError.AudioFocusHeld`. The notice shows instead of the error dialog (Q-14). A refused play request still shows the playback-unavailable dialog, as it did before P2. §8.4 does not cover that case.
+- `Playing.pausedByOtherApp` is true after a `TRANSIENT` or `PERMANENT` loss, so the notice shows (AC-6.1). A headset unplug leaves it false, so no notice shows.
+- The service remembers whether playback was running when a transient loss paused it. The focus coming back resumes playback only then. A user pause or resume clears that memory, and so does a permanent loss. A refused resume keeps it, so the focus coming back later still resumes playback that was running.
+- The speed is session state in the service, exposed as `MediaSessionService.playbackSpeed` (a `StateFlow`), so the speed button shows it while nothing plays. `Playing.speed` mirrors it while a memory plays. `AudioPlayer.setSpeed` keeps the speed for later `play` calls on the same player. If a device rejects a speed, the player keeps the speed it had, and the button still shows the chosen speed. That is an open device check.
+- The Android player sets the speed with `PlaybackParams` (pitch 1.0) before it starts a memory, so a memory does not begin at 1× for a moment. If setting the speed starts a paused player, the player pauses it again (Q-3). Neither behaviour has been checked on a device.
+- The speed button sits on the panel row beside the transport controls. The transport takes the remaining width, so the two do not overlap in layout. How the row fits on narrow screens is an open device check.
+- Speaker samples (speaker recognition spec, section 8.3) play through the same player. A sample has no pause, so an interruption stops it, and nothing resumes it. A sample plays at the session speed. The wake-up before its end is scaled by that speed, so a sample stops at its end at any speed.
+- The instrumented tests for `AndroidAudioPlayer` in §13 are still not written. They need a device and an audio fixture.
 
 ---
 
@@ -326,10 +341,10 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 |---|---|---|
 | Q-1 | Can `AndroidLiveTranscriber` pause without losing its engine state? | **Open.** Default: stop feeding audio and resume feeding it, keeping the engine. Check the engine's API first. |
 | Q-2 | Does a phone call stop a `MediaRecorder` recording, and can the file be finalised afterwards? | **Open.** Test on devices. Default: keep the partial file when it has a readable duration (§8.5). |
-| Q-3 | Does `setPlaybackParams` start playback when the player is paused? | **Open.** Test on devices. If it does, re-pause at once. |
+| Q-3 | Does `setPlaybackParams` start playback when the player is paused? | **Open.** The re-pause is built in P2 (§8.7). Test on devices. |
 | Q-4 | Should the speed be saved between launches? | **Decided: no** for v1 (AC-3.3). |
 | Q-5 | Should background playback and notification controls ship in v1? | **Decided: no.** P5, with its own design. |
-| Q-6 | Should a headset unplugged pause playback in v1? | **Open.** Default: yes, in P2. Needs a `BroadcastReceiver` for `ACTION_AUDIO_BECOMING_NOISY`. |
+| Q-6 | Should a headset unplugged pause playback in v1? | **Open.** Default yes, built in P2 with a receiver for `ACTION_AUDIO_BECOMING_NOISY` (§8.7). Test on devices. |
 | Q-7 | Should legacy durations be filled in by a launch job, not on first play? | **Decided: first play only.** No extra file reads. |
 | Q-8 | Should list cards show durations? | **Open.** Default: yes, in P3. |
 | Q-9 | Should icons come from Material Icons Extended, or from `Canvas` drawings? | **Open.** Default: `Canvas`, as the app already does. |
@@ -337,7 +352,7 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 | Q-11 | Does `MediaPlayer` play from 0 after a seek to 0 that follows its completion? | **Open.** Device check for P1. The service seeks to 0 before it starts the player, so the default matches §5.1. |
 | Q-12 | Does a drag that starts on the seek bar leave the memory page in place? | **Open.** Device check for P1 (§7, pager). |
 | Q-13 | Do TalkBack and the seek bar's content description read as §7 describes? | **Open.** TalkBack check for P1 (§7). Material 3 overrides the state description (§8.6). |
-| Q-14 | Does a resume that fails on the audio focus show the error dialog as the P1 build does? | **Open.** Device check with another app holding the focus. P2 replaces the dialog with the notice. |
+| Q-14 | Does a resume that fails on the audio focus show the error dialog as the P1 build does? | **Open.** P2 shows the notice instead of the dialog (§8.7). Device check with another app holding the focus. |
 
 ---
 

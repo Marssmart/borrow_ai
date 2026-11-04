@@ -375,7 +375,7 @@
 <p>No manifest change is needed for v1. The microphone permission and the microphone foreground service already exist (<code>AndroidManifest.xml</code>, lines 7 and 24 to 27). P5 adds the media playback service and permission (§12).</p>
 <h3 id="84-pausing-audio-focus-and-the-interruption-rules">8.4 Pausing, audio focus, and the interruption rules</h3>
 <ul>
-<li>Pausing (by the user or the platform) releases the audio focus, so other apps can play (AC-4.5).</li>
+<li>Pausing by the user, an unplugged headset, a permanent loss, or the end of the file releases the audio focus, so other apps can play (AC-4.5). A transient loss keeps the request registered, so the return of the focus is reported (§8.7).</li>
 <li>Resuming requests the focus again. If the request fails, the memory stays paused and the notice says so.</li>
 <li>A transient loss (<code>AUDIOFOCUS_LOSS_TRANSIENT</code>, and <code>AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK</code>, which speech should not duck) pauses with <code>TRANSIENT</code>. The service resumes only when the focus returns, and only if playback was running (AC-6.2).</li>
 <li>A permanent loss (<code>AUDIOFOCUS_LOSS</code>) pauses with <code>PERMANENT</code>. Nothing resumes it.</li>
@@ -398,6 +398,20 @@
 <li>Seek and skip need an active playback. An idle memory has no position to move, so the seek bar and the skip buttons are disabled for it.</li>
 <li>P1 stores no duration. The duration exists only while the memory plays or is paused. Once playback stops, the total time shows "Duration unknown" again until P3 stores durations. AC-1.6 and AC-7.2 are P3 targets.</li>
 <li>The focus listener still stops playback until P2 (§8.4). Instrumented tests for <code>AndroidAudioPlayer</code> (§13) are not in P1, because they need a device and an audio fixture.</li>
+</ul>
+<h3 id="87-phase-2-as-built">8.7 Phase 2 as built</h3>
+<p>These decisions refine §8.3 and §8.4. They were made when P2 was built.</p>
+<ul>
+<li><code>AudioPlayer.setInterruptionHandler</code> takes a <code>PlaybackInterruption</code>. The enum has <code>TRANSIENT</code> and <code>PERMANENT</code> from §8.3, and two more values. <code>FOCUS_REGAINED</code> tells the service that a transient loss ended, so it can resume (AC-6.2). <code>OUTPUT_UNPLUGGED</code> is sent when the audio output becomes noisy, such as a headset unplug (AC-6.3). Lambdas that do not name the argument still compile. Function references do not, so they must take the new parameter.</li>
+<li>A transient loss keeps the audio focus request registered. Abandoning it would stop the platform from reporting that the focus came back. A user pause, a headset unplug, a permanent loss, and the end of the file all release the focus (AC-4.5).</li>
+<li><code>AudioFocusHeldException</code>, a <code>PlaybackUnavailableException</code>, marks a play or resume that another app's focus refused. A refused resume leaves the memory paused, sets <code>Playing.pausedByOtherApp</code>, and returns <code>PlaybackError.AudioFocusHeld</code>. The notice shows instead of the error dialog (Q-14). A refused play request still shows the playback-unavailable dialog, as it did before P2. §8.4 does not cover that case.</li>
+<li><code>Playing.pausedByOtherApp</code> is true after a <code>TRANSIENT</code> or <code>PERMANENT</code> loss, so the notice shows (AC-6.1). A headset unplug leaves it false, so no notice shows.</li>
+<li>The service remembers whether playback was running when a transient loss paused it. The focus coming back resumes playback only then. A user pause or resume clears that memory, and so does a permanent loss. A refused resume keeps it, so the focus coming back later still resumes playback that was running.</li>
+<li>The speed is session state in the service, exposed as <code>MediaSessionService.playbackSpeed</code> (a <code>StateFlow</code>), so the speed button shows it while nothing plays. <code>Playing.speed</code> mirrors it while a memory plays. <code>AudioPlayer.setSpeed</code> keeps the speed for later <code>play</code> calls on the same player. If a device rejects a speed, the player keeps the speed it had, and the button still shows the chosen speed. That is an open device check.</li>
+<li>The Android player sets the speed with <code>PlaybackParams</code> (pitch 1.0) before it starts a memory, so a memory does not begin at 1× for a moment. If setting the speed starts a paused player, the player pauses it again (Q-3). Neither behaviour has been checked on a device.</li>
+<li>The speed button sits on the panel row beside the transport controls. The transport takes the remaining width, so the two do not overlap in layout. How the row fits on narrow screens is an open device check.</li>
+<li>Speaker samples (speaker recognition spec, section 8.3) play through the same player. A sample has no pause, so an interruption stops it, and nothing resumes it. A sample plays at the session speed. The wake-up before its end is scaled by that speed, so a sample stops at its end at any speed.</li>
+<li>The instrumented tests for <code>AndroidAudioPlayer</code> in §13 are still not written. They need a device and an audio fixture.</li>
 </ul>
 <hr />
 <h2 id="9-platform-split">9. Platform split</h2>
@@ -562,7 +576,7 @@
 <tr>
 <td>Q-3</td>
 <td>Does <code>setPlaybackParams</code> start playback when the player is paused?</td>
-<td><strong>Open.</strong> Test on devices. If it does, re-pause at once.</td>
+<td><strong>Open.</strong> The re-pause is built in P2 (§8.7). Test on devices.</td>
 </tr>
 <tr>
 <td>Q-4</td>
@@ -577,7 +591,7 @@
 <tr>
 <td>Q-6</td>
 <td>Should a headset unplugged pause playback in v1?</td>
-<td><strong>Open.</strong> Default: yes, in P2. Needs a <code>BroadcastReceiver</code> for <code>ACTION_AUDIO_BECOMING_NOISY</code>.</td>
+<td><strong>Open.</strong> Default yes, built in P2 with a receiver for <code>ACTION_AUDIO_BECOMING_NOISY</code> (§8.7). Test on devices.</td>
 </tr>
 <tr>
 <td>Q-7</td>
@@ -617,7 +631,7 @@
 <tr>
 <td>Q-14</td>
 <td>Does a resume that fails on the audio focus show the error dialog as the P1 build does?</td>
-<td><strong>Open.</strong> Device check with another app holding the focus. P2 replaces the dialog with the notice.</td>
+<td><strong>Open.</strong> P2 shows the notice instead of the dialog (§8.7). Device check with another app holding the focus.</td>
 </tr>
 </tbody>
 </table>
