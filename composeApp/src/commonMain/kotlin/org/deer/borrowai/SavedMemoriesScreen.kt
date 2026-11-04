@@ -118,6 +118,8 @@ internal fun SavedMemoriesScreen(
         SavedMemoriesStateHolder(
             memoryService = services.memories,
             mediaSessionService = services.mediaSession,
+            speakers = services.speakers,
+            speakerAnalysisActive = services::speakerAnalysisActive,
             pagerState = memoryPagerState,
             memoriesListState = memoriesListState,
             detailScrollState = detailScrollState,
@@ -170,11 +172,13 @@ internal fun SavedMemoriesScreen(
                 summaryModelMissing = uiState.summaryModelMissing,
                 categoryNames = uiState.categoryNames,
                 listState = stateHolder.memoriesListState,
+                speakerChips = uiState.speakerChips,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)
                     ?.takeUnless { it.paused }
                     ?.target,
                 playbackControlsAvailable = stateHolder.playbackControlsAvailable,
                 onOpenMemory = stateHolder::openMemory,
+                onOpenMemoryAtSpeaker = stateHolder::openMemoryAtSpeaker,
                 onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
                 onSearchTextChanged = stateHolder::onSearchTextChanged,
                 onSearchSubmit = stateHolder::submitSearch,
@@ -197,6 +201,13 @@ internal fun SavedMemoriesScreen(
                     },
                     onSeekPlayback = stateHolder::seekPlayback,
                     onSkipPlayback = stateHolder::skipPlayback,
+                    services = services,
+                    playingSample = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                        ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
+                        ?.target,
+                    onPlaySample = { stateHolder.toggleSamplePlayback(it) },
+                    focusedSpeakerOrdinal = uiState.focusedSpeakerOrdinal,
+                    onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
                 )
             }
 
@@ -266,9 +277,11 @@ private fun MemoryListScreen(
     summaryModelMissing: Boolean,
     categoryNames: Map<Int, String>,
     listState: LazyListState,
+    speakerChips: Map<String, SpeakerChipsState>,
     playingTarget: PlaybackTarget?,
     playbackControlsAvailable: Boolean,
     onOpenMemory: (String) -> Unit,
+    onOpenMemoryAtSpeaker: (String, Int?) -> Unit,
     onPlayRecording: (String) -> Unit,
     onSearchTextChanged: (String) -> Unit,
     onSearchSubmit: () -> Unit,
@@ -337,7 +350,9 @@ private fun MemoryListScreen(
                     categoryNames = memory.categories.mapNotNull { categoryNames[it] },
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
                     playbackControlsAvailable = playbackControlsAvailable,
+                    speakerChips = speakerChips[memory.id],
                     onOpen = { onOpenMemory(memory.id) },
+                    onOpenSpeaker = { ordinal -> onOpenMemoryAtSpeaker(memory.id, ordinal) },
                     onPlayRecording = { onPlayRecording(memory.id) },
                 )
             }
@@ -351,7 +366,9 @@ private fun MemoryCard(
     categoryNames: List<String>,
     playingContent: PlaybackContent?,
     playbackControlsAvailable: Boolean,
+    speakerChips: SpeakerChipsState?,
     onOpen: () -> Unit,
+    onOpenSpeaker: (Int?) -> Unit,
     onPlayRecording: () -> Unit,
 ) {
     val hasTranscript = memory.transcription.isNotBlank()
@@ -445,6 +462,9 @@ private fun MemoryCard(
                     showIcon = true,
                 )
             }
+            if (speakerRecognitionSupported) {
+                speakerChips?.let { SpeakerChipsRow(state = it, onOpenSpeaker = onOpenSpeaker) }
+            }
             if (memory.transcription.isNotBlank()) {
                 MemoryTextSection(
                     label = stringResource(Res.string.memory_original_transcription),
@@ -466,12 +486,17 @@ private fun MemoryCard(
 @Composable
 private fun MemoryDetailScreen(
     memory: Memory,
+    services: AppServices,
     scrollState: ScrollState,
     playback: MediaSessionState.Playing?,
     playbackControlsAvailable: Boolean,
     onPlayRecording: () -> Unit,
     onSeekPlayback: (Long) -> Unit,
     onSkipPlayback: (Long) -> Unit,
+    playingSample: PlaybackTarget?,
+    onPlaySample: (PlaybackTarget) -> Unit,
+    focusedSpeakerOrdinal: Int?,
+    onSpeakerFocusHandled: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -551,6 +576,17 @@ private fun MemoryDetailScreen(
                     )
                 }
             }
+            if (speakerRecognitionSupported) {
+                SpeakersSection(
+                    memory = memory,
+                    speakers = services.speakers,
+                    hasRecordingFile = services.mediaSession::hasRecordingFile,
+                    playingTarget = playingSample,
+                    onPlaySample = onPlaySample,
+                    focusedSpeakerOrdinal = focusedSpeakerOrdinal,
+                    onSpeakerFocusHandled = onSpeakerFocusHandled,
+                )
+            }
         }
     }
 }
@@ -626,7 +662,7 @@ private fun MemorySectionIcon(original: Boolean) {
 }
 
 @Composable
-private fun AuroraPanel(
+internal fun AuroraPanel(
     shape: Shape = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_SHAPE,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentPadding: PaddingValues = SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_CONTENT_PADDING,
@@ -677,7 +713,7 @@ private fun AudioPlaybackButtons(
 }
 
 @Composable
-private fun PlaybackButton(
+internal fun PlaybackButton(
     playing: Boolean,
     playLabel: StringResource,
     playingLabel: StringResource,

@@ -20,6 +20,7 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryError
@@ -219,6 +220,8 @@ class SavedMemoriesDeleteTest {
     ) = SavedMemoriesStateHolder(
         memoryService = memoryService,
         mediaSessionService = mediaSession,
+        speakers = FakeSpeakerService(),
+        speakerAnalysisActive = { false },
         summaryModelMissing = MutableStateFlow(false),
         pagerState = PagerState(pageCount = { 2 }),
         memoriesListState = LazyListState(),
@@ -228,7 +231,7 @@ class SavedMemoriesDeleteTest {
     )
 }
 
-private class FakeMediaSession : MediaSessionService {
+internal class FakeMediaSession : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     override val state: StateFlow<MediaSessionState> = mutableState
     var stopPlaybackCalls = 0

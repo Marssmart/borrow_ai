@@ -13,17 +13,35 @@ enum class PlaybackContent {
     TRANSCRIPTION,
     SUMMARY,
     RECORDING,
+
+    /** The stretch of a recording where one speaker talks. The target's [PlaybackTarget.sample] gives its range. */
+    SPEAKER_SAMPLE,
+}
+
+/** A range of a recording in milliseconds from its start. [endMs] is after [startMs]. */
+data class PlaybackSample(val startMs: Long, val endMs: Long) {
+    init {
+        require(startMs >= 0 && endMs > startMs) { "A sample needs a positive time range." }
+    }
 }
 
 data class PlaybackTarget(
     val memoryId: String,
     val content: PlaybackContent,
+    /** The range played for [PlaybackContent.SPEAKER_SAMPLE]. Only that content has a range. */
+    val sample: PlaybackSample? = null,
 ) {
-    /** Text shown for the target. Raw recordings are audio, so they have no text. */
+    init {
+        require((content == PlaybackContent.SPEAKER_SAMPLE) == (sample != null)) {
+            "Only a speaker sample target has a sample range."
+        }
+    }
+
+    /** Text shown for the target. Raw recordings and speaker samples are audio, so they have no text. */
     fun getText(memory: Memory): String = when (content) {
         PlaybackContent.TRANSCRIPTION -> memory.transcription
         PlaybackContent.SUMMARY -> memory.summary
-        PlaybackContent.RECORDING -> ""
+        PlaybackContent.RECORDING, PlaybackContent.SPEAKER_SAMPLE -> ""
     }
 }
 
@@ -102,6 +120,9 @@ interface MediaSessionService {
     /** False when this service cannot start a raw recording. Recording controls should be disabled. */
     val recordingAvailable: Boolean
         get() = true
+
+    /** True when [memory] has its raw recording on disk, so the recording and its speaker samples can be played. */
+    fun hasRecordingFile(memory: Memory): Boolean = false
 
     /** Why microphone access was denied, or null when it is granted. Platforms without denial tracking report null. */
     val microphoneDenial: StateFlow<MicrophoneDenial?>

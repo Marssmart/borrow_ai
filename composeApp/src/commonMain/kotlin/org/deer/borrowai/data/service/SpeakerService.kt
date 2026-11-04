@@ -49,6 +49,9 @@ interface SpeakerService {
     /** The occurrences of memory [memoryId], ordered by ordinal. */
     suspend fun findOccurrences(memoryId: String): Either<SpeakerError, List<SpeakerOccurrence>>
 
+    /** The occurrences of every memory in one read. The memory list uses it for its chips, so it never reads per row (AC-1.5). */
+    suspend fun findAllOccurrences(): Either<SpeakerError, List<SpeakerOccurrence>>
+
     /**
      * Replaces every occurrence and embedding of memory [memoryId] with [drafts], in one batch. A linked draft also adds
      * its embedding to its speaker, and a speaker keeps at most [MAX_EMBEDDINGS_PER_SPEAKER]. The oldest are dropped.

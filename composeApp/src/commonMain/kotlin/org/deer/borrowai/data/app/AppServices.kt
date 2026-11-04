@@ -71,6 +71,8 @@ class AppServices internal constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val speakers: SpeakerService,
+    /** Finds speakers in recordings. Settings reads its availability, which stays false until a model is pinned. */
+    val speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
     val mediaSession: MediaSessionService,
     /** Runs the transcription jobs. Android's WorkManager workers reach it through a holder. */
     val transcriptionRunner: TranscriptionWorkRunner,
@@ -94,6 +96,10 @@ class AppServices internal constructor(
 ) {
     private val closed = MutableStateFlow(false)
     private val pendingWrites = PendingWrites(closeScope)
+
+    /** Whether speaker analysis can run now: the user has opted in and a speaker model is available (section 9.1). */
+    suspend fun speakerAnalysisActive(): Boolean =
+        speakers.isFeatureEnabled().getOrNull() == true && speakerAnalyzer.isAvailable()
 
     /**
      * Starts a write that must finish even if the screen that asked for it leaves, such as a memory delete. [close]
@@ -334,6 +340,7 @@ class AppServices internal constructor(
                     modelSetup = modelSetup,
                     memories = memories,
                     speakers = speakers,
+                    speakerAnalyzer = speakerAnalyzer,
                     mediaSession = mediaSession,
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,

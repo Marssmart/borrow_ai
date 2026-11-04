@@ -44,9 +44,10 @@ import org.deer.borrowai.data.service.MutableJob
  * cancels the pending start. Stored memories hold only a path relative to [recordingsRoot], because
  * absolute container paths change between installs and updates.
  *
- * Playback plays a memory's raw recording through [audioPlayer]. Only [PlaybackContent.RECORDING] targets have
- * audio, so text targets return [PlaybackError.RecordingUnavailable]. Requesting playback while
- * recording asks for confirmation. Confirming stops and saves the recording, then plays the requested memory.
+ * Playback plays a memory's raw recording through [audioPlayer]. Recording and speaker sample targets have audio, so text
+ * targets return [PlaybackError.RecordingUnavailable]. A speaker sample seeks to its start and stops at its end. It has
+ * no pause, seek, or skip. Requesting playback while recording asks for confirmation. Confirming stops and saves the
+ * recording, then plays the requested memory.
  */
 @OptIn(ExperimentalUuidApi::class)
 class RecordingMediaSessionService(
@@ -141,6 +142,8 @@ class RecordingMediaSessionService(
         return true
     }
 
+    override fun hasRecordingFile(memory: Memory): Boolean = recordingFile(memory) != null
+
     override fun stopPlayback() {
         ensureOpen()
         stopActivePlayback()
@@ -149,7 +152,7 @@ class RecordingMediaSessionService(
     override fun pausePlayback() {
         ensureOpen()
         val playing = mutableState.value as? MediaSessionState.Playing ?: return
-        if (playing.paused || !audioPlayer.controlsAvailable) return
+        if (playing.paused || !audioPlayer.controlsAvailable || playing.target.sample != null) return
         tickerJob.cancel()
         audioPlayer.pause()
         mutableState.value = playing.copy(paused = true, elapsedMillis = currentPlaybackPosition(playing))
@@ -178,7 +181,7 @@ class RecordingMediaSessionService(
     override fun seekPlayback(positionMillis: Long) {
         ensureOpen()
         val playing = mutableState.value as? MediaSessionState.Playing ?: return
-        if (!audioPlayer.controlsAvailable) return
+        if (!audioPlayer.controlsAvailable || playing.target.sample != null) return
         val target = positionMillis.coerceIn(0L, playing.durationMillis)
         audioPlayer.seekTo(target)
         mutableState.value = playing.copy(elapsedMillis = target)
@@ -214,16 +217,24 @@ class RecordingMediaSessionService(
     private fun findMemory(target: PlaybackTarget) =
         memoryService.getState().value.firstOrNull { it.id == target.memoryId }
 
-    /** Returns the absolute file path for a raw recording target, or null when no playable file exists. */
+    /** Returns the absolute file path for a recording or speaker sample target, or null when no playable file exists. */
     private fun playableRecordingPath(target: PlaybackTarget, memory: Memory): Path? {
-        if (target.content != PlaybackContent.RECORDING) return null
+        if (target.content != PlaybackContent.RECORDING && target.content != PlaybackContent.SPEAKER_SAMPLE) return null
+        return recordingFile(memory)
+    }
+
+    /** The absolute path of [memory]'s raw recording, or null when the file is missing. */
+    private fun recordingFile(memory: Memory): Path? {
         val relativePath = memory.recordingPath?.takeIf { it.isNotBlank() } ?: return null
         val absolutePath = recordingsRoot / relativePath
         return absolutePath.takeIf { fileSystem.exists(it) }
     }
 
     private fun startPlayback(target: PlaybackTarget, absolutePath: Path): Either<PlaybackError, PlaybackRequest> {
-        val durationMillis = try {
+        val sample = target.sample
+        // A sample starts at its position. Without seeking it would play from the start of the recording instead.
+        if (sample != null && !audioPlayer.controlsAvailable) return PlaybackError.RecordingUnavailable.left()
+        val fileDurationMillis = try {
             audioPlayer.play(absolutePath.toString())
         } catch (exception: PlaybackUnavailableException) {
             // A failed replacement has already stopped any previous playback, so the state must not stay Playing.
@@ -231,7 +242,24 @@ class RecordingMediaSessionService(
             if (mutableState.value is MediaSessionState.Playing) mutableState.value = MediaSessionState.Idle
             return PlaybackError.RecordingUnavailable.left()
         }
-        mutableState.value = MediaSessionState.Playing(target = target, elapsedMillis = 0L, durationMillis = durationMillis)
+        // Positions are absolute within the file. A sample stops at its end, or at the end of the file if it runs past it.
+        val startMillis: Long
+        val stopMillis: Long
+        if (sample == null) {
+            startMillis = 0L
+            stopMillis = fileDurationMillis
+        } else {
+            if (sample.startMs >= fileDurationMillis) {
+                tickerJob.cancel()
+                audioPlayer.stop()
+                if (mutableState.value is MediaSessionState.Playing) mutableState.value = MediaSessionState.Idle
+                return PlaybackError.RecordingUnavailable.left()
+            }
+            startMillis = sample.startMs
+            stopMillis = minOf(sample.endMs, fileDurationMillis)
+            audioPlayer.seekTo(startMillis)
+        }
+        mutableState.value = MediaSessionState.Playing(target = target, elapsedMillis = startMillis, durationMillis = stopMillis)
         // close() can run while audioPlayer.play blocks. It sets closed before stopping playback, so checking again
         // after publishing either sees the close or lets close stop this playback.
         if (closed.value) {
@@ -239,7 +267,7 @@ class RecordingMediaSessionService(
             return PlaybackError.RecordingUnavailable.left()
         }
         tickerJob.cancel()
-        startPlaybackTicker(durationMillis, startMillis = 0L)
+        startPlaybackTicker(stopMillis, startMillis)
         return PlaybackRequest.Started.right()
     }
 
@@ -247,11 +275,13 @@ class RecordingMediaSessionService(
         // The position comes from the player. A player that cannot report it falls back to a monotonic clock, so
         // changing the wall clock cannot stop or extend playback.
         val startedAtMillis = monotonicMillis()
+        fun currentPosition(): Long = audioPlayer.positionMillis() ?: (startMillis + monotonicMillis() - startedAtMillis)
         tickerJob.launch {
             while (isActive) {
-                delay(PLAYBACK_TICK_INTERVAL_MILLIS)
-                val positionMillis = audioPlayer.positionMillis()
-                    ?: (startMillis + monotonicMillis() - startedAtMillis)
+                // Wakes at the end when that comes first, so a speaker sample stops at its end and not a tick later.
+                val remainingMillis = durationMillis - currentPosition()
+                delay(minOf(PLAYBACK_TICK_INTERVAL_MILLIS, remainingMillis.coerceAtLeast(0L)))
+                val positionMillis = currentPosition()
                 if (positionMillis >= durationMillis) {
                     finishPlayback()
                     return@launch
@@ -267,9 +297,13 @@ class RecordingMediaSessionService(
         }
     }
 
-    /** Playback reached the end of the file. A player with controls stays paused there so Play can start it again. */
+    /**
+     * Playback reached its end. A recording with controls stays paused there so Play can start it again. A speaker sample
+     * stops instead, since it has nothing to resume.
+     */
     private fun finishPlayback() {
-        if (!audioPlayer.controlsAvailable) {
+        val playing = mutableState.value as? MediaSessionState.Playing
+        if (!audioPlayer.controlsAvailable || playing?.target?.sample != null) {
             stopActivePlayback()
             return
         }

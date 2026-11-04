@@ -72,6 +72,10 @@ fun App(services: AppServices) {
     val appUiState by appStateHolder.uiState.collectAsState()
     val backgroundActivities by services.backgroundActivities.collectAsState()
     val appSettings by services.appSettings.settings.collectAsState()
+    val speakerSettingsHolder = remember(services, scope) {
+        SpeakerSettingsStateHolder(services.speakers, services.speakerAnalyzer, scope)
+    }
+    val speakerSettings by speakerSettingsHolder.uiState.collectAsState()
     val indicatorState = backgroundActivityIndicatorState(
         activities = backgroundActivities,
         showIndicator = appSettings.showBackgroundActivityIndicator,
@@ -151,6 +155,8 @@ fun App(services: AppServices) {
                             onUseGpuAccelerationChange = { use ->
                                 scope.launch { services.appSettings.setUseGpuAcceleration(use) }
                             },
+                            speakerSettings = speakerSettings,
+                            onTurnOffSpeakerRecognition = speakerSettingsHolder::turnOff,
                         )
                     }
                 }

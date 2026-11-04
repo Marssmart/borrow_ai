@@ -1,6 +1,6 @@
 # Speaker Recognition
 
-Status: Planning (draft v0.1)
+Status: In progress (draft v0.1). P1 (data and pipeline) and P2 (read-only UI, Android only) are built. P3 to P5 are planned.
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 
@@ -171,6 +171,7 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 | `createdAt` | Long (epoch millis) | |
 | `lastUsedAt` | Long (epoch millis) | Sort key for the assign sheet. |
 | `embeddingCount` | Int | Capped at 10 by dropping the oldest embeddings. |
+| `colorIndex` | Int | Index into the 8-colour palette (§9.7). A new speaker takes the first index no other library speaker uses. Read as 0 when absent. |
 
 **SpeakerEmbedding**
 
@@ -280,16 +281,17 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 ### 9.1 Memory list row
 
 - Speaker chips sit under the summary line, left-aligned, same height as the category chip.
-- Chip states: recognized (filled with the speaker's colour, name), unknown (outline in the speaker's colour, "Speaker N"), pending (muted grey, no label, subtle pulse), overflow ("+N").
+- Chip states: recognized (filled with the speaker's colour, name), unknown (outline in the speaker's colour, "Speaker N"), pending (muted grey, no label, subtle pulse), overflow ("+N"). The pending chip shows only while analysis can run (feature on and a model available), so P2 never shows one.
 - Each speaker has a colour from the palette in §9.7. Colour is never the only cue: the state (filled or outline) and the label always carry the same meaning.
-- Chips are tappable. Tapping a chip opens the detail view scrolled to that speaker's card.
+- Chips are tappable. Tapping a chip opens the detail view scrolled to that speaker's card. Tapping "+N" opens the detail view at the top.
 
 ### 9.2 Memory detail
 
 - New "Speakers" section below the transcript, above the category.
 - One card per occurrence, showing: label or name, speech duration, a Play button for the sample, and the action button.
 - Action button is "Assign" for unknown, "Change" for matched, and "Not this person" as a secondary action on auto-matched cards.
-- Empty state: "No speakers detected in this memory."
+- Empty state: "No speakers detected in this memory." Shown only when analysis is DONE and found no speakers (Q-10).
+- P2: the section is left out while the memory has no speakers and its analysis is PENDING, ANALYZING, FAILED, or SKIPPED. Cards show the label, "Speech m:ss", and Play sample. A missing recording shows "Audio unavailable" with no button (AC-2.4). The visual guide's "Audio unavailable. The original recording is missing." is shortened to the AC-2.4 text.
 
 ### 9.3 Assign sheet
 
@@ -301,6 +303,8 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 - Row: "Speaker recognition" toggle, explanation line (AC-6.2). Turning it on shows the consent screen first (§9.8).
 - Row: model status (downloaded, downloading, not available on this device).
 - Row: "Withdraw consent and delete speaker data" (AC-6.6). Confirmed with a dialog.
+- P2: the switch is disabled while the feature is off, so analysis cannot start without consent. It can only be switched off until the consent screen (§9.8) ships. The model row is labelled "Speaker models" and reads "Not available on this device" while no model is pinned. The withdraw row is not in P2.
+- iOS hides the Settings rows, the detail section, and the list chips (Q-5). The shared code checks `speakerRecognitionSupported`.
 
 ### 9.8 Consent screen
 
@@ -330,8 +334,8 @@ All values are proposals until measured in §11.
 
 ### 9.7 Speaker colours
 
-- A fixed palette of 8 colours. Each colour is a fill colour that passes WCAG AA (4.5:1) with white text, plus a light tint for backgrounds.
-- A library speaker keeps the same colour in every memory, chip, card, and sheet. The colour is stored with the speaker, not recomputed. (Confirmed.)
+- A fixed palette of 8 colours. Each colour is a fill colour that passes WCAG AA (4.5:1) with white text, plus a light tint for backgrounds. P2 uses the fills only.
+- A library speaker keeps the same colour in every memory, chip, card, and sheet. The colour is stored with the speaker, not recomputed (`Speaker.colorIndex`). (Confirmed.)
 - An unknown speaker gets the first palette colour not used by another speaker in the same memory, in order of first speech. Colours can repeat across memories. (Confirmed.)
 - Up to 8 speakers per memory (§9.6), so every speaker in one memory can have a distinct colour.
 - Colour is decorative. State and label carry the meaning, so the palette works in greyscale. The palette is not checked for colour-blind separation yet. Spike S-8 should check it on real device screens.
@@ -347,7 +351,7 @@ All values are proposals until measured in §11.
 | Analyzer, Android | `androidMain` | sherpa-onnx diarization and embedding wrapper, `UnavailableSpeakerAnalyzer` default |
 | Analyzer, iOS | `iosMain` | `UnavailableSpeakerAnalyzer` only in v1. No iOS transcriber exists, so no input. |
 | UI | `commonMain` | Chips, speaker cards, assign sheet, Settings rows |
-| Playback | `androidMain` / `iosMain` | Seeked playback of a time range from the `.m4a` (reuse existing player) |
+| Playback | `commonMain` / `androidMain` | Sample playback runs through `RecordingMediaSessionService` on the playback API (`play`, `seekTo`, `positionMillis`). It seeks to the start and stops at the end. iOS has no playback controls, so samples are refused there. |
 
 Clustering and matching are pure Kotlin in `commonMain` so they can be unit-tested on the JVM without a device.
 
@@ -376,7 +380,7 @@ The spike writes its numbers into this file (§11 table, filled in) before imple
 
 ## 12. Open questions
 
-These were open before implementation. All nine are decided, recorded in the Decision column below.
+These were open before implementation. Q-1 to Q-9 are decided, recorded in the Decision column below. Q-10 onward were found while building P2 and are open.
 
 | # | Question | Decision |
 |---|---|---|
@@ -389,6 +393,12 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Explicit in-app consent** (decided, §9.8). Analysis does not start until the user agrees. Legal concerns (BIPA, GDPR Art. 9, CUBI) are treated as covered by this explicit opt-in and the delete-all path (AC-6.6). |
 | Q-8 | Which speaker model license is acceptable? | **Any license that allows commercial use** (decided). S-5 still verifies each model. |
 | Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
+| Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (`SpeakerAnalysisRunner`, empty drafts), and SKIPPED also covers a feature that is off. | **Open.** P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE. |
+| Q-11 | §9.7 says a library speaker keeps a stored colour, but `Speaker` has no colour field. | **Decided (P2).** `Speaker.colorIndex` stores the palette index (§6.2). A new speaker takes the first index no library speaker uses. |
+| Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Open.** The consent screen must ship before any UI path can call `setFeatureEnabled(true)`. |
+| Q-13 | Does a sample play its first few milliseconds from the start of the recording? `play()` starts playback at once, and the seek to the sample start follows it. | **Open (device).** Check on a Pixel that a sample does not start with the first words of the recording. If it does, the playback API needs a start position for `play()`. |
+| Q-14 | Does a sample stop at its end on a device? The ticker wakes at the end, so the stop should land within a few milliseconds of the end. | **Open (device).** Check with recorded two-speaker memories, and listen for the next speaker at the stop. |
+| Q-15 | Does a chip tap scroll the detail to the speaker's card on a device, and do the chips read well with TalkBack? The card is brought into view with `BringIntoViewRequester`. | **Open (device).** Tap a chip on a memory with 4 or more speakers and check the card is on screen. In TalkBack, check each chip reads its name or "Speaker N", and "+N" reads as "N more speakers". |
 
 ---
 
@@ -429,7 +439,7 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | P4 Re-analysis | Queue on opt-in, speaker creation and model upgrade; drain on app launch | US-5 met. |
 | P5 iOS | Only after an iOS transcriber exists | Separate plan. |
 
-Each phase is a separate MR with its own CHANGELOG entry and version bump (see `AGENTS.md`).
+Each phase is a separate MR with its own CHANGELOG entry and version bump (see `AGENTS.md`). P2 ships as one MR, after the search and filter LazyColumn change (#76) is on main, so the list chips build on that list.
 
 ---
 

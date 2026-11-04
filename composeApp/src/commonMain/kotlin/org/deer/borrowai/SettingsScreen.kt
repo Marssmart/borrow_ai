@@ -33,6 +33,8 @@ internal fun SettingsScreen(
     onShowBackgroundActivityIndicatorChange: (Boolean) -> Unit,
     useGpuAcceleration: Boolean,
     onUseGpuAccelerationChange: (Boolean) -> Unit,
+    speakerSettings: SpeakerSettingsUiState,
+    onTurnOffSpeakerRecognition: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -95,6 +97,9 @@ internal fun SettingsScreen(
                 checked = useGpuAcceleration,
                 onCheckedChange = null,
             )
+        }
+        if (speakerRecognitionSupported) {
+            SpeakerSettingsRows(state = speakerSettings, onTurnOff = onTurnOffSpeakerRecognition)
         }
     }
 }
