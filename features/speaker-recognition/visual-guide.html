@@ -386,12 +386,12 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>BorrowAI features</h1>
       <p class="lede">
-        What the app does today (Shipped sections) and the speaker recognition screens still being designed (Mockup sections).
+        What the app does today (Shipped sections). Speaker recognition is partly shipped on Android: its built parts carry a Shipped tag, and the Mockup sections and tags show what is still being designed.
         Speaker recognition master spec: <code>SPEAKER_RECOGNITION.md</code>.
       </p>
     </header>
 
-    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the code in 1.9.7 wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
+    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the current build wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. A section can carry both tags when only part of it is built. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
 
     <section class="section">
       <p class="eyebrow">Shipped · 1 · Navigation</p>
@@ -585,7 +585,7 @@
     <section class="section">
       <p class="eyebrow">Shipped · 7 · Settings</p>
       <h2>Settings screen <span class="tag tag-live">Shipped</span></h2>
-      <p class="section-note">No longer a placeholder. It holds two switches, both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). The speaker recognition settings below are mockups.</p>
+      <p class="section-note">No longer a placeholder. It holds two switches, both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). On Android it also has the speaker recognition rows, described in the Opt-in and re-analysis section below. The consent and re-analysis parts there are mockups.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -607,19 +607,18 @@
 
     <section class="section">
       <p class="eyebrow">Shipped · 9 · Speaker data layer</p>
-      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Chips, library, and consent are mockups</span></h2>
-      <p class="section-note">Shipped in 1.8.0 with no interface: a speaker library and per-memory speakers in a separate local collection, speech clustering, a playable sample per speaker, and library matching. Memories gained speaker analysis status fields, and purging a memory removes its speaker data. The feature is off by default and no speech model is bundled, so no analysis runs yet. In this release the Speakers section of the memory detail, its sample playback, and the Settings rows ship. The sections below show the planned UI, and each one notes how the shipped version differs.</p>
+      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Library, assignment, consent, and re-analysis are mockups</span></h2>
+      <p class="section-note">Shipped in 1.8.0 with no interface: a speaker library and per-memory speakers in a separate local collection, speech clustering, a playable sample per speaker, and library matching. Memories gained speaker analysis status fields, and purging a memory removes its speaker data. The feature is off by default and no speech model is bundled, so no analysis runs yet. In this release, the speaker chips on the memory list, the Speakers section of the memory detail with its sample playback, and the Settings rows ship on Android only. iOS shows none of them. No speech model is pinned, so no memory has speakers yet and the list and detail look unchanged. The sections below show the planned UI, and each one notes how the shipped version differs.</p>
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 1 · Memory list</p>
-      <h2>Speaker chips on each row</h2>
-      <p class="section-note">Up to three chips per row. Recognized names are filled teal, unknown speakers are outlined, and pending analysis is muted. Extra speakers collapse into “+N”.</p>
+      <p class="eyebrow">Shipped · 10 · Speaker chips</p>
+      <h2>Speaker chips on each row <span class="tag tag-live">Shipped</span> <span class="tag tag-ios">Android only</span></h2>
+      <p class="section-note">Up to three chips per row, under the summary. Recognized names are filled with the speaker’s colour, unknown speakers are outlined in that colour, and pending analysis is muted. Extra speakers collapse into “+N”. Pending shows only while speaker analysis can run. Tapping a speaker chip opens the memory at that speaker’s card.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Memories</div>
-            <div class="muted" style="margin-top:-6px">Speakers ›  <span class="muted">(entry point, to confirm)</span></div>
             <div class="row">
               <div class="row-title">Dinner plans with Sam</div>
               <div class="row-meta">Today · 4:12 · Social</div>
@@ -688,10 +687,6 @@
               </div>
             </div>
             <div class="row">
-              <div class="row-title" style="font-size:12px">Pending</div>
-              <div class="row-meta">Muted grey with a dot. Shown only while analysis is queued or running.</div>
-            </div>
-            <div class="row">
               <div class="row-title" style="font-size:12px">Overflow</div>
               <div class="row-meta">Shows the number of speakers beyond three.</div>
             </div>
@@ -722,8 +717,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · Memory detail</p>
-      <h2>One card per speaker <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Assign, Change, and Not this person are mockups</span></h2>
+      <p class="eyebrow">Mockup · 1 · Memory detail</p>
+      <h2>One card per speaker <span class="tag tag-live">Shipped</span> <span class="tag tag-ios">Android only</span> <span class="tag tag-mock">Assign, Change, and Not this person are mockups</span></h2>
       <p class="section-note">Each card plays only that speaker’s sample from the original recording. Only one sample plays at a time. Unknown speakers get an Assign action. Matched speakers get Change, and auto-matched speakers also get “Not this person”. Shipped cards show the label, the speech time, and Play sample. A missing recording shows “Audio unavailable” with no button, and the mockup’s longer text is shortened to that. A memory with no speakers shows “No speakers detected in this memory.” only after its analysis has finished.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -792,7 +787,7 @@
                 <span class="btn btn-primary">Assign</span>
               </div>
             </div>
-            <div class="muted" style="margin-top:6px">When the memory has no speech, the section shows:</div>
+            <div class="muted" style="margin-top:6px">When analysis has finished and found no speakers, the section shows:</div>
             <div class="card" style="background:#f6f9f9">
               <div class="card-name" style="font-weight:700;color:#5d7c80">No speakers detected in this memory.</div>
             </div>
@@ -822,7 +817,7 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 3 · Speaker library</p>
+      <p class="eyebrow">Mockup · 2 · Speaker library</p>
       <h2>Rename, merge, delete</h2>
       <p class="section-note">Reached from “Speakers ›” in the memory list header (to confirm). Deleting a speaker never deletes memories. Their chips become “Speaker N” again. Merging combines voice samples, and memories keep their names.</p>
       <div class="mock-grid">
@@ -877,8 +872,8 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 4 · Settings</p>
-      <h2>Opt-in and re-analysis <span class="tag tag-live">Settings rows shipped</span> <span class="tag tag-mock">Consent and re-analysis are mockups</span></h2>
+      <p class="eyebrow">Mockup · 3 · Settings</p>
+      <h2>Opt-in and re-analysis <span class="tag tag-live">Settings rows shipped</span> <span class="tag tag-ios">Android only</span> <span class="tag tag-mock">Consent and re-analysis are mockups</span></h2>
       <p class="section-note">Shipped: the Speaker recognition row with its explanation, and the Speaker models row, which reads “Not available on this device” while no model is pinned. The switch stays off and locked, because turning it on needs the consent screen, which is not built yet. Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is enabled as soon as the user opts in, with no separate control. It is also queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
@@ -932,7 +927,7 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 5 · Pipeline</p>
+      <p class="eyebrow">Mockup · 4 · Pipeline</p>
       <h2>What the user sees, step by step</h2>
       <p class="section-note">Analysis runs after transcription, so transcription status is never blocked by speaker work.</p>
       <div class="flow">
@@ -945,9 +940,9 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 6 · States</p>
+      <p class="eyebrow">Mockup · 5 · States</p>
       <h2>Screen states</h2>
-      <p class="section-note">Every state the UI must handle. Each row maps to an acceptance criterion in the master spec.</p>
+      <p class="section-note">Every state the UI must handle. Each row maps to an acceptance criterion in the master spec. Built in this release on Android: pending chips, the no-speech message (not reachable until Q-10 is decided), missing audio, feature off, and unavailable tier. Analysis failed has no copy yet, so its section is left out. Assignment, matching, library, and re-analysis rows are for later phases.</p>
       <table>
         <thead>
           <tr><th>State</th><th>List row</th><th>Detail card</th><th>Spec</th></tr>

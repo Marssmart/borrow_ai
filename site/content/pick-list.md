@@ -26,7 +26,7 @@ Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more th
 - [ ] **G18** Onboarding: privacy model, storage needed, Wi-Fi and download choices. · S–M
 - [ ] **G19** Manual retry for failed transcription, summary, and categories. · S
 - [ ] **G20** Import audio files and share-in from other apps (Android intents and document picker). · M
-- [ ] **G21** Transcript timestamps and speaker labels. The speaker UI is planned but not built. · M–L
+- [ ] **G21** Transcript timestamps and speaker labels. The read-only speaker UI is built on Android, with no analysis running yet. Assignment and the library are planned. · M–L
 - [ ] **G22** Summary formats: meeting notes, to-dos, journal entry. · S–M
 - [ ] **G23** User-managed categories: create, rename, pin, filter. · M
 - [ ] **G24** Android home-screen widget, Quick Settings tile, and app shortcuts for one-tap capture. · M

@@ -10,7 +10,7 @@ Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L
 
 - **Android:** recording in a foreground service, live transcript (Whisper tiny, English), batch transcript (Whisper base or large-v3 by RAM tier), one-paragraph summary and AI categories (Gemma 4 E2B/E4B or Qwen3 0.6B through LiteRT-LM, optional GPU), saved list, memory detail with "Play recording", background activity pill, and a Settings screen.
 - **iOS:** recording, playback, saved list, microphone permission. Nothing else is wired (`site/content/platforms.md`).
-- **Data:** Couchbase Lite, local only. Soft delete and purge exist in the service layer. A speaker data layer exists with no UI.
+- **Data:** Couchbase Lite, local only. Soft delete and purge exist in the service layer. A speaker data layer exists. Its read-only UI is built on Android, but no speech model is pinned, so no analysis runs.
 - **Settings:** two switches (`AppSettingsService.kt:7-12`, `SettingsScreen.kt`).
 
 ## 2. Missing features
@@ -33,7 +33,7 @@ Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L
 | G18 | **No onboarding.** First launch starts multi-GB downloads with no explanation of the privacy model, storage needed, or the Wi-Fi choice. | No match for onboard or welcome | First-run drop-off and surprise. | S-M |
 | G19 | **No manual retry.** Failed transcription, summary, or categorization retries only automatically (limits: transcription 5, summary 10, categories 3). | `Memory.kt` limits; no retry in UI | Users cannot recover a bad memory themselves. | S |
 | G20 | **No import or share-in.** Audio from other apps (for example WhatsApp voice notes) cannot be brought in. | No document picker or `ACTION_SEND` intent filter | A large, easy intake source is closed. | M |
-| G21 | **Transcripts have no timestamps or speakers.** `transcription` is one string. Speaker recognition is planned, but has no UI. | `Memory.kt` (`transcription: String`); `SPEAKER_RECOGNITION.md:3` ("Planning") | Blocks tap-to-seek, chapters, and "who said what". | M-L |
+| G21 | **Transcripts have no timestamps or speakers.** `transcription` is one string. Speaker recognition has a read-only UI on Android, but no speech model is pinned, so no speakers are found yet. | `Memory.kt` (`transcription: String`); `SPEAKER_RECOGNITION.md:3` ("In progress") | Blocks tap-to-seek, chapters, and "who said what". | M-L |
 | G22 | **One summary format.** The prompt asks for one short summary. No meeting notes, action items, or journal templates. | `SummaryPrompt.kt` (no title or format instructions); changelog 1.3.0 | Less useful for the most common note types. | S-M |
 | G23 | **Categories are AI-only.** They cannot be renamed, created, or pinned by the user. At most three per memory. | Changelog 1.5.0 and 1.6.0; `MemoryService.createCategory` has only the categorizer as caller | Users cannot shape their own structure. | M (with G5) |
 | G24 | **No widgets or app shortcuts.** No home-screen widget, Quick Settings tile, or app shortcut for one-tap capture. | Grep for widget, Glance, shortcut, and QuickSettings: no matches | One-tap capture is the main reason people use this kind of app. | M |
@@ -54,7 +54,7 @@ Covered by gaps above, so not repeated: search (G6), export (G8), speed and paus
 | P5 | Integrations and API (Notion, Slack, Zapier, CRM) | Otter, Plaud, Bee, Voicenotes, Day One | None | M per integration; L for an API |
 | P6 | AI chat over recordings | Otter, Plaud, Bee, Voicenotes, Day One | None (offline version: U1) | M-L |
 | P7 | Action items and reminders | Otter, Plaud, Bee, Voicenotes | None (offline version: U4) | M |
-| P8 | Speaker labels | Google Recorder, Otter | Planned, no UI (G21) | M-L |
+| P8 | Speaker labels | Google Recorder, Otter | Read-only UI on Android, no analysis yet (G21) | M-L |
 
 ## 3a. Peer picture in short
 
