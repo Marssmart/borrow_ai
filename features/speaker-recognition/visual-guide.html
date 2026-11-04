@@ -612,8 +612,8 @@
 
     <section class="section">
       <p class="eyebrow">Shipped · 9 · Speaker data layer</p>
-      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">UI is mockup</span></h2>
-      <p class="section-note">Shipped in 1.8.0 with no interface: a speaker library and per-memory speakers in a separate local collection, speech clustering, a playable sample per speaker, and library matching. Memories gained speaker analysis status fields, and purging a memory removes its speaker data. The feature is off by default and no speech model is bundled, so no analysis runs yet. The sections below show the planned UI.</p>
+      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Chips, library, and consent are mockups</span></h2>
+      <p class="section-note">Shipped in 1.8.0 with no interface: a speaker library and per-memory speakers in a separate local collection, speech clustering, a playable sample per speaker, and library matching. Memories gained speaker analysis status fields, and purging a memory removes its speaker data. The feature is off by default and no speech model is bundled, so no analysis runs yet. In this release the Speakers section of the memory detail, its sample playback, and the Settings rows ship. The sections below show the planned UI, and each one notes how the shipped version differs.</p>
     </section>
 
     <section class="section">
@@ -724,8 +724,8 @@
 
     <section class="section">
       <p class="eyebrow">Mockup · 2 · Memory detail</p>
-      <h2>One card per speaker</h2>
-      <p class="section-note">Each card plays only that speaker’s sample from the original recording. Only one sample plays at a time. Unknown speakers get an Assign action. Matched speakers get Change, and auto-matched speakers also get “Not this person”.</p>
+      <h2>One card per speaker <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Assign, Change, and Not this person are mockups</span></h2>
+      <p class="section-note">Each card plays only that speaker’s sample from the original recording. Only one sample plays at a time. Unknown speakers get an Assign action. Matched speakers get Change, and auto-matched speakers also get “Not this person”. Shipped cards show the label, the speech time, and Play sample. A missing recording shows “Audio unavailable” with no button, and the mockup’s longer text is shortened to that. A memory with no speakers shows “No speakers detected in this memory.” only after its analysis has finished.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -879,8 +879,8 @@
 
     <section class="section">
       <p class="eyebrow">Mockup · 4 · Settings</p>
-      <h2>Opt-in and re-analysis</h2>
-      <p class="section-note">Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is enabled as soon as the user opts in, with no separate control. It is also queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
+      <h2>Opt-in and re-analysis <span class="tag tag-live">Settings rows shipped</span> <span class="tag tag-mock">Consent and re-analysis are mockups</span></h2>
+      <p class="section-note">Shipped: the Speaker recognition row with its explanation, and the Speaker models row, which reads “Not available on this device” while no model is pinned. The switch stays off and locked, because turning it on needs the consent screen, which is not built yet. Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is enabled as soon as the user opts in, with no separate control. It is also queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">

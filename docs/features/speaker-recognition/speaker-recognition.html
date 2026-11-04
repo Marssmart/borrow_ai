@@ -471,7 +471,8 @@
 <li>New "Speakers" section below the transcript, above the category.</li>
 <li>One card per occurrence, showing: label or name, speech duration, a Play button for the sample, and the action button.</li>
 <li>Action button is "Assign" for unknown, "Change" for matched, and "Not this person" as a secondary action on auto-matched cards.</li>
-<li>Empty state: "No speakers detected in this memory."</li>
+<li>Empty state: "No speakers detected in this memory." Shown only when analysis is DONE and found no speakers (Q-10).</li>
+<li>P2 (1.10.0): the section is left out while the memory has no speakers and its analysis is PENDING, ANALYZING, FAILED, or SKIPPED. Cards show the label, "Speech m:ss", and Play sample. A missing recording shows "Audio unavailable" with no button (AC-2.4). The visual guide's "Audio unavailable. The original recording is missing." is shortened to the AC-2.4 text.</li>
 </ul>
 <h3 id="93-assign-sheet">9.3 Assign sheet</h3>
 <ul>
@@ -483,6 +484,8 @@
 <li>Row: "Speaker recognition" toggle, explanation line (AC-6.2). Turning it on shows the consent screen first (§9.8).</li>
 <li>Row: model status (downloaded, downloading, not available on this device).</li>
 <li>Row: "Withdraw consent and delete speaker data" (AC-6.6). Confirmed with a dialog.</li>
+<li>P2 (1.10.0): the switch is disabled while the feature is off, so analysis cannot start without consent. It can only be switched off until the consent screen (§9.8) ships. The model row is labelled "Speaker models" and reads "Not available on this device" while no model is pinned. The withdraw row is not in P2.</li>
+<li>iOS hides the Settings rows, the detail section, and the list chips (Q-5). The shared code checks <code>speakerRecognitionSupported</code>.</li>
 </ul>
 <h3 id="98-consent-screen">9.8 Consent screen</h3>
 <ul>
@@ -582,8 +585,8 @@
 </tr>
 <tr>
 <td>Playback</td>
-<td><code>androidMain</code> / <code>iosMain</code></td>
-<td>Seeked playback of a time range from the <code>.m4a</code> (reuse existing player)</td>
+<td><code>commonMain</code> / <code>androidMain</code></td>
+<td>Sample playback runs through <code>RecordingMediaSessionService</code> on the playback API (<code>play</code>, <code>seekTo</code>, <code>positionMillis</code>). It seeks to the start and stops at the end. iOS has no playback controls, so samples are refused there.</td>
 </tr>
 </tbody>
 </table>
@@ -673,7 +676,7 @@
 <p><strong>P0 status (2026-11-02, no device on this host):</strong> S-1 is a go at the API level, and S-6 is met for the candidate pairs. S-5 is open for the embedding models, so no model is chosen or pinned. S-2, S-3, S-4, S-7, and S-8 are pending device. Unit tests were not run: Gradle could not download its distribution from this host because of a JDK TLS trust error.</p>
 <hr />
 <h2 id="12-open-questions">12. Open questions</h2>
-<p>These were open before implementation. All nine are decided, recorded in the Decision column below.</p>
+<p>These were open before implementation. Q-1 to Q-9 are decided, recorded in the Decision column below. Q-10 onward were found while building P2 and are open.</p>
 <table>
 <thead>
 <tr>
@@ -727,6 +730,31 @@
 <td>Q-9</td>
 <td>Store speakers in a separate Couchbase collection (<code>KotbaseSpeakerService</code>) or in <code>KotbaseMemoryService</code>?</td>
 <td><strong>Separate <code>KotbaseSpeakerService</code></strong> (decided).</td>
+</tr>
+<tr>
+<td>Q-10</td>
+<td>Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (<code>SpeakerAnalysisRunner</code>, empty drafts), and SKIPPED also covers a feature that is off.</td>
+<td><strong>Open.</strong> P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE.</td>
+</tr>
+<tr>
+<td>Q-11</td>
+<td>§9.7 says a library speaker keeps a stored colour, but <code>Speaker</code> has no colour field.</td>
+<td><strong>Open.</strong> Needed for the list chips (P2, second MR). Add a stored colour in P3, or derive one per memory until then.</td>
+</tr>
+<tr>
+<td>Q-12</td>
+<td>Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off.</td>
+<td><strong>Open.</strong> The consent screen must ship before any UI path can call <code>setFeatureEnabled(true)</code>.</td>
+</tr>
+<tr>
+<td>Q-13</td>
+<td>Does a sample play its first few milliseconds from the start of the recording? <code>play()</code> starts playback at once, and the seek to the sample start follows it.</td>
+<td><strong>Open (device).</strong> Check on a Pixel that a sample does not start with the first words of the recording. If it does, the playback API needs a start position for <code>play()</code>.</td>
+</tr>
+<tr>
+<td>Q-14</td>
+<td>Does a sample stop at its end on a device? The ticker wakes at the end, so the stop should land within a few milliseconds of the end.</td>
+<td><strong>Open (device).</strong> Check with recorded two-speaker memories, and listen for the next speaker at the stop.</td>
 </tr>
 </tbody>
 </table>
@@ -840,7 +868,7 @@
 </tr>
 </tbody>
 </table>
-<p>Each phase is a separate MR with its own CHANGELOG entry and version bump (see <code>AGENTS.md</code>).</p>
+<p>Each phase is a separate MR with its own CHANGELOG entry and version bump (see <code>AGENTS.md</code>). P2 ships in two MRs: the detail section, sample playback, and Settings first, then the list chips once the search and filter LazyColumn change is on main.</p>
 <hr />
 <h2 id="16-test-plan">16. Test plan</h2>
 <h3 id="unit-commontest">Unit (commonTest)</h3>
