@@ -1201,6 +1201,24 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun skipWithAnExtremeDeltaClampsToTheNearestEnd() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 40_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(5_000L)
+        runCurrent()
+
+        service.skipPlayback(Long.MAX_VALUE)
+        assertEquals(40_000L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        service.skipPlayback(Long.MIN_VALUE)
+        assertEquals(0L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
     fun reachingTheEndPausesAtTheEndWithoutStoppingThePlayer() = runTest {
         val player = FakeAudioPlayer(durationMillis = 2_000L, clockMillis = { testScheduler.currentTime })
         val fs = FakeFileSystem()

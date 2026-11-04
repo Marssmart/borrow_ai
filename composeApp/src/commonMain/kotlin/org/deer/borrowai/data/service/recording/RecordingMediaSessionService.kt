@@ -187,7 +187,9 @@ class RecordingMediaSessionService(
     override fun skipPlayback(deltaMillis: Long) {
         ensureOpen()
         val playing = mutableState.value as? MediaSessionState.Playing ?: return
-        seekPlayback(currentPlaybackPosition(playing) + deltaMillis)
+        // The delta is clamped first, so an extreme value cannot overflow when it is added to the position.
+        val clampedDeltaMillis = deltaMillis.coerceIn(-playing.durationMillis, playing.durationMillis)
+        seekPlayback(currentPlaybackPosition(playing) + clampedDeltaMillis)
     }
 
     override fun dismissRecordingError() {
