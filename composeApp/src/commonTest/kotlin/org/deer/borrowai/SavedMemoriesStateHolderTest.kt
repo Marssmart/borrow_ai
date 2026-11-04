@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
@@ -207,6 +208,104 @@ class SavedMemoriesStateHolderTest {
         assertEquals(allIds, resultIds(holder))
     }
 
+    @Test
+    fun chipsListTheCategoriesInUseInIdOrderWithCounts() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+
+        assertEquals(
+            listOf(CategoryFilterChip(1, "Work", 2), CategoryFilterChip(2, "Travel", 1)),
+            holder.uiState.value.categoryChips,
+        )
+    }
+
+    @Test
+    fun selectingChipsCombinesWithOrAndAppliesAtOnce() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+
+        holder.toggleCategory(2)
+        runCurrent()
+        assertEquals(listOf("m2"), resultIds(holder))
+
+        holder.toggleCategory(1)
+        runCurrent()
+        assertEquals(listOf("m2", "m1"), resultIds(holder))
+    }
+
+    @Test
+    fun chipsCombineWithTheSearchAsAnd() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+
+        holder.toggleCategory(1)
+        holder.onSearchTextChanged("trip")
+        holder.submitSearch()
+        runCurrent()
+
+        assertEquals(listOf("m2"), resultIds(holder))
+    }
+
+    @Test
+    fun clearingFiltersRemovesTheChipsButKeepsTheSearch() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+        holder.onSearchTextChanged("budget")
+        holder.submitSearch()
+        holder.toggleCategory(2)
+        runCurrent()
+        assertEquals(listOf("m2"), resultIds(holder))
+
+        holder.clearCategoryFilters()
+        runCurrent()
+
+        assertEquals(listOf("m2", "m1"), resultIds(holder))
+        assertEquals(emptySet(), holder.uiState.value.selectedCategoryIds)
+        assertEquals("budget", holder.uiState.value.searchText)
+    }
+
+    @Test
+    fun aSelectedCategoryNoLongerInUseFiltersNothing() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+
+        holder.toggleCategory(3)
+        runCurrent()
+
+        assertEquals(listOf("m3", "m2", "m1"), resultIds(holder))
+        assertEquals(emptySet(), holder.uiState.value.activeCategoryIds)
+    }
+
+    @Test
+    fun chipsDoNotChangeTheResultsWhileTheDetailIsOpen() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+        holder.openMemory("m1")
+        runCurrent()
+
+        holder.toggleCategory(2)
+        runCurrent()
+        assertEquals(listOf("m3", "m2", "m1"), resultIds(holder))
+
+        holder.onPagerPageSettled(SavedMemoriesStateHolder.MEMORY_LIST_PAGE)
+        runCurrent()
+        assertEquals(listOf("m2"), resultIds(holder))
+    }
+
+    private suspend fun TestScope.categorizedHolder(): SavedMemoriesStateHolder {
+        val memoryService = FakeMemoryService(categorizedMemories(), EpochClock { 0L })
+        memoryService.createCategory("Work", "")
+        memoryService.createCategory("Travel", "")
+        memoryService.createCategory("Ideas", "")
+        return holder(this, memoryService)
+    }
+
+    private fun categorizedMemories(): List<Memory> = listOf(
+        memory("m1", createdAt = 1, transcription = "budget notes", categories = listOf(1)),
+        memory("m2", createdAt = 2, transcription = "trip budget", categories = listOf(1, 2)),
+        memory("m3", createdAt = 3, transcription = "dentist"),
+    )
+
     private fun libraryMemories(): List<Memory> = listOf(
         memory("budget", createdAt = 1, transcription = "Quarterly budget numbers", title = "Budget review"),
         memory("dentist", createdAt = 2, transcription = "Book the dentist", title = "Dentist"),
@@ -218,6 +317,7 @@ class SavedMemoriesStateHolderTest {
         createdAt: Long,
         title: String = "",
         transcription: String = "",
+        categories: List<Int> = emptyList(),
     ): Memory = Memory(
         id = id,
         createdAtEpochMillis = createdAt,
@@ -225,6 +325,7 @@ class SavedMemoriesStateHolderTest {
         summary = "",
         transcription = transcription,
         transcriptionStatus = if (transcription.isBlank()) TranscriptionStatus.PENDING else TranscriptionStatus.DONE,
+        categories = categories,
     )
 
     private fun resultIds(holder: SavedMemoriesStateHolder): List<String> =

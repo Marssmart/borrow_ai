@@ -65,6 +65,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
+import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MediaSessionState
@@ -178,6 +179,10 @@ internal fun SavedMemoriesScreen(
                 onSearchTextChanged = stateHolder::onSearchTextChanged,
                 onSearchSubmit = stateHolder::submitSearch,
                 onClearSearch = stateHolder::clearSearch,
+                categoryChips = uiState.categoryChips,
+                selectedCategoryIds = uiState.activeCategoryIds,
+                onToggleCategory = stateHolder::toggleCategory,
+                onClearCategoryFilters = stateHolder::clearCategoryFilters,
             )
 
             SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
@@ -268,6 +273,10 @@ private fun MemoryListScreen(
     onSearchTextChanged: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onClearSearch: () -> Unit,
+    categoryChips: List<CategoryFilterChip>,
+    selectedCategoryIds: Set<Int>,
+    onToggleCategory: (Int) -> Unit,
+    onClearCategoryFilters: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -289,6 +298,15 @@ private fun MemoryListScreen(
                 onClear = onClearSearch,
                 modifier = Modifier.padding(MemorySearchControlsPadding),
             )
+            if (categoryChips.isNotEmpty()) {
+                CategoryFilterRow(
+                    chips = categoryChips,
+                    selectedIds = selectedCategoryIds,
+                    onToggle = onToggleCategory,
+                    onClear = onClearCategoryFilters,
+                    modifier = Modifier.padding(MemorySearchControlsPadding),
+                )
+            }
             MemoryCountLine(
                 shown = memories.size,
                 total = libraryCount,

@@ -28,10 +28,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemorySearch
 import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.domain.MemorySearcher
+import org.deer.borrowai.data.domain.categoriesInUse
+import org.deer.borrowai.data.domain.effectiveCategoryFilter
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
@@ -54,16 +57,29 @@ internal data class SavedMemoriesUiState(
     val pendingDelete: PendingMemoryDelete = PendingMemoryDelete(),
     /** Counts failed deletes. The screen shows an error each time the count goes up. */
     val deleteFailures: Int = 0,
+    /** The category chips the user has selected. A selection of a category no memory uses filters nothing. */
+    val selectedCategoryIds: Set<Int> = emptySet(),
 ) {
     /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
     val visibleMemories: List<Memory>
         get() = memories.filterNot { it.id in pendingDelete.hiddenMemoryIds }
+
+    /** One chip per category that a visible memory uses, in category id order. */
+    val categoryChips: List<CategoryFilterChip>
+        get() = categoriesInUse(visibleMemories).entries
+            .sortedBy { it.key }
+            .mapNotNull { (id, count) -> categoryNames[id]?.let { name -> CategoryFilterChip(id, name, count) } }
+
+    /** The selected categories that still have a chip. */
+    val activeCategoryIds: Set<Int>
+        get() = effectiveCategoryFilter(selectedCategoryIds, categoryChips.mapTo(HashSet()) { it.id })
 }
 
-/** The query and the library to search. The result set is recalculated from one of these. */
+/** The query, the category filter, and the library to search. The result set is recalculated from one of these. */
 private data class SearchRequest(
     val memories: List<Memory>,
     val query: String,
+    val categories: Set<Int>,
 )
 
 internal class SavedMemoriesStateHolder(
@@ -121,14 +137,22 @@ internal class SavedMemoriesStateHolder(
             combine(
                 mutableUiState.map { it.visibleMemories }.distinctUntilChanged(),
                 appliedQuery,
+                mutableUiState.map { it.selectedCategoryIds }.distinctUntilChanged(),
                 mutableUiState.map { it.selectedMemoryId != null }.distinctUntilChanged(),
-            ) { memories, query, isDetailOpen ->
+            ) { memories, query, selectedCategories, isDetailOpen ->
                 // A null request stops a running search and keeps the result set frozen (AC-5.1).
-                if (isDetailOpen) null else SearchRequest(memories, query)
+                if (isDetailOpen) {
+                    null
+                } else {
+                    val inUse = categoriesInUse(memories).keys
+                    SearchRequest(memories, query, effectiveCategoryFilter(selectedCategories, inUse))
+                }
             }
                 .distinctUntilChanged()
                 .mapLatest { request ->
-                    request?.let { r -> withContext(searchDispatcher) { searcher.search(r.memories, r.query) } }
+                    request?.let { r ->
+                        withContext(searchDispatcher) { searcher.search(r.memories, r.query, r.categories) }
+                    }
                 }
                 .filterNotNull()
                 .collect { results ->
@@ -235,6 +259,19 @@ internal class SavedMemoriesStateHolder(
         searchJob?.cancel()
         mutableUiState.update { it.copy(searchText = "", searchTextCut = false) }
         appliedQuery.value = ""
+    }
+
+    /** Selects or deselects a category chip. Chips apply at once, without the typing delay. */
+    fun toggleCategory(categoryId: Int) {
+        mutableUiState.update { state ->
+            val selected = state.selectedCategoryIds
+            state.copy(selectedCategoryIds = if (categoryId in selected) selected - categoryId else selected + categoryId)
+        }
+    }
+
+    /** Clears the category chips. The search text is kept. */
+    fun clearCategoryFilters() {
+        mutableUiState.update { it.copy(selectedCategoryIds = emptySet()) }
     }
 
     /**

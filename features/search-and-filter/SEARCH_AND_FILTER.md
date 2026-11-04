@@ -1,6 +1,6 @@
 # Search and filter
 
-Status: Phase 1 built on Android. Its exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phases 2 and 3 are next (draft v0.1)
+Status: Phases 1 and 2 built on Android. Phase 1's exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phase 3 is next (draft v0.1)
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 
@@ -209,6 +209,7 @@ The filter row hides when the library has no categories in use.
 - Each chip is a `FilterChip` with the selected state, the category name, and its count, for example "Work 4".
 - Chips use the app's colour roles: `primaryContainer` (#C9E5E7) with `onPrimaryContainer` (#123B43) when selected.
 - The chip row scrolls horizontally. The chip's touch target is at least 48 dp (`minimumInteractiveComponentSize`).
+- Chip counts and the chip list use the memories the list shows, so a memory hidden by a pending delete is not counted. A selected chip whose category no memory uses any longer filters nothing, and it is not shown as active.
 
 ---
 

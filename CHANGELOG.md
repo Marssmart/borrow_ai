@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.12.0]
+
+- Added category filter chips to saved memories. Each category used by a memory has a chip with its count, in category order. Selecting several chips shows the memories in any of them, and the chips combine with the search. Clear filters removes the chips and keeps the search.
+- Updated Android and iOS versioning to 1.12.0 (build 69).
+
 ## [1.11.0]
 
 - Added pause and resume for memory playback on Android. Pausing keeps the position and releases the audio focus, so other apps can play while a memory is paused.

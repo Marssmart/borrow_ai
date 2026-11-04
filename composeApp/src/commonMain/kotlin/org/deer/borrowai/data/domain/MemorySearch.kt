@@ -28,9 +28,10 @@ object MemorySearch {
 data class MemorySearchResults(
     val memories: List<Memory> = emptyList(),
     val query: String = "",
+    val categories: Set<Int> = emptySet(),
 ) {
     val isFiltered: Boolean
-        get() = query.isNotEmpty()
+        get() = query.isNotEmpty() || categories.isNotEmpty()
 }
 
 /**
@@ -41,18 +42,17 @@ data class MemorySearchResults(
 class MemorySearcher {
     private val texts = HashMap<String, SearchableText>()
 
-    fun search(memories: List<Memory>, query: String): MemorySearchResults {
+    fun search(memories: List<Memory>, query: String, categories: Set<Int> = emptySet()): MemorySearchResults {
         val normalized = MemorySearch.normalizeQuery(query)
         val terms = normalized.lowercase().split(' ').filter(String::isNotEmpty)
         forgetRemovedMemories(memories)
-        val matches = if (terms.isEmpty()) {
-            memories
-        } else {
-            memories.filter { memory -> textOf(memory).containsAll(terms) }
+        val matches = memories.filter { memory ->
+            memory.hasAnyCategory(categories) && (terms.isEmpty() || textOf(memory).containsAll(terms))
         }
         return MemorySearchResults(
             memories = matches.sortedByDescending(Memory::createdAtEpochMillis),
             query = normalized,
+            categories = categories,
         )
     }
 
