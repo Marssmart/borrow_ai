@@ -2,8 +2,7 @@
 
 Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, `site/content/*`, `features/*`, and `CHANGELOG.md`. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.
 
-**Status at 1.17.0:** G4 is merged (#75, #83, and 1.17.0), with all of its phases done. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.
-Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.
+**Status at 1.17.0:** G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The [pick list](pick-list.html) has the same items as checkboxes.Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.
 
 ## 1. What exists today
 
@@ -78,7 +77,7 @@ Covered by gaps above, so not repeated: search (G6), export (G8), speed and paus
 
 ## 5. Suggested sequencing
 
-1. **Quick fixes (about a week):** G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.
+1. **Quick fixes (about a week):** G4 accessibility, G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.
 2. **Core usability (two to four weeks):** G6 keyboard and back polish, G5 edit and recategorize, G11 stored durations, G8 export, G12 language setting, G19 manual retry.
 3. **Differentiators:** U2 privacy ledger (cheap, on-brand), then U1 offline Ask, U3 speaker UI, U4 commitments.
 

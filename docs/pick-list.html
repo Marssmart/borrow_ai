@@ -25,12 +25,12 @@
 <article>
 <h1 id="pick-list">Pick list</h1>
 <p><strong>Scope: Android only.</strong> Removed as iOS-only: G1, G2, G3, G10. Removed as non-Android surfaces: P14, P16. Narrowed to Android: G15, G20, G24, P4, U7. Use the IDs to pick work, for example "G4, G7, U2". The evidence for each G and U item is in the <a href="gap-analysis.html">gap analysis</a>. Peer features come from the competitor research in the gap analysis (Appendix A), unless marked "market", which means general market knowledge that was not checked in the research.</p>
-<p><strong>Status at 1.17.0:</strong> G4 is merged (#75, #83, and 1.17.0), with all of its phases done. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77), and speed is in playback phase 2. G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.</p>
+<p><strong>Status at 1.17.0:</strong> G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77), and speed is in playback phase 2. G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.</p>
 <p>Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks. Items marked "verify on device" are inferred from code paths.</p>
-<p><strong>Recommended first picks:</strong> G7, G14, G16, G17 (quick wins), then G11 (durations and recording pause), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.</p>
+<p><strong>Recommended first picks:</strong> G7, G14, G16, G17 (quick wins), then G4 (accessibility), G11 (durations and recording pause), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.</p>
 <h2 id="a-missing-core-features-g">A. Missing core features (G)</h2>
 <ul class="task-list">
-<li><label><input type="checkbox" checked="" /><strong>G4</strong> Delete memories. Merged in three phases: the state and commit rules (#75), the delete UI (#83), and the list card long-press and TalkBack action (1.17.0). · S</label></li>
+<li><label><input type="checkbox" /><strong>G4</strong> Delete memories. Partly done: phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review. Still open until the TalkBack walkthrough passes on a device. · S</label></li>
 <li><label><input type="checkbox" /><strong>G5</strong> Edit title, summary, transcript, and categories. The service exists, the UI does not. · M</label></li>
 <li><label><input type="checkbox" /><strong>G7</strong> Automatic titles (blank today). · S</label></li>
 <li><label><input type="checkbox" /><strong>G8</strong> Export and share: audio (m4a), transcript (txt, md, and srt once timestamps exist), summary. · M</label></li>
