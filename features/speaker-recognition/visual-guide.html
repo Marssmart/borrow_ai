@@ -142,14 +142,9 @@
     }
     .chip-recognized { background: var(--c, #14757b); color: #fff; }
     .chip-unknown { background: transparent; color: var(--c, #14757b); border: 1px solid var(--c, #14757b); }
-    .chip-pending { background: #e3e7e9; color: #7a8588; }
-    .chip-pending::before {
-      content: "";
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #9aa5a8;
-    }
+    /* pending: muted, no label, pulses while analysis can run (§9.1) */
+    .chip-pending { background: #e3e7e9; color: #7a8588; min-width: 40px; animation: chip-pulse 1.2s ease-in-out infinite alternate; }
+    @keyframes chip-pulse { from { opacity: 0.5; } to { opacity: 1; } }
     .chip-overflow { background: #d4e6e8; color: #123b43; }
 
     /* detail cards */
@@ -654,7 +649,7 @@
               <div class="row-title">Call with the bank</div>
               <div class="row-meta">Sun · 6:30 · Finance</div>
               <div class="chips">
-                <span class="chip chip-pending">Analyzing</span>
+                <span class="chip chip-pending" aria-label="Analyzing speakers"></span>
               </div>
             </div>
           </div></div>
@@ -669,7 +664,7 @@
               <div class="chips">
                 <span class="chip spk-2 chip-recognized">Sam</span>
                 <span class="chip spk-1 chip-unknown">Speaker 2</span>
-                <span class="chip chip-pending">Analyzing</span>
+                <span class="chip chip-pending" aria-label="Analyzing speakers"></span>
                 <span class="chip chip-overflow">+3</span>
               </div>
             </div>
@@ -680,6 +675,10 @@
             <div class="row">
               <div class="row-title" style="font-size:12px">Unknown</div>
               <div class="row-meta">Outlined, “Speaker N”. N is the order of first speech.</div>
+            </div>
+            <div class="row">
+              <div class="row-title" style="font-size:12px">Pending</div>
+              <div class="row-meta">Muted, no label, pulses. Shown only while speaker analysis can run.</div>
             </div>
             <div class="row">
               <div class="row-title" style="font-size:12px">Colour</div>
@@ -954,7 +953,7 @@
           <tr><th>State</th><th>List row</th><th>Detail card</th><th>Spec</th></tr>
         </thead>
         <tbody>
-          <tr><td>Pending</td><td>Muted “Analyzing” chip</td><td>Section shows “Analyzing voices…”</td><td>AC-1.3</td></tr>
+          <tr><td>Pending</td><td>Muted chip, no label</td><td>Section left out until analysis finishes</td><td>AC-1.3</td></tr>
           <tr><td>No speech</td><td>No chips</td><td>“No speakers detected in this memory.”</td><td>AC-1.4</td></tr>
           <tr><td>Unknown speaker</td><td>Outlined “Speaker N”</td><td>Play and Assign</td><td>AC-1.2, AC-3.1</td></tr>
           <tr><td>Auto-matched</td><td>Filled name</td><td>Play, Change, Not this person</td><td>AC-4.1, AC-4.4</td></tr>
