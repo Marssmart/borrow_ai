@@ -66,6 +66,12 @@ internal data class SavedMemoriesUiState(
     val speakerChips: Map<String, SpeakerChipsState> = emptyMap(),
     /** The speaker card the detail view scrolls to. A chip tap sets it, and the view clears it once it has scrolled. */
     val focusedSpeakerOrdinal: Int? = null,
+    /** True while a finished recording is being saved as a memory. */
+    val saveInProgress: Boolean = false,
+    /** Set once the memory list has arrived. The empty state waits for it, so it never shows before the data does. */
+    val memoriesLoaded: Boolean = false,
+    /** Set once the save state has arrived, for the same reason as [memoriesLoaded]. */
+    val saveStatusLoaded: Boolean = false,
 ) {
     /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
     val visibleMemories: List<Memory>
@@ -80,6 +86,17 @@ internal data class SavedMemoriesUiState(
     /** The selected categories that still have a chip. */
     val activeCategoryIds: Set<Int>
         get() = effectiveCategoryFilter(selectedCategoryIds, categoryChips.mapTo(HashSet()) { it.id })
+
+    /**
+     * The rows the list shows: the search results minus memories waiting out their delete Undo window. The results are
+     * frozen while the detail view is open, so a delete must be applied here as well, or the card would linger.
+     */
+    val listMemories: List<Memory>
+        get() = searchResults.memories.filterNot { it.id in pendingDelete.hiddenMemoryIds }
+
+    /** The empty library state: both values have arrived, nothing is visible, and no save would make a memory appear. */
+    val showsEmptyMemories: Boolean
+        get() = memoriesLoaded && saveStatusLoaded && visibleMemories.isEmpty() && !saveInProgress
 }
 
 /** The query, the category filter, and the library to search. The result set is recalculated from one of these. */
@@ -142,6 +159,11 @@ internal class SavedMemoriesStateHolder(
                 mutableUiState.update { it.copy(summaryModelMissing = missing) }
             }
         }
+        scope.launch {
+            mediaSessionService.saving.collect { saving ->
+                mutableUiState.update { it.copy(saveInProgress = saving, saveStatusLoaded = true) }
+            }
+        }
         observeSearchResults()
     }
 
@@ -190,7 +212,7 @@ internal class SavedMemoriesStateHolder(
     }
 
     private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {
-        if (uiState.value.memories.none { it.id == memoryId }) return
+        if (uiState.value.visibleMemories.none { it.id == memoryId }) return
         mutableUiState.update {
             it.copy(
                 selectedMemoryId = memoryId,
@@ -336,6 +358,12 @@ internal class SavedMemoriesStateHolder(
         if (updated.undoWindow?.requestId == requestId) startUndoWindow(requestId)
     }
 
+    /** Deletes the memory shown in the detail view, then slides back to the list, where its Undo snackbar appears. */
+    fun deleteFromDetail(memoryId: String) {
+        requestDelete(memoryId)
+        backToList()
+    }
+
     /** Restores the memory whose Undo window is open. Nothing is written. */
     fun undoDelete(memoryId: String) {
         mutableUiState.update { it.copy(pendingDelete = it.pendingDelete.undo(memoryId)) }
@@ -410,7 +438,7 @@ internal class SavedMemoriesStateHolder(
 
     private fun updateMemories(memories: List<Memory>) {
         val orderedMemories = memories.sortedByDescending(Memory::createdAtEpochMillis)
-        mutableUiState.update { it.copy(memories = orderedMemories) }
+        mutableUiState.update { it.copy(memories = orderedMemories, memoriesLoaded = true) }
 
         val selectedMemoryId = uiState.value.selectedMemoryId
         if (selectedMemoryId != null && orderedMemories.none { it.id == selectedMemoryId }) {

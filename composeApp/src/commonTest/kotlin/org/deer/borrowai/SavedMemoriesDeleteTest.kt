@@ -15,10 +15,12 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
@@ -198,6 +200,51 @@ class SavedMemoriesDeleteTest {
         assertEquals(listOf("a"), visibleIds(holder))
     }
 
+    @Test
+    fun emptyStateShowsOnlyWhenNothingIsVisibleAndNoSaveIsRunning() = runTest {
+        val service = memoryService(memory("a", createdAt = 1))
+        val media = FakeMediaSession()
+        val holder = holder(service, media)
+        runCurrent()
+        assertFalse(holder.uiState.value.showsEmptyMemories)
+
+        holder.requestDelete("a")
+        runCurrent()
+        assertTrue(holder.uiState.value.showsEmptyMemories)
+
+        media.setSaving(true)
+        runCurrent()
+        assertFalse(holder.uiState.value.showsEmptyMemories)
+
+        media.setSaving(false)
+        runCurrent()
+        assertTrue(holder.uiState.value.showsEmptyMemories)
+    }
+
+    @Test
+    fun listMemoriesHidePendingDeletesWhileSearchResultsAreFrozen() {
+        val older = memory("a", createdAt = 1)
+        val newer = memory("b", createdAt = 2)
+        val state = SavedMemoriesUiState(
+            memories = listOf(newer, older),
+            searchResults = MemorySearchResults(memories = listOf(newer, older)),
+            pendingDelete = PendingMemoryDelete().request("a", requestId = 1).state,
+        )
+
+        assertEquals(listOf("b"), state.listMemories.map(Memory::id))
+        assertEquals(listOf("b"), state.visibleMemories.map(Memory::id))
+    }
+
+    @Test
+    fun emptyStateWaitsForTheFirstValues() = runTest {
+        val holder = holder(memoryService(), FakeMediaSession())
+
+        assertFalse(holder.uiState.value.showsEmptyMemories)
+
+        runCurrent()
+        assertTrue(holder.uiState.value.showsEmptyMemories)
+    }
+
     private fun memory(id: String, createdAt: Long) = Memory(
         id = id,
         createdAtEpochMillis = createdAt,
@@ -234,7 +281,13 @@ class SavedMemoriesDeleteTest {
 internal class FakeMediaSession : MediaSessionService {
     private val mutableState = MutableStateFlow<MediaSessionState>(MediaSessionState.Idle)
     override val state: StateFlow<MediaSessionState> = mutableState
+    private val mutableSaving = MutableStateFlow(false)
+    override val saving: StateFlow<Boolean> = mutableSaving
     var stopPlaybackCalls = 0
+
+    fun setSaving(value: Boolean) {
+        mutableSaving.value = value
+    }
 
     fun play(memoryId: String) {
         mutableState.value = MediaSessionState.Playing(

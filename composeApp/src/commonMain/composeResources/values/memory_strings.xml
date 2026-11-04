@@ -36,4 +36,12 @@
     <string name="memory_category_chip">%1$s %2$d</string>
     <string name="memory_filters_clear">Clear filters</string>
     <string name="memory_filters_clear_description">Clear category filters</string>
+    <string name="memory_more_actions">More actions for this memory</string>
+    <string name="memory_delete">Delete memory</string>
+    <string name="memory_deleted">Memory deleted</string>
+    <string name="memory_undo">Undo</string>
+    <string name="memory_delete_failed">Couldn\'t delete this memory. It is still saved.</string>
+    <string name="memory_empty_title">No saved memories yet</string>
+    <string name="memory_empty_body">Record a voice note and it will appear here.</string>
+    <string name="memory_empty_go_to_record">Go to Record</string>
 </resources>

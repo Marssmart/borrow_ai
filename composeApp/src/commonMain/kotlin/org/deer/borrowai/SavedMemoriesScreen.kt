@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,10 +39,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -51,6 +54,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -58,10 +63,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
@@ -101,6 +108,7 @@ internal fun SavedMemoriesScreen(
     services: AppServices,
     onDetailBackRegistered: (() -> Unit) -> Unit,
     onDetailVisibilityChanged: (Boolean) -> Unit,
+    onGoToRecord: () -> Unit,
 ) {
     val memoryPagerState = rememberPagerState(
         pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
@@ -138,6 +146,16 @@ internal fun SavedMemoriesScreen(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { stateHolder.commitPendingDelete() }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val headingFocus = remember { FocusRequester() }
+    // After a delete, focus moves to the list heading once the list is back on screen.
+    LaunchedEffect(uiState.pendingDelete.undoWindow?.requestId) {
+        if (uiState.pendingDelete.undoWindow == null) return@LaunchedEffect
+        snapshotFlow { stateHolder.pagerState.settledPage }.first { it == SavedMemoriesStateHolder.MEMORY_LIST_PAGE }
+        // requestFocus throws if the heading is not attached yet; focus then stays where it is.
+        runCatching { headingFocus.requestFocus() }
+    }
+
     androidx.compose.runtime.LaunchedEffect(stateHolder) {
         onDetailBackRegistered(stateHolder::backToList)
     }
@@ -157,62 +175,76 @@ internal fun SavedMemoriesScreen(
         }
     }
 
-    HorizontalPager(
-        state = stateHolder.pagerState,
-        modifier = Modifier.fillMaxSize(),
-        userScrollEnabled = uiState.detailSwipeEnabled,
-    ) { page ->
-        when (page) {
-            SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
-                memories = uiState.searchResults.memories,
-                libraryCount = uiState.visibleMemories.size,
-                isFiltered = uiState.searchResults.isFiltered,
-                searchText = uiState.searchText,
-                searchTextCut = uiState.searchTextCut,
-                summaryModelMissing = uiState.summaryModelMissing,
-                categoryNames = uiState.categoryNames,
-                listState = stateHolder.memoriesListState,
-                speakerChips = uiState.speakerChips,
-                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)
-                    ?.takeUnless { it.paused }
-                    ?.target,
-                playbackControlsAvailable = stateHolder.playbackControlsAvailable,
-                onOpenMemory = stateHolder::openMemory,
-                onOpenMemoryAtSpeaker = stateHolder::openMemoryAtSpeaker,
-                onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
-                onSearchTextChanged = stateHolder::onSearchTextChanged,
-                onSearchSubmit = stateHolder::submitSearch,
-                onClearSearch = stateHolder::clearSearch,
-                categoryChips = uiState.categoryChips,
-                selectedCategoryIds = uiState.activeCategoryIds,
-                onToggleCategory = stateHolder::toggleCategory,
-                onClearCategoryFilters = stateHolder::clearCategoryFilters,
-            )
-
-            SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
-                MemoryDetailScreen(
-                    memory = memory,
-                    scrollState = stateHolder.detailScrollState,
-                    playback = (uiState.mediaSessionState as? MediaSessionState.Playing)
-                        ?.takeIf { it.target.memoryId == memory.id && it.target.content == PlaybackContent.RECORDING },
-                    playbackControlsAvailable = stateHolder.playbackControlsAvailable,
-                    onPlayRecording = {
-                        stateHolder.togglePlayback(memory.id, PlaybackContent.RECORDING)
-                    },
-                    onSeekPlayback = stateHolder::seekPlayback,
-                    onSkipPlayback = stateHolder::skipPlayback,
-                    services = services,
-                    playingSample = (uiState.mediaSessionState as? MediaSessionState.Playing)
-                        ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
+    Box(modifier = Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = stateHolder.pagerState,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = uiState.detailSwipeEnabled,
+        ) { page ->
+            when (page) {
+                SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
+                    memories = uiState.listMemories,
+                    libraryCount = uiState.visibleMemories.size,
+                    isFiltered = uiState.searchResults.isFiltered,
+                    searchText = uiState.searchText,
+                    searchTextCut = uiState.searchTextCut,
+                    summaryModelMissing = uiState.summaryModelMissing,
+                    categoryNames = uiState.categoryNames,
+                    listState = stateHolder.memoriesListState,
+                    speakerChips = uiState.speakerChips,
+                    playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                        ?.takeUnless { it.paused }
                         ?.target,
-                    onPlaySample = { stateHolder.toggleSamplePlayback(it) },
-                    focusedSpeakerOrdinal = uiState.focusedSpeakerOrdinal,
-                    onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
+                    playbackControlsAvailable = stateHolder.playbackControlsAvailable,
+                    onOpenMemory = stateHolder::openMemory,
+                    onOpenMemoryAtSpeaker = stateHolder::openMemoryAtSpeaker,
+                    onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
+                    onSearchTextChanged = stateHolder::onSearchTextChanged,
+                    onSearchSubmit = stateHolder::submitSearch,
+                    onClearSearch = stateHolder::clearSearch,
+                    categoryChips = uiState.categoryChips,
+                    selectedCategoryIds = uiState.activeCategoryIds,
+                    onToggleCategory = stateHolder::toggleCategory,
+                    onClearCategoryFilters = stateHolder::clearCategoryFilters,
+                    showEmptyState = uiState.showsEmptyMemories,
+                    headingFocus = headingFocus,
+                    onGoToRecord = onGoToRecord,
                 )
-            }
 
-            else -> Unit
+                SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
+                    MemoryDetailScreen(
+                        memory = memory,
+                        scrollState = stateHolder.detailScrollState,
+                        playback = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                            ?.takeIf { it.target.memoryId == memory.id && it.target.content == PlaybackContent.RECORDING },
+                        playbackControlsAvailable = stateHolder.playbackControlsAvailable,
+                        onPlayRecording = {
+                            stateHolder.togglePlayback(memory.id, PlaybackContent.RECORDING)
+                        },
+                        onSeekPlayback = stateHolder::seekPlayback,
+                        onSkipPlayback = stateHolder::skipPlayback,
+                        services = services,
+                        playingSample = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                            ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
+                            ?.target,
+                        onPlaySample = { stateHolder.toggleSamplePlayback(it) },
+                        focusedSpeakerOrdinal = uiState.focusedSpeakerOrdinal,
+                        onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
+                        onDelete = { stateHolder.deleteFromDetail(memory.id) },
+                    )
+                }
+
+                else -> Unit
+            }
         }
+        // Sits above the dock, because this page is already padded for the dock (App.kt).
+        MemoryDeleteSnackbarHost(
+            hostState = snackbarHostState,
+            undoWindow = uiState.pendingDelete.undoWindow,
+            deleteFailures = uiState.deleteFailures,
+            onUndo = stateHolder::undoDelete,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+        )
     }
 
     val pendingPlayback = (uiState.mediaSessionState as? MediaSessionState.Recording)
@@ -290,6 +322,9 @@ private fun MemoryListScreen(
     selectedCategoryIds: Set<Int>,
     onToggleCategory: (Int) -> Unit,
     onClearCategoryFilters: () -> Unit,
+    showEmptyState: Boolean,
+    headingFocus: FocusRequester,
+    onGoToRecord: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -297,7 +332,10 @@ private fun MemoryListScreen(
     ) {
         Text(
             stringResource(Res.string.memory_saved_memories_title),
-            modifier = Modifier.padding(SavedMemoriesStateHolder.MEMORY_LIST_TITLE_PADDING),
+            modifier = Modifier
+                .padding(SavedMemoriesStateHolder.MEMORY_LIST_TITLE_PADDING)
+                .focusRequester(headingFocus)
+                .focusable(),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -355,6 +393,9 @@ private fun MemoryListScreen(
                     onOpenSpeaker = { ordinal -> onOpenMemoryAtSpeaker(memory.id, ordinal) },
                     onPlayRecording = { onPlayRecording(memory.id) },
                 )
+            }
+            if (showEmptyState) {
+                item { MemoriesEmptyState(onGoToRecord) }
             }
         }
     }
@@ -497,6 +538,7 @@ private fun MemoryDetailScreen(
     onPlaySample: (PlaybackTarget) -> Unit,
     focusedSpeakerOrdinal: Int?,
     onSpeakerFocusHandled: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -514,17 +556,25 @@ private fun MemoryDetailScreen(
                 ),
                 elevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION,
             ) {
-                Text(
-                    formatMemoryTimestamp(memory.createdAtEpochMillis),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Text(
-                    memory.title,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_CARD_CONTENT_SPACING),
+                    ) {
+                        Text(
+                            formatMemoryTimestamp(memory.createdAtEpochMillis),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            memory.title,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    MemoryMoreActions(onDelete = onDelete)
+                }
             }
             AuroraPanel(
                 shape = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_SHAPE,

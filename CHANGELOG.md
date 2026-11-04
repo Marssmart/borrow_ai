@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.14.0]
+
+- Added a More actions button to the memory detail view on Android. Its menu has a Delete memory item. The memory leaves the list at once, and an Undo snackbar keeps it for 10 seconds. Undo brings it back. When the window ends, the memory is deleted, and its recording is removed later by a background job.
+- Added an error message on Android when a delete cannot be saved. The memory returns to the list and stays saved.
+- Added an empty library state on Android. With no memories, Saved memories shows a heading, a line of text, and a Go to Record button.
+- After a delete on Android, focus moves to the Saved memories heading.
+- Updated Android and iOS versioning to 1.14.0 (build 72).
+
 ## [1.13.0]
 
 - Added speaker chips to Saved memories on Android. Each row shows up to three chips under its summary: a library speaker by name, and an unknown speaker as "Speaker N". Each speaker has its own colour. Tapping a chip opens the memory at that speaker's card, and "+N" counts the speakers beyond three.
