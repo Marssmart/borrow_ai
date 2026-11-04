@@ -6,7 +6,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [1.9.2]
 
-- Updated the feature visual guide with the implemented background activity indicator and its Settings switch, and marked the speaker recognition screens as design mockups.
+- Expanded the feature visual guide to cover the implemented features: navigation dock, capture screen and its setup and error states, saved memories list and detail, the background transcription, summary and categorization pipeline, the background activity indicator, the Settings screen, the GitHub Pages docs site, and the speaker data layer. The speaker recognition screens are marked as design mockups, and Android-only features are labeled.
 - Updated Android and iOS versioning to 1.9.2 (build 58).
 
 ## [1.9.1]
