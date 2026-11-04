@@ -38,6 +38,7 @@ data class Memory(
     val summary: String,
     val transcription: String,
     val recordingPath: String? = null,
+    val durationMillis: Long? = null,
     val deleted: Boolean = false,
     val summaryStatus: SummaryStatus = SummaryStatus.PENDING,
     val summaryAttempts: Int = 0,
@@ -325,6 +326,7 @@ data class MemoryDraft(
     val summary: String,
     val transcription: String,
     val recordingPath: String? = null,
+    val durationMillis: Long? = null,
     val categories: List<Int> = emptyList(),
 ) {
     init {

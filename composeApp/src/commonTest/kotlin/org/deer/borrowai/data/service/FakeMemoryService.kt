@@ -75,6 +75,7 @@ class FakeMemoryService(
             summaryStatus = summaryStatusFor(draft.summary),
             transcription = draft.transcription,
             recordingPath = draft.recordingPath,
+            durationMillis = draft.durationMillis,
             transcriptionStatus = transcriptionStatus,
             categories = draft.categories,
             categorizationStatus = categorizationStatusFor(draft.categories),
@@ -104,6 +105,13 @@ class FakeMemoryService(
 
     override suspend fun findCategories(): Either<MemoryError, List<Category>> = mutex.withLock {
         categories.values.sortedBy(Category::id).right()
+    }
+
+    override suspend fun recordDuration(id: String, durationMillis: Long): Either<MemoryError, Unit> = mutex.withLock {
+        val memory = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
+        if (memory.durationMillis == null) records[id] = memory.copy(durationMillis = durationMillis)
+        publishMemories()
+        Unit.right()
     }
 
     override suspend fun createCategory(name: String, description: String): Either<MemoryError, Category> =

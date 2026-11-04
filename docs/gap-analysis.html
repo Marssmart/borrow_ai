@@ -25,7 +25,7 @@
 <article>
 <h1 id="gap-analysis">Gap analysis</h1>
 <p>Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, <code>site/content/*</code>, <code>features/*</code>, and <code>CHANGELOG.md</code>. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.</p>
-<p><strong>Status at 1.17.0:</strong> G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
+<p><strong>Status at 1.18.0:</strong> G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, stored durations are in playback phase 3, and recording pause remains. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
 <p>Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.</p>
 <h2 id="1-what-exists-today">1. What exists today</h2>
 <ul>
@@ -90,8 +90,8 @@
 </tr>
 <tr>
 <td>G11</td>
-<td><strong>Thin playback and capture controls.</strong> No seek bar, skip, speed, pause and resume, bookmarks, input level, or max length. Durations are not stored.</td>
-<td><code>AudioPlayer.kt</code> (<code>play</code>, <code>stop</code>, interruption only); <code>AudioRecorder.kt</code> (<code>start</code>, <code>stop</code>); <code>Memory.kt</code> has no duration</td>
+<td><strong>Thin playback and capture controls.</strong> No seek bar, skip, speed, pause and resume, bookmarks, input level, or max length. Stored durations are in playback phase 3.</td>
+<td><code>AudioPlayer.kt</code> (<code>play</code>, <code>stop</code>, interruption only); <code>AudioRecorder.kt</code> (<code>start</code>, <code>stop</code>); recording pause is open</td>
 <td>Basic expectations of a recorder.</td>
 <td>M</td>
 </tr>
@@ -354,7 +354,7 @@
 <h2 id="5-suggested-sequencing">5. Suggested sequencing</h2>
 <ol type="1">
 <li><strong>Quick fixes (about a week):</strong> G4 accessibility, G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.</li>
-<li><strong>Core usability (two to four weeks):</strong> G6 keyboard and back polish, G5 edit and recategorize, G11 stored durations, G8 export, G12 language setting, G19 manual retry.</li>
+<li><strong>Core usability (two to four weeks):</strong> G6 keyboard and back polish, G5 edit and recategorize, G8 export, G12 language setting, G19 manual retry.</li>
 <li><strong>Differentiators:</strong> U2 privacy ledger (cheap, on-brand), then U1 offline Ask, U3 speaker UI, U4 commitments.</li>
 </ol>
 <h2 id="6-decisions-needed">6. Decisions needed</h2>

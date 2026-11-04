@@ -493,11 +493,20 @@ private fun MemoryCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        formatMemoryTimestamp(memory.createdAtEpochMillis),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            formatMemoryTimestamp(memory.createdAtEpochMillis),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        memory.durationMillis?.let { durationMillis ->
+                            Text(
+                                formatPlaybackTime(durationMillis),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -618,7 +627,7 @@ private fun MemoryDetailScreen(
                 if (playbackControlsAvailable) {
                     PlaybackPanel(
                         playback = playback,
-                        durationMillis = playback?.durationMillis,
+                        durationMillis = playback?.durationMillis ?: memory.durationMillis,
                         onTogglePlayback = onPlayRecording,
                         onSeek = onSeekPlayback,
                         onSkip = onSkipPlayback,

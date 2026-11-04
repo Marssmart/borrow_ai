@@ -237,6 +237,7 @@ class RecordingMediaSessionServiceTest {
         monotonicMillis: () -> Long = { 0L },
         liveTranscriber: LiveTranscriber? = null,
         scheduler: TranscriptionScheduler = TranscriptionScheduler.None,
+        durationReader: AudioDurationReader = AudioDurationReader.None,
     ) = RecordingMediaSessionService(
         memoryService = memories,
         recorder = recorder,
@@ -250,6 +251,7 @@ class RecordingMediaSessionServiceTest {
         monotonicMillis = monotonicMillis,
         liveTranscriber = liveTranscriber,
         transcriptionScheduler = scheduler,
+        durationReader = durationReader,
     )
 
     private class FakeScheduler : TranscriptionScheduler {
@@ -1864,6 +1866,57 @@ class RecordingMediaSessionServiceTest {
         advanceTimeBy(1L)
         runCurrent()
         assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun finishedRecordingStoresItsDuration() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val service = service(
+            FakeRecorder(fileSystem = fs),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            durationReader = AudioDurationReader { 3_500L },
+        )
+
+        service.startRecording()
+        runCurrent()
+        service.stopRecording()
+        runCurrent()
+
+        assertEquals(3_500L, memories.getState().value.single().durationMillis)
+    }
+
+    @Test
+    fun firstPlayStoresTheDurationOfALegacyMemory() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 4_000L)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        assertNull(memory.durationMillis)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        runCurrent()
+
+        assertEquals(4_000L, memories.getState().value.single().durationMillis)
+    }
+
+    @Test
+    fun playbackNeverOverwritesAStoredDuration() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 4_000L)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        memories.recordDuration(memory.id, 9_000L)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        runCurrent()
+
+        assertEquals(9_000L, memories.getState().value.single().durationMillis)
     }
 
     private suspend fun savedRecording(memories: FakeMemoryService, fs: FakeFileSystem): Memory {

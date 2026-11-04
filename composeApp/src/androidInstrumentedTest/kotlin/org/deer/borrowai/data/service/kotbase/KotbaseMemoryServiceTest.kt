@@ -70,6 +70,27 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
+    fun durationRoundTripsAcrossReopenAndIsWriteOnce() = runTest {
+        val service = openService()
+        val withDuration = service.create(
+            MemoryDraft("Timed", "", "", "recordings/timed.m4a", durationMillis = 3_500L),
+        ).getOrNull()!!
+        assertEquals(3_500L, withDuration.durationMillis)
+        val legacy = service.create(MemoryDraft("Legacy", "", "", "recordings/legacy.m4a")).getOrNull()!!
+        assertEquals(null, legacy.durationMillis)
+
+        assertTrue(service.recordDuration(legacy.id, 4_000L).isRight())
+        assertTrue(service.recordDuration(withDuration.id, 9_000L).isRight())
+        assertTrue(service.recordDuration("missing", 1L).isLeft())
+        requireNotNull(database).close()
+        database = Database(databaseName)
+
+        val reopened = openService()
+        assertEquals(3_500L, reopened.findById(withDuration.id).getOrNull()?.durationMillis)
+        assertEquals(4_000L, reopened.findById(legacy.id).getOrNull()?.durationMillis)
+    }
+
+    @Test
     fun updateReplacesFieldsAndKeepsCreationTime() = runTest {
         val service = openService()
         val created = service.create(MemoryDraft("Old", "Old summary", "Old text")).getOrNull()!!

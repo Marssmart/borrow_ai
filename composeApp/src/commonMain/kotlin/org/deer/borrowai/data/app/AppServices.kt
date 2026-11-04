@@ -41,6 +41,7 @@ import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.ModelFileStore
 import org.deer.borrowai.data.service.model.createPlatformModelHttpClient
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
+import org.deer.borrowai.data.service.recording.AudioDurationReader
 import org.deer.borrowai.data.service.recording.AudioPlayer
 import org.deer.borrowai.data.service.recording.AudioRecorder
 import org.deer.borrowai.data.service.recording.BatchTranscriber
@@ -186,6 +187,7 @@ class AppServices internal constructor(
             closeModelRuntime: suspend () -> Unit = {},
             speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
             onSettingsReady: (AppSettingsService) -> Unit = {},
+            audioDurationReader: AudioDurationReader = AudioDurationReader.None,
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -202,6 +204,7 @@ class AppServices internal constructor(
             closeModelRuntime = closeModelRuntime,
             speakerAnalyzer = speakerAnalyzer,
             onSettingsReady = onSettingsReady,
+            audioDurationReader = audioDurationReader,
         )
 
         /**
@@ -226,6 +229,7 @@ class AppServices internal constructor(
             closeModelRuntime: suspend () -> Unit = {},
             speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
             onSettingsReady: (AppSettingsService) -> Unit = {},
+            audioDurationReader: AudioDurationReader = AudioDurationReader.None,
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -283,6 +287,7 @@ class AppServices internal constructor(
                     epochClock = epochClock,
                     liveTranscriber = liveTranscriber,
                     transcriptionScheduler = transcriptionScheduler,
+                    durationReader = audioDurationReader,
                 )
                 val speakerRunner = SpeakerAnalysisRunner(
                     memoryService = memories,

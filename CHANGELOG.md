@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.18.0]
+
+- Each new memory stores its duration when it is saved, read from the audio file, so pauses are not counted.
+- Memories saved before this release store their duration the first time they are played. Until then, the list shows no duration.
+- The list card shows the stored duration beside the date when it is known.
+- Updated Android and iOS versioning to 1.18.0 (build 76).
+
 ## [1.17.0]
 
 - Added a long-press shortcut to each card in Saved memories on Android. A long-press starts the same delete as More actions, with the same 10-second Undo.
