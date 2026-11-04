@@ -147,6 +147,10 @@ fun App(services: AppServices) {
                             onShowBackgroundActivityIndicatorChange = { show ->
                                 scope.launch { services.appSettings.setShowBackgroundActivityIndicator(show) }
                             },
+                            useGpuAcceleration = appSettings.useGpuAcceleration,
+                            onUseGpuAccelerationChange = { use ->
+                                scope.launch { services.appSettings.setUseGpuAcceleration(use) }
+                            },
                         )
                     }
                 }

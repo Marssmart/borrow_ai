@@ -166,6 +166,7 @@ class AppServices internal constructor(
             categoryModel: CategoryModel? = null,
             closeModelRuntime: suspend () -> Unit = {},
             speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
+            onSettingsReady: (AppSettingsService) -> Unit = {},
         ): AppServices = createReal(
             database = Database(databaseName),
             recordingsRoot = recordingsRoot,
@@ -181,6 +182,7 @@ class AppServices internal constructor(
             categoryModel = categoryModel,
             closeModelRuntime = closeModelRuntime,
             speakerAnalyzer = speakerAnalyzer,
+            onSettingsReady = onSettingsReady,
         )
 
         /**
@@ -204,6 +206,7 @@ class AppServices internal constructor(
             categoryModel: CategoryModel? = null,
             closeModelRuntime: suspend () -> Unit = {},
             speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
+            onSettingsReady: (AppSettingsService) -> Unit = {},
         ): AppServices {
             val graphJob = SupervisorJob()
             try {
@@ -221,6 +224,7 @@ class AppServices internal constructor(
                     ifLeft = { error -> throw IllegalStateException("Settings store failed to open: $error") },
                     ifRight = { it },
                 )
+                onSettingsReady(appSettings)
                 val activityTracker = BackgroundActivityTracker()
                 val httpClient = createPlatformModelHttpClient()
                 // Closed when the graph completes, including the failure path where cancel() runs below.

@@ -21,20 +21,32 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okio.Path
+import org.deer.borrowai.data.service.model.Accelerator
+import org.deer.borrowai.data.service.model.AcceleratorSelector
 import org.deer.borrowai.data.service.model.ModelCatalog
 import org.deer.borrowai.data.service.model.ModelFileStore
+import org.deer.borrowai.data.service.model.ModelRole
 import org.deer.borrowai.data.service.model.ModelSpec
+import org.deer.borrowai.data.service.model.ModelTierSelector
 
 /**
  * Creates the shared on-device LLM runtime for the tier's LLM model that matches [totalRamBytes]. The model file is
  * checked on each call, so a model downloaded after startup is picked up without a restart.
  */
-internal fun createLocalLlm(modelDirectory: Path, totalRamBytes: Long, cacheDirectory: String): LocalLlmRuntime =
-    LocalLlmRuntime(
+internal fun createLocalLlm(
+    modelDirectory: Path,
+    totalRamBytes: Long,
+    cacheDirectory: String,
+    useGpuAcceleration: () -> Boolean = { true },
+): LocalLlmRuntime {
+    val tier = ModelTierSelector.select(totalRamBytes)
+    return LocalLlmRuntime(
         store = ModelFileStore(modelDirectory),
-        spec = ModelCatalog.modelsForRam(totalRamBytes).llm,
+        spec = ModelCatalog.modelsFor(tier).llm,
         cacheDirectory = cacheDirectory,
+        preferredAccelerator = { AcceleratorSelector.select(ModelRole.LLM, tier, useGpuAcceleration()) },
     )
+}
 
 /**
  * Owns one LiteRT-LM [Engine] shared by every on-device LLM feature. The engine loads on the first call. Calls run one
@@ -46,6 +58,8 @@ internal class LocalLlmRuntime(
     private val store: ModelFileStore,
     private val spec: ModelSpec,
     private val cacheDirectory: String,
+    // Read each time an engine is needed, so a setting change takes effect on the next call.
+    private val preferredAccelerator: () -> Accelerator = { Accelerator.CPU },
     private val engineFactory: LlmEngineFactory = LiteRtLlmEngineFactory(),
     // Native inference cannot be interrupted, so it runs here and may outlive a timed-out call. close() cancels it.
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
@@ -57,6 +71,9 @@ internal class LocalLlmRuntime(
     // Guards closed and the in-flight handoff. Held briefly and never across a reply, so close() can always get in.
     private val stateLock = Mutex()
     private var engine: LlmEngine? = null
+    private var engineAccelerator = Accelerator.CPU
+    // Set when the GPU failed for this device. The GPU is not tried again until the setting is turned off and on.
+    private var gpuFailed = false
     private var inFlight: Deferred<LlmOutcome>? = null
     private var closed = false
 
@@ -111,17 +128,43 @@ internal class LocalLlmRuntime(
         engine = null
     }
 
-    private fun infer(systemInstruction: String, userMessage: String): LlmOutcome = try {
-        val loaded = engine ?: engineFactory.create(store.finalPath(spec).toString(), cacheDirectory)
-            .also { engine = it }
+    private fun infer(systemInstruction: String, userMessage: String): LlmOutcome {
+        val preferred = preferredAccelerator()
+        if (preferred == Accelerator.CPU) gpuFailed = false
+        val accelerator = if (gpuFailed) Accelerator.CPU else preferred
+        return try {
+            run(accelerator, systemInstruction, userMessage)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Throwable) {
+            if (accelerator != Accelerator.GPU) return LlmOutcome.Failed(failure)
+            // Retry once on the CPU for this call and remember the failure.
+            gpuFailed = true
+            closeEngine()
+            try {
+                run(Accelerator.CPU, systemInstruction, userMessage)
+            } catch (retryFailure: CancellationException) {
+                throw retryFailure
+            } catch (retryFailure: Throwable) {
+                LlmOutcome.Failed(retryFailure)
+            }
+        }
+    }
+
+    private fun run(accelerator: Accelerator, systemInstruction: String, userMessage: String): LlmOutcome {
+        // The engine is bound to one backend, so a changed choice needs a new engine.
+        if (engine != null && engineAccelerator != accelerator) closeEngine()
+        val loaded = engine ?: engineFactory.create(store.finalPath(spec).toString(), cacheDirectory, accelerator)
+            .also {
+                engine = it
+                engineAccelerator = accelerator
+            }
         val conversation = loaded.startConversation(systemInstruction)
         try {
-            LlmOutcome.Text(conversation.reply(userMessage))
+            return LlmOutcome.Text(conversation.reply(userMessage))
         } finally {
             runCatching { conversation.close() }
         }
-    } catch (failure: Throwable) {
-        LlmOutcome.Failed(failure)
     }
 }
 
@@ -131,7 +174,7 @@ private val closedOutcome = LlmOutcome.Failed(IllegalStateException("LLM runtime
 
 /** Seam over LiteRT-LM so the runtime lifecycle can be tested without a real model. */
 internal fun interface LlmEngineFactory {
-    fun create(modelPath: String, cacheDirectory: String): LlmEngine
+    fun create(modelPath: String, cacheDirectory: String, accelerator: Accelerator): LlmEngine
 }
 
 internal interface LlmEngine {
@@ -147,8 +190,12 @@ internal interface LlmConversation {
 }
 
 internal class LiteRtLlmEngineFactory : LlmEngineFactory {
-    override fun create(modelPath: String, cacheDirectory: String): LlmEngine {
-        val created = Engine(EngineConfig(modelPath = modelPath, backend = Backend.CPU(), cacheDir = cacheDirectory))
+    override fun create(modelPath: String, cacheDirectory: String, accelerator: Accelerator): LlmEngine {
+        val backend = when (accelerator) {
+            Accelerator.CPU -> Backend.CPU()
+            Accelerator.GPU -> Backend.GPU()
+        }
+        val created = Engine(EngineConfig(modelPath = modelPath, backend = backend, cacheDir = cacheDirectory))
         created.initialize()
         return LiteRtLlmEngine(created)
     }

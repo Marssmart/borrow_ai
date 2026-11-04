@@ -82,6 +82,7 @@
 </table>
 <h2 id="notes">Notes</h2>
 <ul>
+<li>GPU acceleration applies to the Android LLM only (LiteRT-LM <code>Backend.GPU()</code>). Speech uses sherpa-onnx on the CPU.</li>
 <li>On iOS, <code>MainViewController</code> calls <code>AppServices.create</code> with the recorder, player, permission, and device only. The transcriber, summarizer, and category model are not passed, so their defaults apply (none). The speech and LLM runtimes exist only under <code>androidMain</code>.</li>
 <li>Speaker recognition is described in the <a href="features/index.html">feature pages</a>. The data layer shipped in version 1.8.0 with no user interface, so no analysis runs in that release.</li>
 <li>Platform checks in this table reflect the source tree at the time these pages were built.</li>

@@ -42,6 +42,18 @@ class KotbaseAppSettingsService private constructor(
             }
         }
 
+    override suspend fun setUseGpuAcceleration(use: Boolean): Either<AppSettingsError, Unit> =
+        mutex.withLock {
+            withContext(Dispatchers.Default) {
+                persisting {
+                    val document = collection.getDocument(SETTINGS_ID)?.toMutable() ?: MutableDocument(SETTINGS_ID)
+                    document.setBoolean(KEY_USE_GPU_ACCELERATION, use)
+                    collection.save(document)
+                    mutableSettings.value = mutableSettings.value.copy(useGpuAcceleration = use)
+                }
+            }
+        }
+
     /** Reads the stored settings. A key that is missing keeps its default, so a newer build can add settings safely. */
     private fun readSettings(): AppSettings {
         val defaults = AppSettings()
@@ -52,6 +64,11 @@ class KotbaseAppSettingsService private constructor(
             } else {
                 defaults.showBackgroundActivityIndicator
             },
+            useGpuAcceleration = if (document.contains(KEY_USE_GPU_ACCELERATION)) {
+                document.getBoolean(KEY_USE_GPU_ACCELERATION)
+            } else {
+                defaults.useGpuAcceleration
+            },
         )
     }
 
@@ -59,6 +76,7 @@ class KotbaseAppSettingsService private constructor(
         private const val COLLECTION_NAME = "app-settings"
         private const val SETTINGS_ID = "app-settings"
         private const val KEY_SHOW_BACKGROUND_ACTIVITY_INDICATOR = "showBackgroundActivityIndicator"
+        private const val KEY_USE_GPU_ACCELERATION = "useGpuAcceleration"
 
         /** Opens the settings store on [database], creating its collection on first use. */
         suspend fun open(database: Database): Either<AppSettingsError, KotbaseAppSettingsService> =

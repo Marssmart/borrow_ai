@@ -8,7 +8,7 @@ The app has three pages in a horizontal pager. The bottom bar switches between t
 |------|-----------|---------|
 | Capture | Record | Record a memory. Shows the live transcript while you talk. |
 | Saved memories | Memories | List of saved memories with their summaries, categories, and playback. |
-| Settings | Settings | App settings. Currently includes the background activity indicator switch. |
+| Settings | Settings | App settings. Includes the background activity indicator switch and the GPU acceleration switch. |
 
 On the Record page, the hint reads **TAP/HOLD TO RECORD**. While recording it reads **TAP TO STOP** (tap mode) or **RELEASE TO STOP** (hold mode). A hint at the bottom reads **SWIPE LEFT FOR SAVED MEMORIES**. Strings come from `composeApp/src/commonMain/composeResources/values/capture.xml`.
 

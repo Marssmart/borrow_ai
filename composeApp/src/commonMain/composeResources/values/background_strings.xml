@@ -8,4 +8,6 @@
     <string name="background_indicator_more">+%1$d</string>
     <string name="settings_background_indicator_title">Background activity indicator</string>
     <string name="settings_background_indicator_description">Show a small indicator at the top of the screen while the app transcribes, summarizes, categorizes, analyzes speakers, downloads models, or cleans up in the background.</string>
+    <string name="settings_gpu_acceleration_title">GPU acceleration</string>
+    <string name="settings_gpu_acceleration_description">Let the on-device summary and category model run on the GPU when the device supports it. If the GPU fails, the app falls back to the CPU. Turn this off to always use the CPU.</string>
 </resources>
