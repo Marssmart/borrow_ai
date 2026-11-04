@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.21.0]
+
+- Added a Transcript field to the memory editor on Android. A transcript that is still being created is read-only with a notice. A transcript that failed can be typed in, and saving it marks it done.
+- After a saved transcript change, the memory detail view shows a banner. It says the summary and categories were made from the earlier transcript, and offers Write new summary and Suggest categories. Each asks first when it would replace text or choices you made. Dismiss hides it.
+- Updated Android and iOS versioning to 1.21.0 (build 80).
+
 ## [1.20.0]
 
 - Added Pause and Resume under the microphone while a tap-to-record capture runs on Android. Pausing keeps the same file, so there is no gap in the audio.
