@@ -2,22 +2,36 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemorySearch
+import org.deer.borrowai.data.domain.MemorySearchResults
+import org.deer.borrowai.data.domain.MemorySearcher
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.MemoryService
@@ -34,6 +48,9 @@ internal data class SavedMemoriesUiState(
     val playbackError: PlaybackError? = null,
     val summaryModelMissing: Boolean = false,
     val categoryNames: Map<Int, String> = emptyMap(),
+    val searchText: String = "",
+    val searchTextCut: Boolean = false,
+    val searchResults: MemorySearchResults = MemorySearchResults(),
     val pendingDelete: PendingMemoryDelete = PendingMemoryDelete(),
     /** Counts failed deletes. The screen shows an error each time the count goes up. */
     val deleteFailures: Int = 0,
@@ -43,19 +60,31 @@ internal data class SavedMemoriesUiState(
         get() = memories.filterNot { it.id in pendingDelete.hiddenMemoryIds }
 }
 
+/** The query and the library to search. The result set is recalculated from one of these. */
+private data class SearchRequest(
+    val memories: List<Memory>,
+    val query: String,
+)
+
 internal class SavedMemoriesStateHolder(
     private val memoryService: MemoryService,
     private val mediaSessionService: MediaSessionService,
     summaryModelMissing: StateFlow<Boolean>,
     val pagerState: PagerState,
-    val memoriesScrollState: ScrollState,
+    val memoriesListState: LazyListState,
     val detailScrollState: ScrollState,
     private val scope: CoroutineScope,
     /** Starts the soft-delete writes through the app, so close waits for them and a write outlives the screen. */
     private val launchWrite: (suspend () -> Unit) -> Unit,
+    /** Serial, so the searcher's cache is never used by two searches at once. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val searchDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
     private val mutableUiState = MutableStateFlow(SavedMemoriesUiState())
     private var lastUndoRequestId = 0L
+    private val appliedQuery = MutableStateFlow("")
+    private val searcher = MemorySearcher()
+    private var searchJob: Job? = null
 
     val uiState = mutableUiState.asStateFlow()
 
@@ -78,6 +107,30 @@ internal class SavedMemoriesStateHolder(
             summaryModelMissing.collect { missing ->
                 mutableUiState.update { it.copy(summaryModelMissing = missing) }
             }
+        }
+        observeSearchResults()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeSearchResults() {
+        scope.launch {
+            // Searches the memories the list shows, so a memory waiting out its delete Undo window is not found.
+            combine(
+                mutableUiState.map { it.visibleMemories }.distinctUntilChanged(),
+                appliedQuery,
+                mutableUiState.map { it.selectedMemoryId != null }.distinctUntilChanged(),
+            ) { memories, query, isDetailOpen ->
+                // A null request stops a running search and keeps the result set frozen (AC-5.1).
+                if (isDetailOpen) null else SearchRequest(memories, query)
+            }
+                .distinctUntilChanged()
+                .mapLatest { request ->
+                    request?.let { r -> withContext(searchDispatcher) { searcher.search(r.memories, r.query) } }
+                }
+                .filterNotNull()
+                .collect { results ->
+                    mutableUiState.update { it.copy(searchResults = results) }
+                }
         }
     }
 
@@ -141,6 +194,32 @@ internal class SavedMemoriesStateHolder(
 
     fun dismissPlaybackError() {
         mutableUiState.update { it.copy(playbackError = null) }
+    }
+
+    /** Called on each keystroke. The query is applied [MEMORY_SEARCH_DEBOUNCE_MILLIS] after the last one. */
+    fun onSearchTextChanged(text: String) {
+        val input = MemorySearch.limitInput(text)
+        mutableUiState.update {
+            it.copy(searchText = input, searchTextCut = MemorySearch.isInputCut(text))
+        }
+        val typedQuery = MemorySearch.normalizeQuery(input)
+        searchJob?.cancel()
+        searchJob = scope.launch {
+            delay(MEMORY_SEARCH_DEBOUNCE_MILLIS)
+            appliedQuery.value = typedQuery
+        }
+    }
+
+    /** Applies the current text at once, without the typing delay. Used by the Search key. */
+    fun submitSearch() {
+        searchJob?.cancel()
+        appliedQuery.value = MemorySearch.normalizeQuery(uiState.value.searchText)
+    }
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        mutableUiState.update { it.copy(searchText = "", searchTextCut = false) }
+        appliedQuery.value = ""
     }
 
     /**
@@ -253,6 +332,7 @@ internal class SavedMemoriesStateHolder(
         const val MEMORY_LIST_PAGE = 0
         const val MEMORY_DETAIL_PAGE = 1
         const val MEMORY_PREVIEW_CHAR_LIMIT = 240
+        const val MEMORY_SEARCH_DEBOUNCE_MILLIS = 150L
         const val MEMORY_CONTENT_SIZE_ANIMATION_MILLIS = 220
 
         val MEMORY_LIST_TITLE_PADDING = PaddingValues(

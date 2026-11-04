@@ -1,6 +1,7 @@
 package org.deer.borrowai
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import arrow.core.Either
 import arrow.core.left
@@ -220,7 +221,7 @@ class SavedMemoriesDeleteTest {
         mediaSessionService = mediaSession,
         summaryModelMissing = MutableStateFlow(false),
         pagerState = PagerState(pageCount = { 2 }),
-        memoriesScrollState = ScrollState(0),
+        memoriesListState = LazyListState(),
         detailScrollState = ScrollState(0),
         scope = backgroundScope,
         launchWrite = { block -> launch { block() } },

@@ -24,7 +24,7 @@
   <main>
 <article>
 <h1 id="search-and-filter">Search and filter</h1>
-<p>Status: Planning (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<p>Status: Phase 1 built on Android. Its exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phases 2 and 3 are next (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
 <hr />
 <h2 id="1-summary">1. Summary</h2>
 <p>The saved memories list cannot be searched or filtered. It shows every active memory in one scrolling column (<code>SavedMemoriesScreen.kt</code>, <code>MemoryListScreen</code>, <code>verticalScroll</code> at line 246). A user who remembers a phrase from a voice note has to scroll to find it.</p>
@@ -138,7 +138,7 @@
 <ol type="1">
 <li>The user types in the search field.</li>
 <li>After 150 ms without a keystroke, the query is applied on a background dispatcher.</li>
-<li>The result set is the active memories that match the query and the selected categories, newest first.</li>
+<li>The result set is the memories the list shows that match the query and the selected categories, newest first. A memory hidden by a pending delete (its Undo window, or its write in progress) is left out.</li>
 <li>The list shows the result set, with a count line above it: "3 memories" or "Showing 3 of 42".</li>
 <li>Selecting or clearing a chip recalculates the result set at once, without the 150 ms delay.</li>
 </ol>
@@ -218,7 +218,7 @@
 </ul>
 <h3 id="64-performance-plan-for-in-memory-search">6.4 Performance plan for in-memory search</h3>
 <ul>
-<li>Build a lowercase copy of each memory's searchable text once, and reuse it until the memory changes. Cache by memory id and by a hash of the text. Without this, each keystroke allocates a new lowercase copy of every transcript.</li>
+<li>Build a lowercase copy of each memory's searchable text once, and reuse it until the memory changes. The cache is keyed by memory id. A copy is reused only while the title, summary, and transcript still equal the values it was made from. The comparison is by value, not by hash, so a hash collision cannot return stale text. Without this, each keystroke allocates a new lowercase copy of every transcript.</li>
 <li>Run the filter on <code>Dispatchers.Default</code> (<code>flowOn</code>).</li>
 <li>Keep the 150 ms delay for typed text only. Chips apply at once.</li>
 <li>Measure with a generated library of 500 and 1,000 memories (instrumented test, §11).</li>
@@ -238,11 +238,15 @@
 </tr>
 <tr>
 <td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt</code></td>
-<td>Hold the query and the selected category ids in <code>SavedMemoriesUiState</code>. Derive the result set from <code>getState()</code>, the query (debounced by 150 ms for typing), and the selection. Freeze the result set while the detail view is open (AC-5.1). Replace <code>memoriesScrollState: ScrollState</code> with a <code>LazyListState</code>, so the list can be a <code>LazyColumn</code>.</td>
+<td>Hold the query and the selected category ids in <code>SavedMemoriesUiState</code>. Derive the result set from <code>getState()</code>, the query (debounced by 150 ms for typing), and the selection. Freeze the result set while the detail view is open (AC-5.1). Replace <code>memoriesScrollState: ScrollState</code> with <code>memoriesListState: LazyListState</code> (renamed, because the old name held a <code>ScrollState</code>), so the list can be a <code>LazyColumn</code>.</td>
 </tr>
 <tr>
 <td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt</code></td>
 <td>Replace the <code>verticalScroll</code> column in <code>MemoryListScreen</code> (line 246) with a <code>LazyColumn</code>. Add the search field, the chip row (<code>LazyRow</code> of <code>FilterChip</code>), the count line, and the no-results state. Hide the keyboard on list scroll. Register back handling for the query.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/MemorySearchControls.kt</code> (new)</td>
+<td>The search field (with the Clear search button and the counter), the count line, and the drawn search and close icons.</td>
 </tr>
 <tr>
 <td><code>composeApp/src/commonMain/composeResources/values/memory_strings.xml</code></td>
@@ -445,6 +449,11 @@
 <td>Q-6</td>
 <td>Should the list become a <code>LazyColumn</code> before or with search?</td>
 <td><strong>Decided: with search</strong> (§6.5).</td>
+</tr>
+<tr>
+<td>Q-7</td>
+<td>Has the 1,000-memory benchmark (§6.3, §11) been run on a mid-range device?</td>
+<td><strong>Open.</strong> Not run in the build session, so the phase 4 decision is still open. Record the 95th percentile here before deciding on phase 4.</td>
 </tr>
 </tbody>
 </table>

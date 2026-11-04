@@ -234,6 +234,7 @@
 
     .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .tag-mock { background: #fde3c8; color: #8a4b0a; }
+    .tag-shipped { background: #d6efdf; color: #1d6b3a; }
     .tag-android { background: #e3e7e9; color: #4a5558; }
 
     table {
@@ -281,30 +282,48 @@
       <p class="eyebrow">BorrowAI · Feature guide</p>
       <h1>Search and filter</h1>
       <p class="lede">
-        Design mockups for finding saved memories on Android: the search field, category chips, the no-results and keyboard behaviour, and the matching rules.
+        Finding saved memories on Android. The search field, the clear control, the count line, and the matching rules are built. The category chips, the no-results states, and the keyboard behaviour are design mockups.
         Full spec: <a href="search-and-filter.html">Search and filter design</a>.
       </p>
     </header>
 
     <p class="status-note">
-      <span class="tag tag-mock">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag tag-shipped">Shipped</span> Built on Android in phase 1: the search field, the clear control, the count line, the 100-character limit, and the matching rules.
+      <span class="tag tag-mock">Mockup</span> Still design only: the category chips (phase 2), and the no-results and keyboard states (phase 3).
       <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 1 · Search and chips</p>
-      <h2>Search field, category chips, and count <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The search field sits above the list and matches the title, summary, and transcript. Category chips filter by one or more categories. Search and chips combine.</p>
+      <p class="eyebrow">Build status</p>
+      <h2>What is built</h2>
+      <table>
+        <thead>
+          <tr><th>Element</th><th>Status</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Search field</td><td><span class="tag tag-shipped">Shipped</span></td><td>A label, "Search memories", not a placeholder. Typing applies the query 150 ms after the last keystroke. The Search key hides the keyboard and applies the query at once.</td></tr>
+          <tr><td>Clear control</td><td><span class="tag tag-shipped">Shipped</span></td><td>An icon button named "Clear search". It keeps focus in the field.</td></tr>
+          <tr><td>Count line</td><td><span class="tag tag-shipped">Shipped</span></td><td>"42 memories", or "Showing 3 of 42" while a search is active.</td></tr>
+          <tr><td>Length limit</td><td><span class="tag tag-shipped">Shipped</span></td><td>Queries are cut at 100 characters. A counter shows near the limit, and a notice shows when pasted text was cut.</td></tr>
+          <tr><td>Results while a memory is open</td><td><span class="tag tag-shipped">Shipped</span></td><td>The list does not change while a memory is open. It is recalculated when you return.</td></tr>
+          <tr><td>Empty library</td><td><span class="tag tag-shipped">Shipped</span></td><td>The search field and count line are hidden. The empty state belongs to the delete design.</td></tr>
+          <tr><td>Matching rules</td><td><span class="tag tag-shipped">Shipped</span></td><td>See Matching examples below.</td></tr>
+          <tr><td>Category chips and Clear filters</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 2.</td></tr>
+          <tr><td>No-results state and its buttons</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3.</td></tr>
+          <tr><td>Scrolling, Enter, Escape, and system back</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3. See Predictable keys and back presses below.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Shipped and mockup · 1 · Search and chips</p>
+      <h2>Search field and count <span class="tag tag-shipped">Shipped</span> Category chips <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The search field sits above the list and matches the title, summary, and transcript. The field and the count line are built. The category chips are still a mockup (phase 2). Once built, search and chips combine.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Saved memories</div>
             <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-placeholder">Search memories</span></div>
-            <div class="chip-row">
-              <span class="chip">Travel <span class="chip-count">4</span></span>
-              <span class="chip">Family <span class="chip-count">2</span></span>
-              <span class="chip">Work <span class="chip-count">7</span></span>
-            </div>
             <div class="count">42 memories</div>
             <div class="card">
               <div class="card-meta">3 Nov 2026 · 08:14</div>
@@ -316,16 +335,12 @@
             </div>
             <div class="dock"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
           </div></div>
-          <p class="screen-caption">Default: all memories</p>
+          <p class="screen-caption">Default: all memories <span class="tag tag-shipped">Shipped</span></p>
         </figure>
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Saved memories</div>
-            <div class="search focus"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget<span class="caret"></span></span><span class="search-clear">Clear</span></div>
-            <div class="chip-row">
-              <span class="chip">Travel <span class="chip-count">4</span></span>
-              <span class="chip">Work <span class="chip-count">7</span></span>
-            </div>
+            <div class="search focus"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget<span class="caret"></span></span><span class="search-clear" aria-label="Clear search">&#10005;</span></div>
             <div class="count">Showing 3 of 42</div>
             <div class="card">
               <div class="card-meta">3 Nov 2026 · 08:14</div>
@@ -342,12 +357,12 @@
               <div class="key-row"><span class="key key-search">Search</span></div>
             </div>
           </div></div>
-          <p class="screen-caption">Searching, keyboard open</p>
+          <p class="screen-caption">Searching, keyboard open <span class="tag tag-shipped">Shipped</span></p>
         </figure>
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Saved memories</div>
-            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget</span><span class="search-clear">Clear</span></div>
+            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget</span><span class="search-clear" aria-label="Clear search">&#10005;</span></div>
             <div class="chip-row">
               <span class="chip chip-on">&#10003; Travel <span class="chip-count">3</span></span>
               <span class="chip chip-on">&#10003; Family <span class="chip-count">1</span></span>
@@ -362,7 +377,7 @@
             <div class="menu-note">Search and category chips combine with AND. Chips combine with OR: a memory in Travel or Family matches.</div>
             <div class="dock"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
           </div></div>
-          <p class="screen-caption">Search and two chips</p>
+          <p class="screen-caption">Search and two chips <span class="tag tag-mock">Mockup</span></p>
         </figure>
       </div>
     </section>
@@ -370,7 +385,7 @@
     <section class="section">
       <p class="eyebrow">Mockup · 2 · No results</p>
       <h2>No-results states <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">A no-results state names the query, explains what is searched, and offers the clear actions. A library with no memories at all shows the empty state from the delete design instead.</p>
+      <p class="section-note">A no-results state names the query, explains what is searched, and offers the clear actions. A library with no memories at all shows the empty state from the delete design instead. This is a mockup until phase 3.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -425,7 +440,7 @@
 
     <section class="section">
       <p class="eyebrow">Rules</p>
-      <h2>Matching examples <span class="tag tag-mock">Mockup</span></h2>
+      <h2>Matching examples <span class="tag tag-shipped">Shipped</span></h2>
       <p class="section-note">These examples describe the in-memory matcher. A term is found as a substring, in any of the three text fields, ignoring case. Every term must be found.</p>
       <table>
         <thead>
@@ -444,20 +459,21 @@
 
     <section class="section">
       <p class="eyebrow">Keyboard and back</p>
-      <h2>Predictable keys and back presses <span class="tag tag-mock">Mockup</span></h2>
+      <h2>Predictable keys and back presses <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The Search key and the Clear button are built in phase 1. Scrolling, Enter, Escape, and system back are phase 3, so they stay mockups here.</p>
       <table>
         <thead>
-          <tr><th>Input</th><th>Result</th></tr>
+          <tr><th>Input</th><th>Result</th><th>Status</th></tr>
         </thead>
         <tbody>
-          <tr><td>Search key on the keyboard</td><td>Keyboard hides, results stay.</td></tr>
-          <tr><td>Scroll the list</td><td>Keyboard hides.</td></tr>
-          <tr><td>Clear button</td><td>Query is emptied, focus stays in the field.</td></tr>
-          <tr><td>Hardware Enter</td><td>Runs the search.</td></tr>
-          <tr><td>Hardware Escape</td><td>Clears the query.</td></tr>
-          <tr><td>System back, keyboard open</td><td>Hides the keyboard first.</td></tr>
-          <tr><td>System back, query open</td><td>Clears the query.</td></tr>
-          <tr><td>System back, detail view open</td><td>Returns to the list, as it does today.</td></tr>
+          <tr><td>Search key on the keyboard</td><td>Keyboard hides, results stay.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
+          <tr><td>Scroll the list</td><td>Keyboard hides.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>Clear button</td><td>Query is emptied, focus stays in the field.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
+          <tr><td>Hardware Enter</td><td>Runs the search.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>Hardware Escape</td><td>Clears the query.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>System back, keyboard open</td><td>Hides the keyboard first.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>System back, query open</td><td>Clears the query.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>System back, detail view open</td><td>Returns to the list, as it does today.</td><td><span class="tag tag-android">Unchanged</span></td></tr>
         </tbody>
       </table>
     </section>

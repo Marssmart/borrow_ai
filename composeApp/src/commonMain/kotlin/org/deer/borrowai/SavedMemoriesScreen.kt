@@ -25,6 +25,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -98,13 +102,13 @@ internal fun SavedMemoriesScreen(
     val memoryPagerState = rememberPagerState(
         pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
     )
-    val memoriesScrollState = rememberScrollState()
+    val memoriesListState = rememberLazyListState()
     val detailScrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val stateHolder = remember(
         services,
         memoryPagerState,
-        memoriesScrollState,
+        memoriesListState,
         detailScrollState,
         scope,
     ) {
@@ -112,7 +116,7 @@ internal fun SavedMemoriesScreen(
             memoryService = services.memories,
             mediaSessionService = services.mediaSession,
             pagerState = memoryPagerState,
-            memoriesScrollState = memoriesScrollState,
+            memoriesListState = memoriesListState,
             detailScrollState = detailScrollState,
             scope = scope,
             launchWrite = services::launchWrite,
@@ -155,13 +159,20 @@ internal fun SavedMemoriesScreen(
     ) { page ->
         when (page) {
             SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
-                memories = uiState.visibleMemories,
+                memories = uiState.searchResults.memories,
+                libraryCount = uiState.visibleMemories.size,
+                isFiltered = uiState.searchResults.isFiltered,
+                searchText = uiState.searchText,
+                searchTextCut = uiState.searchTextCut,
                 summaryModelMissing = uiState.summaryModelMissing,
                 categoryNames = uiState.categoryNames,
-                scrollState = stateHolder.memoriesScrollState,
+                listState = stateHolder.memoriesListState,
                 playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
                 onOpenMemory = stateHolder::openMemory,
                 onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
+                onSearchTextChanged = stateHolder::onSearchTextChanged,
+                onSearchSubmit = stateHolder::submitSearch,
+                onClearSearch = stateHolder::clearSearch,
             )
 
             SavedMemoriesStateHolder.MEMORY_DETAIL_PAGE -> selectedMemory?.let { memory ->
@@ -234,12 +245,19 @@ internal fun SavedMemoriesScreen(
 @Composable
 private fun MemoryListScreen(
     memories: List<Memory>,
+    libraryCount: Int,
+    isFiltered: Boolean,
+    searchText: String,
+    searchTextCut: Boolean,
     summaryModelMissing: Boolean,
     categoryNames: Map<Int, String>,
-    scrollState: ScrollState,
+    listState: LazyListState,
     playingTarget: PlaybackTarget?,
     onOpenMemory: (String) -> Unit,
     onPlayRecording: (String) -> Unit,
+    onSearchTextChanged: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    onClearSearch: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -252,20 +270,40 @@ private fun MemoryListScreen(
             fontWeight = FontWeight.Bold,
         )
 
-        Column(
-            modifier = Modifier.weight(1f).verticalScroll(scrollState)
-                .padding(SavedMemoriesStateHolder.MEMORY_LIST_CONTENT_PADDING),
+        if (libraryCount > 0) {
+            MemorySearchField(
+                text = searchText,
+                inputCut = searchTextCut,
+                onTextChange = onSearchTextChanged,
+                onSearch = onSearchSubmit,
+                onClear = onClearSearch,
+                modifier = Modifier.padding(MemorySearchControlsPadding),
+            )
+            MemoryCountLine(
+                shown = memories.size,
+                total = libraryCount,
+                isFiltered = isFiltered,
+                modifier = Modifier.padding(MemorySearchControlsPadding),
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            state = listState,
+            contentPadding = SavedMemoriesStateHolder.MEMORY_LIST_CONTENT_PADDING,
             verticalArrangement = Arrangement.spacedBy(SavedMemoriesStateHolder.MEMORY_LIST_ITEM_SPACING),
         ) {
             if (summaryModelMissing) {
-                Text(
-                    stringResource(Res.string.memory_summary_model_missing),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                item {
+                    Text(
+                        stringResource(Res.string.memory_summary_model_missing),
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
-            memories.forEach { memory ->
+            items(memories, key = Memory::id) { memory ->
                 MemoryCard(
                     memory = memory,
                     categoryNames = memory.categories.mapNotNull { categoryNames[it] },
