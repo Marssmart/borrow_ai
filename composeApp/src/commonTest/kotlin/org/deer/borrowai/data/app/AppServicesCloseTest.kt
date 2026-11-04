@@ -35,6 +35,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class AppServicesCloseTest {
     private val recordingsRoot: Path = "/app/files/recordings".toPath()
@@ -127,6 +128,20 @@ class AppServicesCloseTest {
         advanceUntilIdle()
 
         assertEquals(listOf("write", "database"), events.filter { it == "write" || it == "database" })
+    }
+
+    @Test
+    fun `a write launched after close started is refused and the database still closes`() = runTest {
+        val events = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val services = servicesWith(RecordingMediaSession(events), events, failures, RecordingSummarizer(events))
+
+        services.close()
+        services.launchWrite { events += "late write" }
+        advanceUntilIdle()
+
+        assertFalse("late write" in events)
+        assertTrue("database" in events)
     }
 
     private fun TestScope.servicesWith(

@@ -109,6 +109,8 @@ class AppServices internal constructor(
      */
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
+        // Writes started after this point are refused, so the drain below sees every write that will ever run.
+        pendingWrites.stopAccepting()
 
         val mediaFailure = runCatching { mediaSession.close() }.exceptionOrNull()
         closeScope.launch {

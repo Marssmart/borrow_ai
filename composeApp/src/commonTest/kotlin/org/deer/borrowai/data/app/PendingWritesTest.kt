@@ -34,4 +34,17 @@ class PendingWritesTest {
     fun awaitAllReturnsAtOnceWhenNothingIsRunning() = runTest {
         PendingWrites(backgroundScope).awaitAll()
     }
+
+    @Test
+    fun writesLaunchedAfterStopAcceptingDoNotRun() = runTest {
+        val writes = PendingWrites(backgroundScope)
+        val events = mutableListOf<String>()
+        writes.stopAccepting()
+
+        writes.launch { events += "late write" }
+        writes.awaitAll()
+        runCurrent()
+
+        assertEquals(emptyList<String>(), events)
+    }
 }

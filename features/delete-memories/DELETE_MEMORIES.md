@@ -213,7 +213,7 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 
 ### 8.3 Implementation notes (P1)
 
-- **Commit scope.** Soft-delete writes start through `AppServices.launchWrite`, not on the Memories screen's scope, so a write keeps running after that page leaves composition. `AppServices.close()` waits for every write started this way (`PendingWrites`) before the database closes. Shutdown cannot cut a delete off.
+- **Commit scope.** Soft-delete writes start through `AppServices.launchWrite`, not on the Memories screen's scope, so a write keeps running after that page leaves composition. `AppServices.close()` refuses new writes first, then waits for the ones already started (`PendingWrites`) before the database closes. A write launched after close began is refused. Its delete is not written, so the memory returns on the next launch, the same safe failure as an app kill.
 - **Commit triggers.** The 10-second window timer runs on the screen scope. Leaving the Memories tab is seen when its page leaves composition (`DisposableEffect`), which happens after the swipe settles. Going to the background is `LifecycleEventEffect(ON_STOP)`. A second delete commits the first one before it opens its own window.
 - **Hidden while writing.** A memory stays hidden until its write returns. A `Persistence` or `Malformed` result shows it again and counts one error. `NotFound` counts as done (AC-6.2).
 - **Stale timers.** Each window has a request id. A timer left over from an earlier window does nothing.
