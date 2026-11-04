@@ -97,6 +97,10 @@ class AppServices internal constructor(
     private val closed = MutableStateFlow(false)
     private val pendingWrites = PendingWrites(closeScope)
 
+    /** Whether speaker analysis can run now: the user has opted in and a speaker model is available (section 9.1). */
+    suspend fun speakerAnalysisActive(): Boolean =
+        speakers.isFeatureEnabled().getOrNull() == true && speakerAnalyzer.isAvailable()
+
     /**
      * Starts a write that must finish even if the screen that asked for it leaves, such as a memory delete. [close]
      * waits for it before the database closes.

@@ -36,6 +36,7 @@ import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.newSpeakerColorIndex
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
 
@@ -81,6 +82,7 @@ class KotbaseSpeakerService private constructor(
     override suspend fun createSpeaker(name: String): Either<SpeakerError, Speaker> = mutex.withLock {
         either {
             val trimmed = checkName(name, exceptId = null).bind()
+            val existing = withContext(Dispatchers.Default) { persisting { readSpeakers() } }.bind()
             val now = epochClock.nowEpochMillis()
             val speaker = Speaker(
                 id = idGenerator(),
@@ -88,6 +90,7 @@ class KotbaseSpeakerService private constructor(
                 createdAtEpochMillis = now,
                 lastUsedAtEpochMillis = now,
                 embeddingCount = 0,
+                colorIndex = newSpeakerColorIndex(existing),
             )
             write { saveSpeaker(speaker) }.bind()
             speaker
@@ -123,6 +126,9 @@ class KotbaseSpeakerService private constructor(
         withContext(Dispatchers.Default) {
             persisting { readOccurrences { row -> row.getString(KEY_MEMORY_ID) == memoryId }.sortedBy { it.ordinal } }
         }
+
+    override suspend fun findAllOccurrences(): Either<SpeakerError, List<SpeakerOccurrence>> =
+        withContext(Dispatchers.Default) { persisting { readOccurrences() } }
 
     override suspend fun replaceOccurrences(
         memoryId: String,
@@ -379,6 +385,7 @@ class KotbaseSpeakerService private constructor(
             setLong(KEY_CREATED_AT, speaker.createdAtEpochMillis)
             setLong(KEY_LAST_USED_AT, speaker.lastUsedAtEpochMillis)
             setInt(KEY_EMBEDDING_COUNT, speaker.embeddingCount)
+            setInt(KEY_COLOR_INDEX, speaker.colorIndex)
         }
         collection.save(document)
     }
@@ -499,6 +506,7 @@ class KotbaseSpeakerService private constructor(
                 createdAtEpochMillis = getLong(KEY_CREATED_AT),
                 lastUsedAtEpochMillis = getLong(KEY_LAST_USED_AT),
                 embeddingCount = getInt(KEY_EMBEDDING_COUNT),
+                colorIndex = getInt(KEY_COLOR_INDEX),
             )
         }
     }
@@ -575,6 +583,7 @@ class KotbaseSpeakerService private constructor(
         private const val KEY_CREATED_AT = "createdAtEpochMillis"
         private const val KEY_LAST_USED_AT = "lastUsedAtEpochMillis"
         private const val KEY_EMBEDDING_COUNT = "embeddingCount"
+        private const val KEY_COLOR_INDEX = "colorIndex"
         private const val KEY_MEMORY_ID = "memoryId"
         private const val KEY_SPEAKER_ID = "speakerId"
         private const val KEY_VECTOR = "vector"

@@ -28,6 +28,7 @@ import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MemorySearch
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.FakeMemoryService
+import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackError
@@ -345,6 +346,8 @@ class SavedMemoriesStateHolderTest {
         SavedMemoriesStateHolder(
             memoryService = memoryService,
             mediaSessionService = FakeMediaSession(),
+            speakers = FakeSpeakerService(),
+            speakerAnalysisActive = { false },
             summaryModelMissing = MutableStateFlow(false),
             pagerState = PagerState(pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT }),
             memoriesListState = LazyListState(),
