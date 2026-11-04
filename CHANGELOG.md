@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.22.0]
+
+- Added category chips to the memory editor on Android. Choose up to three categories. The count shows how many are chosen. A fourth choice shows a message.
+- Added a New category option to the editor. A name of up to 15 characters and a description of up to 100 characters create a category. A name that already exists, ignoring case, is refused.
+- Updated Android and iOS versioning to 1.22.0 (build 81).
+
 ## [1.21.0]
 
 - Added a Transcript field to the memory editor on Android. A transcript that is still being created is read-only with a notice. A transcript that failed can be typed in, and saving it marks it done.

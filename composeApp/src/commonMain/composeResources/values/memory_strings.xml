@@ -71,6 +71,17 @@
     <string name="memory_banner_suggest_categories">Suggest categories</string>
     <string name="memory_banner_dismiss">Dismiss</string>
     <string name="memory_banner_request_failed">Couldn\'t request new output. Try again.</string>
+    <string name="memory_edit_categories_label">Categories</string>
+    <string name="memory_edit_categories_count">%1$d of %2$d</string>
+    <string name="memory_edit_categories_max">A memory can have at most 3 categories. Remove one to choose another.</string>
+    <string name="memory_edit_new_category">New category</string>
+    <string name="memory_edit_new_category_title">New category</string>
+    <string name="memory_edit_category_name_label">Name</string>
+    <string name="memory_edit_category_description_label">Description</string>
+    <string name="memory_edit_category_duplicate">A category with this name already exists.</string>
+    <string name="memory_edit_category_add">Add</string>
+    <string name="memory_edit_category_cancel">Cancel</string>
+    <string name="memory_edit_category_failed">Couldn\'t create the category. Try again.</string>
     <string name="memory_banner_replace_summary_title">Replace your summary?</string>
     <string name="memory_banner_replace_summary_message">The new summary replaces the one you wrote.</string>
     <string name="memory_banner_replace_categories_title">Replace your categories?</string>

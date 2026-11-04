@@ -3,7 +3,10 @@ package org.deer.borrowai
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -37,15 +41,28 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import arrow.core.Either
 import borrowai.composeapp.generated.resources.Res
+import borrowai.composeapp.generated.resources.memory_edit_categories_count
+import borrowai.composeapp.generated.resources.memory_edit_categories_label
+import borrowai.composeapp.generated.resources.memory_edit_categories_max
+import borrowai.composeapp.generated.resources.memory_edit_category_add
+import borrowai.composeapp.generated.resources.memory_edit_category_cancel
+import borrowai.composeapp.generated.resources.memory_edit_category_description_label
+import borrowai.composeapp.generated.resources.memory_edit_category_duplicate
+import borrowai.composeapp.generated.resources.memory_edit_category_failed
+import borrowai.composeapp.generated.resources.memory_edit_category_name_label
+import borrowai.composeapp.generated.resources.memory_edit_new_category
+import borrowai.composeapp.generated.resources.memory_edit_new_category_title
 import borrowai.composeapp.generated.resources.memory_edit
 import borrowai.composeapp.generated.resources.memory_edit_cancel
 import borrowai.composeapp.generated.resources.memory_edit_counter
@@ -65,6 +82,11 @@ import borrowai.composeapp.generated.resources.memory_edit_summary_label
 import borrowai.composeapp.generated.resources.memory_edit_summary_too_long
 import borrowai.composeapp.generated.resources.memory_edit_title_label
 import borrowai.composeapp.generated.resources.memory_edit_title_too_long
+import org.deer.borrowai.data.domain.CATEGORY_DESCRIPTION_MAX_LENGTH
+import org.deer.borrowai.data.domain.CATEGORY_NAME_MAX_LENGTH
+import org.deer.borrowai.data.domain.Category
+import org.deer.borrowai.data.domain.categoryNameTaken
+import org.deer.borrowai.data.domain.MAX_MEMORY_CATEGORIES
 import org.deer.borrowai.data.domain.MEMORY_SUMMARY_MAX_LENGTH
 import org.deer.borrowai.data.domain.MEMORY_TITLE_MAX_LENGTH
 import org.deer.borrowai.data.domain.MEMORY_TRANSCRIPTION_MAX_LENGTH
@@ -79,16 +101,18 @@ import org.jetbrains.compose.resources.stringResource
 private const val TITLE_COUNTER_THRESHOLD = 60
 
 /**
- * Full-screen editor for a memory's title, summary, and transcript. Categories are not editable here yet, so
- * [MemoryEdit] carries their current values unchanged. [onSave] reports the outcome through its callback.
+ * Full-screen editor for a memory's title, summary, transcript, and categories. [MemoryEdit] carries only the fields the
+ * user changed, and every other field keeps its live value. [onSave] reports the outcome through its callback.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun MemoryEditScreen(
     memory: Memory,
-    onSave: (String?, String?, String?, String, (Either<MemoryError, Unit>) -> Unit) -> Unit,
+    onSave: (String?, String?, String?, List<Int>?, String, (Either<MemoryError, Unit>) -> Unit) -> Unit,
     onClose: () -> Unit,
     onDeletedElsewhere: () -> Unit,
+    categoryNames: Map<Int, String>,
+    onCreateCategory: (String, String, (Either<MemoryError, Category>) -> Unit) -> Unit,
 ) {
     var title by rememberSaveable(memory.id) { mutableStateOf(memory.title) }
     var summary by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
@@ -96,6 +120,15 @@ internal fun MemoryEditScreen(
     var titleEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
     var summaryEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
     var transcriptEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
+    // Category choices are kept in memory only (spec Q-6: drafts are not kept across process death).
+    var selectedIds by remember(memory.id) { mutableStateOf(memory.categories) }
+    var categoriesEdited by remember(memory.id) { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var newDescription by remember { mutableStateOf("") }
+    var creatingBusy by remember { mutableStateOf(false) }
+    var createFailed by remember { mutableStateOf(false) }
+    var createDuplicate by remember { mutableStateOf(false) }
     // The summary the editor opened with. A different live summary means a new one was written during the edit.
     val summaryAtEntry by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
     var saving by remember { mutableStateOf(false) }
@@ -103,6 +136,7 @@ internal fun MemoryEditScreen(
     var rejected by remember { mutableStateOf<String?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val keepEditingFocus = remember { FocusRequester() }
+    val categoriesMaxMessage = stringResource(Res.string.memory_edit_categories_max)
 
     val live = memory.currentEdit()
     // Only the fields the user typed in are sent. Any other field keeps its live value, so a background summary is not
@@ -111,6 +145,7 @@ internal fun MemoryEditScreen(
         title = if (titleEdited) title else live.title,
         summary = if (summaryEdited) summary else live.summary,
         transcription = if (transcriptEdited) transcript else live.transcription,
+        categoryIds = if (categoriesEdited) selectedIds else live.categoryIds,
     )
     val changed = draft != live
     val summaryConflict = summaryEdited && memory.summary != summaryAtEntry
@@ -135,6 +170,7 @@ internal fun MemoryEditScreen(
             if (titleEdited) title else null,
             if (summaryEdited) summary else null,
             if (transcriptEdited) transcript else null,
+            if (categoriesEdited) selectedIds else null,
             summaryAtEntry,
         ) { result ->
             saving = false
@@ -278,6 +314,50 @@ internal fun MemoryEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            Text(
+                stringResource(Res.string.memory_edit_categories_label),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                categoryNames.toSortedMap().forEach { (id, name) ->
+                    val selected = id in selectedIds
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            when {
+                                selected -> {
+                                    selectedIds = selectedIds - id
+                                    categoriesEdited = true
+                                }
+                                selectedIds.size >= MAX_MEMORY_CATEGORIES -> rejected = categoriesMaxMessage
+                                else -> {
+                                    selectedIds = selectedIds + id
+                                    categoriesEdited = true
+                                }
+                            }
+                        },
+                        enabled = !saving,
+                        label = { Text(name) },
+                        modifier = Modifier.heightIn(min = 48.dp).semantics { role = Role.Checkbox },
+                    )
+                }
+                FilterChip(
+                    selected = false,
+                    onClick = { creating = true },
+                    enabled = !saving,
+                    label = { Text(stringResource(Res.string.memory_edit_new_category)) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+            Text(
+                stringResource(Res.string.memory_edit_categories_count, selectedIds.size, MAX_MEMORY_CATEGORIES),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
             rejected?.let {
                 Text(
                     it,
@@ -308,6 +388,106 @@ internal fun MemoryEditScreen(
                 }
             }
         }
+    }
+
+    if (creating) {
+        val trimmedName = newName.trim()
+        val duplicate = trimmedName.isNotEmpty() && categoryNameTaken(trimmedName, categoryNames.values)
+        val nameTooLong = newName.length > CATEGORY_NAME_MAX_LENGTH
+        val descriptionTooLong = newDescription.length > CATEGORY_DESCRIPTION_MAX_LENGTH
+        val canAdd = trimmedName.isNotEmpty() && !duplicate && !nameTooLong && !descriptionTooLong && !creatingBusy
+        AlertDialog(
+            onDismissRequest = { if (!creatingBusy) creating = false },
+            title = { Text(stringResource(Res.string.memory_edit_new_category_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = {
+                            newName = it
+                            createFailed = false
+                        },
+                        label = { Text(stringResource(Res.string.memory_edit_category_name_label)) },
+                        singleLine = true,
+                        isError = duplicate || nameTooLong,
+                        supportingText = {
+                            Text(
+                                if (duplicate) {
+                                    stringResource(Res.string.memory_edit_category_duplicate)
+                                } else {
+                                    stringResource(Res.string.memory_edit_counter, newName.length, CATEGORY_NAME_MAX_LENGTH)
+                                },
+                            )
+                        },
+                    )
+                    OutlinedTextField(
+                        value = newDescription,
+                        onValueChange = {
+                            newDescription = it
+                            createFailed = false
+                        },
+                        label = { Text(stringResource(Res.string.memory_edit_category_description_label)) },
+                        isError = descriptionTooLong,
+                        supportingText = {
+                            Text(
+                                stringResource(
+                                    Res.string.memory_edit_counter,
+                                    newDescription.length,
+                                    CATEGORY_DESCRIPTION_MAX_LENGTH,
+                                ),
+                            )
+                        },
+                    )
+                    if (createFailed || createDuplicate) {
+                        Text(
+                            stringResource(
+                                if (createDuplicate) {
+                                    Res.string.memory_edit_category_duplicate
+                                } else {
+                                    Res.string.memory_edit_category_failed
+                                },
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = canAdd,
+                    onClick = {
+                        creatingBusy = true
+                        createFailed = false
+                        createDuplicate = false
+                        onCreateCategory(trimmedName, newDescription.trim()) { result ->
+                            creatingBusy = false
+                            result.fold(
+                                ifLeft = { error ->
+                                    if (error is MemoryError.InvalidInput) createDuplicate = true else createFailed = true
+                                },
+                                ifRight = { category ->
+                                    creating = false
+                                    newName = ""
+                                    newDescription = ""
+                                    if (selectedIds.size < MAX_MEMORY_CATEGORIES) {
+                                        selectedIds = selectedIds + category.id
+                                        categoriesEdited = true
+                                    } else {
+                                        rejected = categoriesMaxMessage
+                                    }
+                                },
+                            )
+                        }
+                    },
+                ) { Text(stringResource(Res.string.memory_edit_category_add)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { creating = false }, enabled = !creatingBusy) {
+                    Text(stringResource(Res.string.memory_edit_category_cancel))
+                }
+            },
+        )
     }
 
     if (confirmDiscard) {

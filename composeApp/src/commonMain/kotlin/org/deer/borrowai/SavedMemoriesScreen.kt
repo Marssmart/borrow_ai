@@ -289,9 +289,19 @@ internal fun SavedMemoriesScreen(
         editedMemory?.let { memory ->
             MemoryEditScreen(
                 memory = memory,
-                onSave = { title, summary, transcript, entry, onResult ->
-                    stateHolder.saveMemoryEdit(memory.id, title, summary, transcript, entry, onResult)
+                onSave = { title, summary, transcript, categories, entry, onResult ->
+                    stateHolder.saveMemoryEdit(
+                        memoryId = memory.id,
+                        title = title,
+                        summary = summary,
+                        transcript = transcript,
+                        summaryAtEntry = entry,
+                        categories = categories,
+                        onResult = onResult,
+                    )
                 },
+                categoryNames = uiState.categoryNames,
+                onCreateCategory = stateHolder::createCategory,
                 onClose = { editingMemoryId = null },
                 onDeletedElsewhere = onEditedMemoryDeleted,
             )

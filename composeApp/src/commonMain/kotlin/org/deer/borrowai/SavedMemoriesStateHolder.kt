@@ -33,6 +33,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.CategoryFilterChip
+import org.deer.borrowai.data.domain.Category
+import org.deer.borrowai.data.domain.categoryNameTaken
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.currentEdit
 import org.deer.borrowai.data.domain.MemorySearch
@@ -50,6 +52,7 @@ import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.SpeakerService
 
 private const val SUMMARY_WRITTEN_AGAIN = "The summary was written again while you were editing."
+private const val CATEGORY_NAME_TAKEN = "A category with this name already exists."
 
 internal data class SavedMemoriesUiState(
     val memories: List<Memory> = emptyList(),
@@ -236,6 +239,7 @@ internal class SavedMemoriesStateHolder(
         summary: String?,
         transcript: String?,
         summaryAtEntry: String,
+        categories: List<Int>? = null,
         onResult: (Either<MemoryError, Unit>) -> Unit,
     ) {
         launchWrite {
@@ -250,6 +254,7 @@ internal class SavedMemoriesStateHolder(
                     title = title ?: current.title,
                     summary = summary ?: current.summary,
                     transcription = transcript ?: current.transcription,
+                    categoryIds = categories ?: current.categories,
                 )
                 memoryService.edit(memoryId, edit).bind()
             }
@@ -262,6 +267,27 @@ internal class SavedMemoriesStateHolder(
 
     fun dismissTranscriptBanner() {
         mutableUiState.update { it.copy(transcriptChangedMemoryId = null) }
+    }
+
+    /**
+     * Creates a category for the editor. The name is checked against a fresh read of the categories, so a category made
+     * elsewhere is not duplicated. On success the new name joins the names the editor offers. [onResult] runs on the
+     * holder's scope.
+     */
+    fun createCategory(name: String, description: String, onResult: (Either<MemoryError, Category>) -> Unit) {
+        launchWrite {
+            val result = either {
+                val existing = memoryService.findCategories().bind()
+                if (categoryNameTaken(name, existing.map(Category::name))) {
+                    raise(MemoryError.InvalidInput(CATEGORY_NAME_TAKEN))
+                }
+                memoryService.createCategory(name, description).bind()
+            }
+            result.onRight { category ->
+                mutableUiState.update { state -> state.copy(categoryNames = state.categoryNames + (category.id to category.name)) }
+            }
+            scope.launch { onResult(result) }
+        }
     }
 
     /** Asks the recovery job for a new summary. The caller has already confirmed when that replaces the user's text. */
