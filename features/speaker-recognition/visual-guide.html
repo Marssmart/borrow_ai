@@ -396,7 +396,7 @@
       </p>
     </header>
 
-    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the code in 1.9.1 wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
+    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the code in 1.9.2 wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
 
     <section class="section">
       <p class="eyebrow">Shipped · 1 · Navigation</p>
@@ -430,8 +430,8 @@
     <section class="section">
       <p class="eyebrow">Shipped · 2 · Capture</p>
       <h2>Recording screen <span class="tag tag-live">Shipped</span></h2>
-      <p class="section-note">Tap or hold the record button. A hold records until release, a tap records until tapped again. While recording the screen shows the elapsed time and, on Android, a live transcript. A progress ring around the button shows model downloads. Recordings are saved as M4A and transcribed in the background.</p>
-      <p class="section-note">Model setup picks a tier from device RAM, then downloads the live voice, high-quality voice and summarization models one after another. Recording is unavailable until setup finishes.</p>
+      <p class="section-note">Tap or hold the record button. A hold records until release, a tap records until tapped again. While recording the screen shows the elapsed time and, on Android, a live transcript. A progress ring around the button shows model downloads. Recordings are saved as M4A and transcribed in the background (transcription is Android only; iOS saves the recording without a transcript).</p>
+      <p class="section-note">Model setup picks a tier from device RAM, then downloads the live voice, high-quality voice and summarization models one after another. Setup progress is shown on the capture screen and does not block recording.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -483,7 +483,7 @@
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title center">BorrowAI</div>
-            <div class="muted center">Recording unavailable until model setup is complete</div>
+            <div class="muted center">Waiting for network</div>
             <div class="notice">Download failed. Check Wi-Fi, then relaunch to retry.</div>
             <div class="notice">Check device storage, then relaunch BorrowAI.</div>
             <div class="notice">Model verification failed. Relaunch BorrowAI to retry.</div>
