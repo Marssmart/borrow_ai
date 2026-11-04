@@ -134,6 +134,21 @@ class MemorySearchTest {
         assertEquals(listOf("a"), searcher.search(after, "dentist").memories.map { it.id })
     }
 
+    @Test
+    fun categoriesCombineAsOrAndTheQueryAsAnd() {
+        val memories = listOf(
+            memory("travel", 3, transcription = "budget for the trip", categories = listOf(1)),
+            memory("family", 2, transcription = "budget for family", categories = listOf(2)),
+            memory("work", 1, transcription = "budget review", categories = listOf(3)),
+        )
+        val searcher = MemorySearcher()
+
+        assertEquals(listOf("travel", "family"), searcher.search(memories, "budget", setOf(1, 2)).memories.map { it.id })
+        assertEquals(listOf("family"), searcher.search(memories, "family", setOf(1, 2)).memories.map { it.id })
+        assertEquals(listOf("travel", "family", "work"), searcher.search(memories, "", emptySet()).memories.map { it.id })
+        assertTrue(searcher.search(memories, "", setOf(1)).isFiltered)
+    }
+
     private fun search(memories: List<Memory>, query: String): List<String> =
         MemorySearcher().search(memories, query).memories.map { it.id }
 
@@ -143,6 +158,7 @@ class MemorySearchTest {
         title: String = "",
         summary: String = "",
         transcription: String = "",
+        categories: List<Int> = emptyList(),
     ): Memory = Memory(
         id = id,
         createdAtEpochMillis = createdAt,
@@ -150,5 +166,6 @@ class MemorySearchTest {
         summary = summary,
         transcription = transcription,
         transcriptionStatus = if (transcription.isBlank()) TranscriptionStatus.PENDING else TranscriptionStatus.DONE,
+        categories = categories,
     )
 }

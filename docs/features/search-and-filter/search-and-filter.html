@@ -24,7 +24,7 @@
   <main>
 <article>
 <h1 id="search-and-filter">Search and filter</h1>
-<p>Status: Phase 1 built on Android. Its exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phases 2 and 3 are next (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<p>Status: Phases 1 and 2 built on Android. Phase 1's exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phase 3 is next (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
 <hr />
 <h2 id="1-summary">1. Summary</h2>
 <p>The saved memories list cannot be searched or filtered. It shows every active memory in one scrolling column (<code>SavedMemoriesScreen.kt</code>, <code>MemoryListScreen</code>, <code>verticalScroll</code> at line 246). A user who remembers a phrase from a voice note has to scroll to find it.</p>
@@ -315,6 +315,7 @@
 <li>Each chip is a <code>FilterChip</code> with the selected state, the category name, and its count, for example "Work 4".</li>
 <li>Chips use the app's colour roles: <code>primaryContainer</code> (#C9E5E7) with <code>onPrimaryContainer</code> (#123B43) when selected.</li>
 <li>The chip row scrolls horizontally. The chip's touch target is at least 48 dp (<code>minimumInteractiveComponentSize</code>).</li>
+<li>Chip counts and the chip list use the memories the list shows, so a memory hidden by a pending delete is not counted. A selected chip whose category no memory uses any longer filters nothing, and it is not shown as active.</li>
 </ul>
 <hr />
 <h2 id="8-accessibility">8. Accessibility</h2>

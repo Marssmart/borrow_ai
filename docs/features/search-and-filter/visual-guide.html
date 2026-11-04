@@ -288,8 +288,8 @@
     </header>
 
     <p class="status-note">
-      <span class="tag tag-shipped">Shipped</span> Built on Android in phase 1: the search field, the clear control, the count line, the 100-character limit, and the matching rules.
-      <span class="tag tag-mock">Mockup</span> Still design only: the category chips (phase 2), and the no-results and keyboard states (phase 3).
+      <span class="tag tag-shipped">Shipped</span> Built on Android in phase 2: the category chips, OR across the selected chips, Clear filters, and chips combined with the search. Phase 1 built the search field, the clear control, the count line, the 100-character limit, and the matching rules.
+      <span class="tag tag-mock">Mockup</span> Still design only: the no-results and keyboard states (phase 3).
       <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
@@ -308,7 +308,7 @@
           <tr><td>Results while a memory is open</td><td><span class="tag tag-shipped">Shipped</span></td><td>The list does not change while a memory is open. It is recalculated when you return.</td></tr>
           <tr><td>Empty library</td><td><span class="tag tag-shipped">Shipped</span></td><td>The search field and count line are hidden. The empty state belongs to the delete design.</td></tr>
           <tr><td>Matching rules</td><td><span class="tag tag-shipped">Shipped</span></td><td>See Matching examples below.</td></tr>
-          <tr><td>Category chips and Clear filters</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 2.</td></tr>
+          <tr><td>Category chips and Clear filters</td><td><span class="tag tag-shipped">Shipped</span></td><td>Phase 2. Chip counts use the memories the list shows. Several chips combine with OR, and the search combines with them as AND.</td></tr>
           <tr><td>No-results state and its buttons</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3.</td></tr>
           <tr><td>Scrolling, Enter, Escape, and system back</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3. See Predictable keys and back presses below.</td></tr>
         </tbody>
@@ -317,8 +317,8 @@
 
     <section class="section">
       <p class="eyebrow">Shipped and mockup · 1 · Search and chips</p>
-      <h2>Search field and count <span class="tag tag-shipped">Shipped</span> Category chips <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The search field sits above the list and matches the title, summary, and transcript. The field and the count line are built. The category chips are still a mockup (phase 2). Once built, search and chips combine.</p>
+      <h2>Search field, count, and category chips <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The search field sits above the list and matches the title, summary, and transcript. The field, the count line, and the category chips are built. Search and chips combine.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -377,7 +377,7 @@
             <div class="menu-note">Search and category chips combine with AND. Chips combine with OR: a memory in Travel or Family matches.</div>
             <div class="dock"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
           </div></div>
-          <p class="screen-caption">Search and two chips <span class="tag tag-mock">Mockup</span></p>
+          <p class="screen-caption">Search and two chips <span class="tag tag-shipped">Shipped</span></p>
         </figure>
       </div>
     </section>
