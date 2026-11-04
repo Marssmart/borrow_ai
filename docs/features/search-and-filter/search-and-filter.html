@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Search and filter — BorrowAI docs</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../index.html">BorrowAI</a>
+    <nav>
+      <a href="../../index.html">Home</a>
+      <a href="../../how-it-works.html">How it works</a>
+      <a href="../../architecture.html">Architecture</a>
+      <a href="../../models-and-privacy.html">Models and privacy</a>
+      <a href="../../platforms.html">Platforms</a>
+      <a href="../../features/index.html" aria-current="page">Features</a>
+      <a href="../../design/index.html">Design guides</a>
+      <a href="../../developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="search-and-filter">Search and filter</h1>
+<p>Status: Planning (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<hr />
+<h2 id="1-summary">1. Summary</h2>
+<p>The saved memories list cannot be searched or filtered. It shows every active memory in one scrolling column (<code>SavedMemoriesScreen.kt</code>, <code>MemoryListScreen</code>, <code>verticalScroll</code> at line 246). A user who remembers a phrase from a voice note has to scroll to find it.</p>
+<p>This design adds:</p>
+<ol type="1">
+<li>A search field above the list. It matches a word or phrase in the title, summary, or transcript.</li>
+<li>Category filter chips. A user can select one or more categories.</li>
+<li>Clear empty states: no results, and a library with no memories at all.</li>
+<li>Keyboard and back behaviour that a user can predict.</li>
+</ol>
+<p>Decision: search runs in memory over the list that <code>getState()</code> already holds, not in a Couchbase full-text index. Kotbase does support full-text indexes (§6.2), so the index stays as the upgrade path if the in-memory search becomes too slow.</p>
+<p>The UI is Android only and uses Material 3. The matching rules are pure Kotlin in <code>commonMain</code>.</p>
+<hr />
+<h2 id="2-goals-and-non-goals">2. Goals and non-goals</h2>
+<h3 id="goals">Goals</h3>
+<ul>
+<li>Find a memory by any word or phrase that appears in its title, summary, or transcript.</li>
+<li>Filter by category, with one or more categories selected.</li>
+<li>Combine search and filters, and say how many memories match.</li>
+<li>Keep the list responsive with several hundred memories.</li>
+<li>Give clear messages when nothing matches, and when the library is empty.</li>
+</ul>
+<h3 id="non-goals-v1">Non-goals (v1)</h3>
+<ul>
+<li>Date, duration, or speaker filters. Speaker names belong to the speaker recognition feature.</li>
+<li>Relevance ranking. Results keep the newest-first order of the list.</li>
+<li>Highlighting matched words inside text. A follow-up.</li>
+<li>Saved searches or search history.</li>
+<li>Accent-insensitive matching (Q-1).</li>
+<li>Searching audio. Only text is matched.</li>
+<li>iOS UI and behaviour. Not designed here.</li>
+</ul>
+<hr />
+<h2 id="3-terms">3. Terms</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Query</td>
+<td>The text in the search field, trimmed, with spaces collapsed.</td>
+</tr>
+<tr>
+<td>Term</td>
+<td>One word of the query. Terms are split on whitespace.</td>
+</tr>
+<tr>
+<td>Searchable text</td>
+<td>A memory's title, summary, and transcript, read together.</td>
+</tr>
+<tr>
+<td>Category filter</td>
+<td>The set of selected category ids. Matches memories that have at least one selected category.</td>
+</tr>
+<tr>
+<td>Result set</td>
+<td>The memories that match the query and the category filter, newest first.</td>
+</tr>
+<tr>
+<td>Pending text</td>
+<td>A memory whose transcript is not ready yet. It has no text to match.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-user-stories-and-acceptance-criteria">4. User stories and acceptance criteria</h2>
+<h3 id="us-1-search-the-list">US-1: Search the list</h3>
+<p>As a user, I want to find a memory by a word I remember from it.</p>
+<ul>
+<li>AC-1.1: A search field sits above the list, under the "Saved memories" heading. Its label is "Search memories", and it has a visible text field, not only a placeholder.</li>
+<li>AC-1.2: The result set updates 150 ms after the last keystroke.</li>
+<li>AC-1.3: Matching is case-insensitive. Every term must appear in at least one of the title, summary, or transcript. A term may match different fields.</li>
+<li>AC-1.4: A query longer than 100 characters is cut at 100, and the field shows that it was cut.</li>
+<li>AC-1.5: An empty query shows every memory, as the list does today.</li>
+<li>AC-1.6: A memory with no text yet (a transcript still being made) never matches. The no-results message says this (US-3).</li>
+<li>AC-1.7: A partial word matches. "meet" matches "meeting". Matching is by substring, not by whole word.</li>
+</ul>
+<h3 id="us-2-filter-by-category">US-2: Filter by category</h3>
+<ul>
+<li>AC-2.1: One filter chip appears for each category used by at least one active memory. Chips follow the category id order, which is creation order.</li>
+<li>AC-2.2: A chip shows the category name and its count, for example "Work 4". It is a <code>FilterChip</code> with the selected state.</li>
+<li>AC-2.3: Several chips can be selected. A memory matches when it has at least one of the selected categories (OR).</li>
+<li>AC-2.4: A <strong>Clear filters</strong> action appears when any chip is selected, and clears them.</li>
+<li>AC-2.5: The category filter and the search combine with AND. A memory must match both.</li>
+</ul>
+<h3 id="us-3-empty-and-no-result-states">US-3: Empty and no-result states</h3>
+<ul>
+<li>AC-3.1: When a search or filter leaves no results, the list shows "No memories match "<query>"" (or "No memories in these categories" when only chips are selected). Below it: a hint, "Search covers titles, summaries, and transcripts. Memories still being transcribed are not searched yet."</li>
+<li>AC-3.2: The no-results state has <strong>Clear search</strong> (when a query exists) and <strong>Clear filters</strong> (when chips are selected) buttons.</li>
+<li>AC-3.3: When the library has no memories at all, the empty state from the delete design is shown (<a href="../delete-memories/delete-memories.html">Delete memories</a>, US-5), not the no-results state.</li>
+</ul>
+<h3 id="us-4-keyboard-and-back">US-4: Keyboard and back</h3>
+<ul>
+<li>AC-4.1: The keyboard shows a <strong>Search</strong> action. Pressing it hides the keyboard and keeps the results.</li>
+<li>AC-4.2: Scrolling the list hides the keyboard.</li>
+<li>AC-4.3: A clear button, labelled "Clear search", empties the query and keeps the focus in the field.</li>
+<li>AC-4.4: On a hardware keyboard, Enter runs the search and Escape clears the query.</li>
+<li>AC-4.5: System back on the Memories tab first hides the keyboard, then clears a non-empty query. Only then does back do what it does today. Back on the detail view keeps its current behaviour (<code>registerMemoryDetailBack</code>).</li>
+</ul>
+<h3 id="us-5-results-while-a-memory-is-open">US-5: Results while a memory is open</h3>
+<ul>
+<li>AC-5.1: While the detail view is open, the result set does not change, even if a memory is edited or deleted there.</li>
+<li>AC-5.2: When the user returns to the list, the result set is recalculated, and the search field and chips keep their values.</li>
+</ul>
+<hr />
+<h2 id="5-flow">5. Flow</h2>
+<ol type="1">
+<li>The user types in the search field.</li>
+<li>After 150 ms without a keystroke, the query is applied on a background dispatcher.</li>
+<li>The result set is the active memories that match the query and the selected categories, newest first.</li>
+<li>The list shows the result set, with a count line above it: "3 memories" or "Showing 3 of 42".</li>
+<li>Selecting or clearing a chip recalculates the result set at once, without the 150 ms delay.</li>
+</ol>
+<hr />
+<h2 id="6-data-and-service-changes">6. Data and service changes</h2>
+<h3 id="61-current-data-path">6.1 Current data path</h3>
+<ul>
+<li><code>KotbaseMemoryService</code> publishes every active memory, with its full text, into one <code>StateFlow</code> (<code>publishMemories</code>, <code>KotbaseMemoryService.kt</code>, line 313). <code>StatefulMemoryService.getState()</code> returns that flow (<code>StatefulMemoryService.kt</code>, line 14). The data is already in memory, so searching it costs no extra storage.</li>
+<li><code>MemoryService.findCategories()</code> returns the category names (<code>MemoryService.kt</code>, line 117). <code>SavedMemoriesStateHolder.refreshCategoryNames</code> already uses it (<code>SavedMemoriesStateHolder.kt</code>, line 155).</li>
+<li><code>SavedMemoriesStateHolder.updateMemories</code> already sorts by creation time, newest first (<code>SavedMemoriesStateHolder.kt</code>, line 144).</li>
+</ul>
+<h3 id="62-options-for-search">6.2 Options for search</h3>
+<p>Kotbase 3.2.4-1.2.0 (the version pinned in <code>gradle/libs.versions.toml</code>, line 9) exposes a full-text index in its common API. Checked in the library's sources jar (<code>couchbase-lite-android-3.2.4-1.2.0-sources.jar</code>, <code>commonMain/kotbase/</code>):</p>
+<ul>
+<li><code>IndexBuilder.fullTextIndex(vararg items: FullTextIndexItem)</code>, with <code>FullTextIndexItem.property(name)</code>.</li>
+<li><code>FullTextIndexConfiguration</code>, with <code>ignoreAccents</code> and <code>language</code> options.</li>
+<li><code>FullTextFunction.match(indexName, query)</code> and <code>FullTextFunction.rank(indexName)</code>.</li>
+</ul>
+<p>So a full-text index is possible without a new dependency. The trade-off is below.</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>In-memory filtering (chosen for v1)</th>
+<th>Full-text index (upgrade path)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data</td>
+<td>Uses the memories already held in <code>getState()</code>.</td>
+<td>An index in the database. Built when the database opens, and updated on every write, including each summary and category write from the AI jobs.</td>
+</tr>
+<tr>
+<td>Matching</td>
+<td>Substring. "meet" matches "meeting".</td>
+<td>Token based. Partial words need prefix syntax. Stemming depends on the language setting.</td>
+</tr>
+<tr>
+<td>Accents</td>
+<td>Needs its own folding (Q-1).</td>
+<td><code>ignoreAccents</code> option.</td>
+</tr>
+<tr>
+<td>Ranking</td>
+<td>Newest first, as the list is.</td>
+<td><code>rank</code> gives relevance order.</td>
+</tr>
+<tr>
+<td>Query safety</td>
+<td>Plain text, no syntax.</td>
+<td>User text must be quoted or escaped before <code>match</code>, because the query has its own syntax.</td>
+</tr>
+<tr>
+<td>Threading</td>
+<td>Pure Kotlin on <code>Dispatchers.Default</code>.</td>
+<td>The query runs in the database, so the service call is suspending.</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>commonTest, no database.</td>
+<td>Needs instrumented tests (<code>KotbaseMemoryServiceTest</code>).</td>
+</tr>
+<tr>
+<td>Scale</td>
+<td>Good to a few thousand memories (target in §10).</td>
+<td>Better for large libraries.</td>
+</tr>
+</tbody>
+</table>
+<p>Decision: in-memory for v1. Voice notes are a small corpus, and the data is already in memory. Substring matching also finds partial words, which full-text prefix search does not do by default. The index is kept as the upgrade path (phase 4).</p>
+<h3 id="63-switch-criteria-for-the-full-text-index">6.3 Switch criteria for the full-text index</h3>
+<p>Move to the index only if one of these is true on the reference mid-range device:</p>
+<ul>
+<li>The 95th percentile query time is above 50 ms with 1,000 memories, after the optimisations in §6.4.</li>
+<li>Users ask for ranked results.</li>
+</ul>
+<h3 id="64-performance-plan-for-in-memory-search">6.4 Performance plan for in-memory search</h3>
+<ul>
+<li>Build a lowercase copy of each memory's searchable text once, and reuse it until the memory changes. Cache by memory id and by a hash of the text. Without this, each keystroke allocates a new lowercase copy of every transcript.</li>
+<li>Run the filter on <code>Dispatchers.Default</code> (<code>flowOn</code>).</li>
+<li>Keep the 150 ms delay for typed text only. Chips apply at once.</li>
+<li>Measure with a generated library of 500 and 1,000 memories (instrumented test, §11).</li>
+</ul>
+<h3 id="65-service-and-file-changes">6.5 Service and file changes</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemorySearch.kt</code> (new)</td>
+<td>Pure matcher: normalise the query, split into terms, match terms against title, summary, and transcript, and filter by categories. Holds the cache from §6.4.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt</code></td>
+<td>Hold the query and the selected category ids in <code>SavedMemoriesUiState</code>. Derive the result set from <code>getState()</code>, the query (debounced by 150 ms for typing), and the selection. Freeze the result set while the detail view is open (AC-5.1). Replace <code>memoriesScrollState: ScrollState</code> with a <code>LazyListState</code>, so the list can be a <code>LazyColumn</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt</code></td>
+<td>Replace the <code>verticalScroll</code> column in <code>MemoryListScreen</code> (line 246) with a <code>LazyColumn</code>. Add the search field, the chip row (<code>LazyRow</code> of <code>FilterChip</code>), the count line, and the no-results state. Hide the keyboard on list scroll. Register back handling for the query.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/composeResources/values/memory_strings.xml</code></td>
+<td>New strings: search label, placeholder, count lines, chip labels, no-results texts, hints, and button labels.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/domain/MemorySearchTest.kt</code> (new)</td>
+<td>Unit tests for the matcher (§11).</td>
+</tr>
+</tbody>
+</table>
+<p>No change to <code>MemoryService</code>, <code>KotbaseMemoryService</code>, or the schema. Phase 4 (only if §6.3 is met) adds the index in <code>KotbaseMemoryService.open</code> and a query method on <code>MemoryService</code>.</p>
+<p>Why <code>LazyColumn</code>? The list is a <code>verticalScroll</code> column, so every card is composed at once. Filtering does not fix that. The same change is needed for the 500-memory target in the speaker recognition design (<a href="../speaker-recognition/speaker-recognition.html">Speaker recognition</a>, AC-1.5).</p>
+<hr />
+<h2 id="7-ui-android-material-3">7. UI (Android, Material 3)</h2>
+<h3 id="71-layout">7.1 Layout</h3>
+<p>From top to bottom, inside the Memories page:</p>
+<ol type="1">
+<li>The "Saved memories" heading, as today.</li>
+<li>The search field. A Material 3 <code>OutlinedTextField</code> with a leading search icon, a trailing <strong>Clear search</strong> button (shown only when the query is not empty), the label "Search memories", and the <strong>Search</strong> IME action.</li>
+<li>The filter row. A <code>LazyRow</code> of <code>FilterChip</code>s, one per category in use, each with its count. <strong>Clear filters</strong> appears at the end of the row when a chip is selected.</li>
+<li>The count line, for example "3 memories" or "Showing 3 of 42".</li>
+<li>The list of cards, or a state from §7.3.</li>
+</ol>
+<p>The filter row hides when the library has no categories in use.</p>
+<h3 id="72-search-field-behaviour">7.2 Search field behaviour</h3>
+<ul>
+<li>A single line. Typing updates the result set after 150 ms.</li>
+<li>The IME action <strong>Search</strong> hides the keyboard (AC-4.1).</li>
+<li>The field keeps its text when the user opens a memory and comes back (AC-5.2).</li>
+<li>Length is capped at 100 characters, with the counter shown only near the limit.</li>
+</ul>
+<h3 id="73-states">7.3 States</h3>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>What the user sees</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Library has memories, no query or filter</td>
+<td>Full list, count "42 memories".</td>
+</tr>
+<tr>
+<td>Query or filter, with results</td>
+<td>Filtered list, count "Showing 3 of 42".</td>
+</tr>
+<tr>
+<td>Query or filter, no results</td>
+<td>No-results message, hint, and <strong>Clear search</strong> and/or <strong>Clear filters</strong>.</td>
+</tr>
+<tr>
+<td>Library empty</td>
+<td>Empty state from <a href="../delete-memories/delete-memories.html">Delete memories</a>, US-5. No search field is needed, so it is hidden.</td>
+</tr>
+<tr>
+<td>Memory still being transcribed</td>
+<td>Its card shows the pending state, as today. It does not match a query.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="74-chips">7.4 Chips</h3>
+<ul>
+<li>Each chip is a <code>FilterChip</code> with the selected state, the category name, and its count, for example "Work 4".</li>
+<li>Chips use the app's colour roles: <code>primaryContainer</code> (#C9E5E7) with <code>onPrimaryContainer</code> (#123B43) when selected.</li>
+<li>The chip row scrolls horizontally. The chip's touch target is at least 48 dp (<code>minimumInteractiveComponentSize</code>).</li>
+</ul>
+<hr />
+<h2 id="8-accessibility">8. Accessibility</h2>
+<ul>
+<li>The search field has a label, so TalkBack does not depend on the placeholder.</li>
+<li>The clear button is labelled "Clear search". The <strong>Clear filters</strong> button is labelled "Clear category filters".</li>
+<li>Chips are toggles, with the selected state read by TalkBack ("selected" or "not selected"), and the count is part of the label.</li>
+<li>The count line updates after the 150 ms delay. It is a polite live region (the same pattern as <code>BorrowCaptureScreen.kt</code>, line 261). It is not announced on each keystroke.</li>
+<li>Keyboard: <strong>Search</strong> runs the search. Scrolling hides the keyboard. On a hardware keyboard, Enter runs the search and Escape clears the query.</li>
+<li>Back: the first back press hides the keyboard, then clears the query (AC-4.5). The system back behaviour is then unchanged.</li>
+<li>Colour is never the only cue. The selected chip has a check icon as well as the colour change.</li>
+<li>Contrast: the selected chip text, #123B43 on #C9E5E7, is about 9:1.</li>
+</ul>
+<hr />
+<h2 id="9-platform-split">9. Platform split</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Location</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Matching rules</td>
+<td><code>commonMain</code></td>
+<td><code>MemorySearch</code>, the query normalising, the cache</td>
+</tr>
+<tr>
+<td>State</td>
+<td><code>commonMain</code></td>
+<td>Query, selection, derived result set</td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>commonMain</code>, Compose Material 3</td>
+<td>Field, chips, count line, no-results state, <code>LazyColumn</code></td>
+</tr>
+<tr>
+<td>Index (phase 4 only)</td>
+<td><code>commonMain</code>, Kotbase</td>
+<td><code>IndexBuilder</code>, <code>FullTextFunction</code></td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>Not designed here</td>
+<td>Shared code compiles, but iOS screens and behaviour are out of scope</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-risks">10. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Slow typing on a large library</td>
+<td>Janky input</td>
+<td>The cache in §6.4, filtering off the main thread, the 150 ms delay, and a 1,000-memory benchmark.</td>
+</tr>
+<tr>
+<td>Matching a half-written word</td>
+<td>Noisy results</td>
+<td>Substring matching is intended (AC-1.7), and the delay keeps results steady.</td>
+</tr>
+<tr>
+<td>Results change under the user while reading</td>
+<td>Confusion</td>
+<td>Results freeze while the detail view is open (AC-5.1).</td>
+</tr>
+<tr>
+<td>A pending transcript looks like a missing match</td>
+<td>User thinks the memory is lost</td>
+<td>The no-results hint explains it (AC-3.1).</td>
+</tr>
+<tr>
+<td>Accents do not match</td>
+<td>Missed results</td>
+<td>Known gap. Q-1 decides whether to add folding.</td>
+</tr>
+<tr>
+<td>The list is still a <code>verticalScroll</code> column</td>
+<td>Slow with several hundred memories</td>
+<td><code>LazyColumn</code> in the same change (§6.5).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-open-questions">11. Open questions</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q-1</td>
+<td>Should matching ignore accents in v1?</td>
+<td><strong>Open.</strong> Default: no. Needs a folding table in common code, or the full-text index.</td>
+</tr>
+<tr>
+<td>Q-2</td>
+<td>Should the multi-select filter use AND instead of OR?</td>
+<td><strong>Decided: OR</strong> (AC-2.3). Revisit if users ask for AND.</td>
+</tr>
+<tr>
+<td>Q-3</td>
+<td>Should the chips show counts?</td>
+<td><strong>Decided: yes</strong> (AC-2.2).</td>
+</tr>
+<tr>
+<td>Q-4</td>
+<td>Should results show which field matched?</td>
+<td><strong>Open.</strong> A follow-up, not v1.</td>
+</tr>
+<tr>
+<td>Q-5</td>
+<td>Should results be ordered by relevance?</td>
+<td><strong>Decided: no</strong> for v1. Newest first.</td>
+</tr>
+<tr>
+<td>Q-6</td>
+<td>Should the list become a <code>LazyColumn</code> before or with search?</td>
+<td><strong>Decided: with search</strong> (§6.5).</td>
+</tr>
+</tbody>
+</table>
+<p>Test and measurement:</p>
+<ul>
+<li><code>MemorySearchTest</code> (commonTest): case-insensitivity, substring matches, every term required, terms may match different fields, a blank query shows everything, a 100-character cut, a pending memory never matches, category OR, category and query AND, newest-first order.</li>
+<li>Instrumented benchmark (androidInstrumentedTest): time the matcher on 500 and 1,000 generated memories with realistic transcript lengths, on a mid-range device. Record the 95th percentile in this document.</li>
+</ul>
+<hr />
+<h2 id="12-phased-rollout">12. Phased rollout</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Exit criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1 Search</td>
+<td><code>LazyColumn</code>, search field, matcher, debounce, count line, clear button</td>
+<td>US-1 met. <code>MemorySearchTest</code> green. Benchmark recorded.</td>
+</tr>
+<tr>
+<td>P2 Category filter</td>
+<td>Chip row, OR filter, <strong>Clear filters</strong>, combined AND</td>
+<td>US-2 met.</td>
+</tr>
+<tr>
+<td>P3 States and keyboard</td>
+<td>No-results state, hint, <strong>Clear search</strong>, IME action, Escape, back handling, freeze while detail is open</td>
+<td>US-3, US-4, US-5 met on Android.</td>
+</tr>
+<tr>
+<td>P4 Full-text index (only if §6.3 is met)</td>
+<td><code>IndexBuilder.fullTextIndex</code>, query method, escaping, instrumented tests</td>
+<td>Benchmark shows the target is met. Results match the in-memory matcher, apart from ordering.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="13-test-plan">13. Test plan</h2>
+<h3 id="unit-commontest">Unit (commonTest)</h3>
+<ul>
+<li><code>MemorySearchTest</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/domain/MemorySearchTest.kt</code>, new file), covering §11.</li>
+<li><code>SavedMemoriesStateHolder</code> (commonTest, with a fake <code>MemoryService</code> such as <code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/FakeMemoryService.kt</code>): the 150 ms delay for typing, no delay for chips, the frozen result set while the detail view is open, and the recalculation on return.</li>
+</ul>
+<h3 id="instrumented-androidinstrumentedtest">Instrumented (androidInstrumentedTest)</h3>
+<ul>
+<li>A benchmark with 500 and 1,000 memories, and a check that the list is a <code>LazyColumn</code> (scroll 500 items without dropped frames on a device).</li>
+</ul>
+<h3 id="manual-device">Manual (device)</h3>
+<ul>
+<li>Search for a word from a transcript, a summary, and a title. Confirm each finds the memory.</li>
+<li>Search for part of a word. Confirm it matches.</li>
+<li>Select two chips. Confirm OR. Add a query. Confirm AND.</li>
+<li>Search for something that does not exist, and check the hint and both buttons.</li>
+<li>TalkBack walk-through of the field, the clear button, the chips, and the count line.</li>
+<li>Hardware keyboard: Enter and Escape.</li>
+<li>Back with a query open, then back with no query.</li>
+</ul>
+<hr />
+<h2 id="14-definition-of-done">14. Definition of done</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />Search and filter rules match §4 and §6.5.</label></li>
+<li><label><input type="checkbox" />The 1,000-memory benchmark is recorded in this document (§11).</label></li>
+<li><label><input type="checkbox" />The list is a <code>LazyColumn</code>.</label></li>
+<li><label><input type="checkbox" />TalkBack walk-through passes on Android.</label></li>
+<li><label><input type="checkbox" /><code>visual-guide.html</code> matches the built UI, or the differences are noted.</label></li>
+<li><label><input type="checkbox" />The full-text index is not added unless §6.3 is met.</label></li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edit memories — BorrowAI docs</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../index.html">BorrowAI</a>
+    <nav>
+      <a href="../../index.html">Home</a>
+      <a href="../../how-it-works.html">How it works</a>
+      <a href="../../architecture.html">Architecture</a>
+      <a href="../../models-and-privacy.html">Models and privacy</a>
+      <a href="../../platforms.html">Platforms</a>
+      <a href="../../features/index.html" aria-current="page">Features</a>
+      <a href="../../design/index.html">Design guides</a>
+      <a href="../../developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="edit-memories">Edit memories</h1>
+<p>Status: Planning (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<hr />
+<h2 id="1-summary">1. Summary</h2>
+<p>The service can change a memory, but no screen does. <code>MemoryService.update(id, draft)</code> (<code>MemoryService.kt</code>, line 32) and <code>updateCategories(id, categories)</code> (line 38) have no UI callers. A memory's title, summary, transcript, and categories are all fixed after they are saved.</p>
+<p>This design adds an editor for those four fields, reached from the memory detail view. It also adds:</p>
+<ol type="1">
+<li>A service method that edits the fields in one write, and cannot clear the recording link by accident.</li>
+<li>Two markers on the memory, so that an AI job never silently overwrites text the user wrote.</li>
+<li>Explicit actions to ask for a new summary or new categories.</li>
+<li>Cancel with a discard prompt, and a way back to the original transcript (phase 5).</li>
+</ol>
+<p>The UI is Android only and uses Material 3. Shared rules and service changes live in <code>commonMain</code>.</p>
+<hr />
+<h2 id="2-goals-and-non-goals">2. Goals and non-goals</h2>
+<h3 id="goals">Goals</h3>
+<ul>
+<li>Edit the title, summary, transcript, and categories of a saved memory.</li>
+<li>Validate every field before saving, with clear messages.</li>
+<li>Make sure an AI job cannot replace a user's text, including a job that was already running when the user saved.</li>
+<li>Keep the recording link safe. Editing never clears the audio path.</li>
+<li>Make changes reversible: Cancel discards unsaved work, and the original transcript can be restored after a save.</li>
+</ul>
+<h3 id="non-goals-v1">Non-goals (v1)</h3>
+<ul>
+<li>Editing the audio. Trimming and re-recording are not planned.</li>
+<li>Edit history or versions beyond the original transcript.</li>
+<li>Speaker-attributed transcripts (see <a href="../speaker-recognition/speaker-recognition.html">Speaker recognition</a>).</li>
+<li>Bulk edits across memories.</li>
+<li>Automatic regeneration after a transcript edit. The user asks for it.</li>
+<li>iOS UI and behaviour. Not designed here.</li>
+</ul>
+<hr />
+<h2 id="3-terms">3. Terms</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Editor</td>
+<td>The full-screen Android page that changes a memory's fields.</td>
+</tr>
+<tr>
+<td>User-edited summary</td>
+<td>A summary the user saved. Marked by <code>summaryEditedByUser</code>.</td>
+</tr>
+<tr>
+<td>User-edited categories</td>
+<td>A category list the user saved. Marked by <code>categoriesEditedByUser</code>.</td>
+</tr>
+<tr>
+<td>Marker</td>
+<td>A boolean on the memory that tells the AI pipeline to leave a field alone.</td>
+</tr>
+<tr>
+<td>Regenerate</td>
+<td>Clearing a field's marker and setting its status to pending, so the job writes a new value.</td>
+</tr>
+<tr>
+<td>Original transcript</td>
+<td>The text the speech model produced, kept once the user first edits the transcript.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-user-stories-and-acceptance-criteria">4. User stories and acceptance criteria</h2>
+<h3 id="us-1-open-the-editor">US-1: Open the editor</h3>
+<p>As a user, I want to correct a memory from the screen where I read it.</p>
+<ul>
+<li>AC-1.1: The memory detail header has an <strong>Edit</strong> button (48 dp, labelled "Edit memory").</li>
+<li>AC-1.2: The editor opens full screen inside the Memories tab. The dock stays hidden, as it does in the detail view.</li>
+<li>AC-1.3: The editor shows the current values of all four fields.</li>
+</ul>
+<h3 id="us-2-edit-the-title">US-2: Edit the title</h3>
+<ul>
+<li>AC-2.1: The title is optional and at most 80 characters (a new limit). A counter appears at 60 characters.</li>
+<li>AC-2.2: A blank title shows "Untitled memory" in the list and in the detail view (a new string). Titles are not generated today; <code>RecordingMediaSessionService.kt</code> (line 320) and <code>RecordingReconciler.kt</code> (line 84) create memories with <code>title = ""</code>.</li>
+<li>AC-2.3: Saving a changed title does not change any other field or status.</li>
+</ul>
+<h3 id="us-3-edit-the-summary">US-3: Edit the summary</h3>
+<ul>
+<li>AC-3.1: The summary is optional and at most 4,000 characters (a new limit).</li>
+<li>AC-3.2: Saving a non-blank summary stores it, sets <code>summaryEditedByUser</code>, and marks the summary as done. No AI job will overwrite it (US-6).</li>
+<li>AC-3.3: Saving a blank summary asks for a new one. The marker is cleared, the status becomes pending, and attempts reset. This is the existing rule in <code>withEditedSummary</code> (<code>Memory.kt</code>, line 117), made visible in the UI.</li>
+<li>AC-3.4: A helper line under the field says: "Clear the summary to have a new one written."</li>
+</ul>
+<h3 id="us-4-edit-the-transcript">US-4: Edit the transcript</h3>
+<ul>
+<li>AC-4.1: The transcript is required once saved. A blank transcript is refused: "The transcript can't be empty. Delete the memory instead."</li>
+<li>AC-4.2: The transcript is at most 50,000 characters (a new limit).</li>
+<li>AC-4.3: The transcript is read-only while its status is pending or in progress, with the notice "Transcript is still being created." The service refuses such an edit too (§8).</li>
+<li>AC-4.4: A transcript that failed can be typed in. Saving sets its status to done and clears the last error (<code>withTranscription</code>, <code>Memory.kt</code>, line 98).</li>
+<li>AC-4.5: Saving a changed transcript does not regenerate the summary or the categories. A banner says: "The summary and categories were made from the earlier transcript." It offers <strong>Write new summary</strong> and <strong>Suggest categories</strong> (US-6). Both ask before replacing text the user wrote.</li>
+<li>AC-4.6: The first transcript edit keeps the original text (phase 5, Q-3). The section label changes from "Original transcription" (<code>SavedMemoriesScreen.kt</code>, line 454) to "Transcript", with an "Edited" tag.</li>
+</ul>
+<h3 id="us-5-edit-categories">US-5: Edit categories</h3>
+<ul>
+<li>AC-5.1: At most 3 categories per memory (<code>MAX_MEMORY_CATEGORIES</code>, <code>Memory.kt</code>, line 354).</li>
+<li>AC-5.2: The editor lists existing categories as selectable chips. A chip shows the selection state and reads as a checkbox to TalkBack.</li>
+<li>AC-5.3: A new category needs a name of 1 to 15 characters (<code>CATEGORY_NAME_MAX_LENGTH</code>, line 355) and a description of at most 100 characters (<code>CATEGORY_DESCRIPTION_MAX_LENGTH</code>, line 356). The UI refuses a name that already exists, ignoring case. The service does not check duplicates today (<code>createCategory</code>, <code>KotbaseMemoryService.kt</code>, line 187).</li>
+<li>AC-5.4: Saving a changed category list sets <code>categoriesEditedByUser</code>. The categorization job does not replace it.</li>
+<li>AC-5.5: Clearing all categories is allowed. The memory then shows "No categories". The job does not refill them. <strong>Suggest categories</strong> asks for a new list.</li>
+</ul>
+<h3 id="us-6-ai-never-overwrites-the-users-text">US-6: AI never overwrites the user's text</h3>
+<ul>
+<li>AC-6.1: While <code>summaryEditedByUser</code> is set, the summary job never writes a summary, and never changes the summary's status or attempt count.</li>
+<li>AC-6.2: While <code>categoriesEditedByUser</code> is set, the categorization job never writes categories and never changes their status.</li>
+<li>AC-6.3: A job that started before the user saved, and finishes after, is refused by the service. This is the race in §6.2.</li>
+<li>AC-6.4: Requesting a new summary or new categories asks first when the user's text would be replaced. Confirming clears the marker and sets the status to pending.</li>
+</ul>
+<h3 id="us-7-cancel-undo-and-restore">US-7: Cancel, undo, and restore</h3>
+<ul>
+<li>AC-7.1: <strong>Cancel</strong> with unsaved changes asks "Discard changes?" with <strong>Keep editing</strong> and <strong>Discard</strong>. Cancel with no changes closes at once.</li>
+<li>AC-7.2: System back does the same as <strong>Cancel</strong>.</li>
+<li>AC-7.3: After a save, <strong>Restore original transcript</strong> is available in the detail view if an original exists (phase 5). It asks first.</li>
+</ul>
+<h3 id="us-8-saving-and-failures">US-8: Saving and failures</h3>
+<ul>
+<li>AC-8.1: <strong>Save</strong> is disabled until a field has changed and every field is valid. While saving, the fields are read-only and the button shows progress.</li>
+<li>AC-8.2: On success the editor closes and the detail view shows the new values, from <code>getState()</code>.</li>
+<li>AC-8.3: On <code>MemoryError.Persistence</code> or <code>MemoryError.Malformed</code>, the editor stays open with the changes kept and the message "Couldn't save. Your changes are still here." and a <strong>Retry</strong> button.</li>
+<li>AC-8.4: On <code>MemoryError.NotFound</code>, the memory was deleted elsewhere. The editor closes and the snackbar says "This memory was deleted."</li>
+<li>AC-8.5: On <code>MemoryError.InvalidInput</code>, the editor stays open and shows the matching field message.</li>
+</ul>
+<hr />
+<h2 id="5-flow">5. Flow</h2>
+<h3 id="51-saving">5.1 Saving</h3>
+<ol type="1">
+<li>The user changes fields in the editor and taps <strong>Save</strong>.</li>
+<li>The app validates the fields (§6.2). Invalid fields show a message and nothing is written.</li>
+<li><code>MemoryService.edit(id, edit)</code> runs once. It sets the markers for fields that changed, and it applies the transcript rules.</li>
+<li>The detail view shows the stored values.</li>
+</ol>
+<h3 id="52-requesting-a-new-summary-or-categories">5.2 Requesting a new summary or categories</h3>
+<ol type="1">
+<li>The user taps <strong>Write new summary</strong> or <strong>Suggest categories</strong>, from the banner or from an empty field.</li>
+<li>If the user's text would be replaced, a dialog asks first.</li>
+<li><code>requestSummary(id)</code> or <code>requestCategorization(id)</code> clears the marker, sets the status to pending, and resets the attempt count.</li>
+<li>The existing recovery job picks the memory up on its next run, as it does for any pending memory.</li>
+</ol>
+<hr />
+<h2 id="6-data-and-service-changes">6. Data and service changes</h2>
+<h3 id="61-current-behaviour-that-shapes-this-design">6.1 Current behaviour that shapes this design</h3>
+<ul>
+<li><code>update(id, draft)</code> copies <code>draft.recordingPath</code> onto the memory (<code>KotbaseMemoryService.kt</code>, lines 141 to 152). A caller that omits the path clears the audio link. A new <code>edit</code> method avoids this by not taking a path.</li>
+<li><code>update</code> does not touch the transcript status (<code>TranscriptionStatus</code>, <code>Memory.kt</code>), so a transcript edit on a pending memory could be overwritten later by the speech model, which claims pending memories (<code>claimNextPendingTranscription</code>).</li>
+<li>The summary job reads a snapshot (<code>findAll</code>, <code>MemorySummaryRecoveryJob.kt</code>, line 40). It calls the model, which can take up to 60 seconds (<code>DEFAULT_TIMEOUT_MILLIS</code>, line 122), and then calls <code>recordSummary</code> (line 84). <code>recordSummary</code> writes unconditionally (<code>KotbaseMemoryService.kt</code>, line 213).</li>
+<li>A failed attempt also changes the status without checking the text. <code>recordFinishedAttempt</code> (line 207) runs <code>afterFinishedAttempt</code> (<code>Memory.kt</code>, line 136), which sets the summary's status to pending (or to empty or given up, depending on the attempt count). A pending summary is then regenerated and overwritten. The same happens with categories: <code>recordCategorizationAttempt</code> (<code>KotbaseMemoryService.kt</code>, line 224) runs <code>afterFinishedCategorizationAttempt</code> (<code>Memory.kt</code>, line 229).</li>
+</ul>
+<h3 id="62-validation">6.2 Validation</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Rule</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Title</td>
+<td>0 to 80 characters</td>
+<td>New limit</td>
+</tr>
+<tr>
+<td>Summary</td>
+<td>0 to 4,000 characters. Blank means "write a new one".</td>
+<td>New limit</td>
+</tr>
+<tr>
+<td>Transcript</td>
+<td>1 to 50,000 characters, not blank, only when status is done or failed</td>
+<td>New limit and rule</td>
+</tr>
+<tr>
+<td>Categories</td>
+<td>At most 3 distinct ids (<code>categoryIdsViolation</code>, <code>Memory.kt</code>). New names 1 to 15 characters. Descriptions up to 100.</td>
+<td>Existing limits, plus a UI duplicate check</td>
+</tr>
+</tbody>
+</table>
+<p>The rules live in a new pure file, <code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt</code> (new). It holds a <code>MemoryEdit</code> value and a <code>memoryEditViolation(edit)</code> function, which returns the first failing rule, or null.</p>
+<h3 id="63-service-changes">6.3 Service changes</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/Memory.kt</code></td>
+<td>Add <code>summaryEditedByUser: Boolean = false</code> and <code>categoriesEditedByUser: Boolean = false</code> to <code>Memory</code> (line 34). Both are additive, so an old document reads as <code>false</code>. Exclude marked memories from <code>isSummaryRetryable</code> (line 75) and <code>isCategorizationRetryable</code> (line 65). Set the summary marker in the edit path, next to <code>withEditedSummary</code> (line 117). Set the category marker in <code>withUserCategories</code> (line 214). Phase 5 adds <code>originalTranscription: String? = null</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/MemoryEdit.kt</code> (new)</td>
+<td><code>MemoryEdit</code> value and <code>memoryEditViolation</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MemoryService.kt</code></td>
+<td>Add <code>edit(id, edit)</code>, <code>requestSummary(id)</code>, and <code>requestCategorization(id)</code>. Remove <code>update</code> (line 32) once its callers and test double are moved. Phase 5 adds <code>restoreOriginalTranscription(id)</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryService.kt</code></td>
+<td>Implement the new methods in one write. Store the two markers as document fields (the same pattern as <code>COLUMN_DELETED</code>). Guard the summary writes: <code>recordSummary</code> (line 213), <code>recordFinishedAttempt</code> (line 207), <code>recordEmpty</code> (line 210), <code>giveUpSummary</code> (line 216). Guard the category writes: <code>recordCategorization</code> (line 219), <code>recordCategorizationAttempt</code> (line 224), <code>giveUpCategorization</code> (line 227). A guarded write returns <code>Right(Unit)</code> and changes nothing. <code>edit</code> refuses a transcript change while the status is pending or in progress (<code>MemoryError.InvalidInput</code>).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/summary/MemorySummaryRecoveryJob.kt</code></td>
+<td>No change in the job. The guard is in the service. The stored count can be one too high in the rare race, because a guarded write returns <code>Right</code>. The count is informational.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/category/MemoryCategorizationRecoveryJob.kt</code></td>
+<td>Same as the summary job.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="64-why-right-for-a-guarded-write">6.4 Why <code>Right</code> for a guarded write?</h3>
+<p>Returning an error would make the job log a failure and count an attempt. Returning <code>Right</code> tells the job it is finished, and it stops. The memory is never changed, so the user's text is safe either way. A new <code>MemoryError</code> kind would be cleaner but touches every caller, so Q-4 leaves it open.</p>
+<hr />
+<h2 id="7-ui-android-material-3">7. UI (Android, Material 3)</h2>
+<h3 id="71-detail-view">7.1 Detail view</h3>
+<ul>
+<li>An <strong>Edit</strong> button (<code>FilledTonalButton</code>, 48 dp minimum) sits in the header panel of <code>MemoryDetailScreen</code> (line 388), next to the <strong>More actions</strong> button from the delete design.</li>
+<li>The title shows "Untitled memory" when blank.</li>
+<li>The transcript section has the label "Transcript", plus the "Edited" tag when <code>originalTranscription</code> is set (phase 5).</li>
+</ul>
+<h3 id="72-editor">7.2 Editor</h3>
+<ul>
+<li>A full-screen page inside the Memories tab, shown in place of the detail view. The dock stays hidden. The pager stays locked (<code>App.kt</code>, line 128).</li>
+<li>Top app bar (Material 3 <code>TopAppBar</code>): navigation icon <strong>Cancel</strong> (close icon, content description "Cancel editing"), title "Edit memory", action <strong>Save</strong> (text button, disabled until valid).</li>
+<li>Fields in order: <strong>Title</strong> (<code>OutlinedTextField</code>, single line, counter at 60 characters), <strong>Summary</strong> (multi-line, helper text from AC-3.4), <strong>Transcript</strong> (multi-line, scrolls inside the page), <strong>Categories</strong> (chip group).</li>
+<li>Categories: <code>FilterChip</code> per existing category, with the selected state. A <strong>New category</strong> chip opens an <code>AlertDialog</code> with a name field (15 characters) and a description field (100 characters). The count reads "2 of 3" under the group.</li>
+<li>Banner (phase 3): after a transcript change is saved, the detail view shows the banner from AC-4.5 with <strong>Write new summary</strong> and <strong>Suggest categories</strong>. Each opens a confirmation when it would replace user text.</li>
+<li>Transcript read-only notice (AC-4.3): a small card with the text "Transcript is still being created." The field is disabled and keeps its content.</li>
+</ul>
+<h3 id="73-cancel-and-discard">7.3 Cancel and discard</h3>
+<ul>
+<li><strong>Cancel</strong> with changes: <code>AlertDialog</code>, title "Discard changes?", buttons <strong>Keep editing</strong> (default) and <strong>Discard</strong>.</li>
+<li>Discard closes the editor and drops the draft. Drafts are kept in memory only, so a process death loses them (Q-6).</li>
+</ul>
+<h3 id="74-save-states">7.4 Save states</h3>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>What the user sees</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Editing</td>
+<td>Fields active. <strong>Save</strong> enabled once something valid has changed.</td>
+</tr>
+<tr>
+<td>Invalid</td>
+<td>The field shows an error message. <strong>Save</strong> disabled.</td>
+</tr>
+<tr>
+<td>Saving</td>
+<td>Fields read-only. <strong>Save</strong> shows a progress indicator.</td>
+</tr>
+<tr>
+<td>Saved</td>
+<td>Editor closes. Detail view shows the new values.</td>
+</tr>
+<tr>
+<td>Failed</td>
+<td>Editor open, changes kept. Message "Couldn't save. Your changes are still here." and <strong>Retry</strong>.</td>
+</tr>
+<tr>
+<td>Deleted elsewhere</td>
+<td>Editor closes. Snackbar "This memory was deleted."</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-accessibility">8. Accessibility</h2>
+<ul>
+<li>Every field has a visible label. The helper and error texts are attached to the field, so TalkBack reads them with it.</li>
+<li>The character counter is part of the supporting text. It is not a live region, so it is not read on every key press.</li>
+<li>Errors use <code>isError</code> on the field and a plain message. The message is read when focus enters the field.</li>
+<li>A category chip is a toggle. It uses <code>Role.Checkbox</code> and the selected state, so TalkBack announces "checked" or "not checked". The "maximum 3 reached" message is announced when the user tries a fourth.</li>
+<li>IME actions: Title and Summary use <strong>Next</strong>. Transcript uses the default new-line action, and <strong>Done</strong> hides the keyboard.</li>
+<li>The discard dialog gives focus to <strong>Keep editing</strong> first.</li>
+<li>Every touch target is at least 48 dp.</li>
+</ul>
+<hr />
+<h2 id="9-platform-split">9. Platform split</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Location</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Domain and rules</td>
+<td><code>commonMain</code></td>
+<td><code>Memory</code> markers, <code>MemoryEdit</code>, validation</td>
+</tr>
+<tr>
+<td>Persistence</td>
+<td><code>commonMain</code></td>
+<td><code>KotbaseMemoryService</code> edit and guard changes</td>
+</tr>
+<tr>
+<td>Jobs</td>
+<td><code>commonMain</code></td>
+<td>No code change; the guards in the service do the work</td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>commonMain</code>, Compose Material 3</td>
+<td>Detail button, editor, dialogs, banner</td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>Not designed here</td>
+<td>Shared changes compile, but iOS screens and behaviour are out of scope</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-risks">10. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A running AI job overwrites a user's text</td>
+<td>Lost edit</td>
+<td>Service guards on every summary and category write (AC-6.3). Tested with a job that finishes after an edit.</td>
+</tr>
+<tr>
+<td>A failed job demotes a user's summary to pending</td>
+<td>Later overwrite</td>
+<td>Guards also cover <code>recordFinishedAttempt</code>, <code>recordEmpty</code>, and the category attempt path.</td>
+</tr>
+<tr>
+<td>Editing a memory clears its audio link</td>
+<td>Playback stops working</td>
+<td><code>edit</code> takes no path (§6.3). Tested.</td>
+</tr>
+<tr>
+<td>Transcript edited while the speech model is working</td>
+<td>Text overwritten later</td>
+<td>Edit refused while pending or in progress (AC-4.3). Tested.</td>
+</tr>
+<tr>
+<td>Original transcript doubles storage</td>
+<td>Larger database</td>
+<td>One copy per edited memory, phase 5, decision Q-3.</td>
+</tr>
+<tr>
+<td>User loses a long edit to a crash</td>
+<td>Frustration</td>
+<td>Drafts are in memory only (Q-6). Decision open.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-open-questions">11. Open questions</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q-1</td>
+<td>Is 80 characters right for a title?</td>
+<td><strong>Open.</strong> Default 80.</td>
+</tr>
+<tr>
+<td>Q-2</td>
+<td>Are 4,000 (summary) and 50,000 (transcript) right limits?</td>
+<td><strong>Open.</strong> Defaults above. Check the longest real transcript first.</td>
+</tr>
+<tr>
+<td>Q-3</td>
+<td>Keep the original transcript (storage cost) so it can be restored?</td>
+<td><strong>Open.</strong> Default: yes, in phase 5.</td>
+</tr>
+<tr>
+<td>Q-4</td>
+<td>Should a guarded write return a dedicated <code>MemoryError</code> instead of <code>Right</code>?</td>
+<td><strong>Open.</strong> Default: keep <code>Right</code> (§6.4).</td>
+</tr>
+<tr>
+<td>Q-5</td>
+<td>Should clearing all categories be refused, or allowed with <strong>Suggest categories</strong>?</td>
+<td><strong>Decided: allowed</strong> (AC-5.5).</td>
+</tr>
+<tr>
+<td>Q-6</td>
+<td>Should unsaved drafts survive process death?</td>
+<td><strong>Open.</strong> Default: no.</td>
+</tr>
+<tr>
+<td>Q-7</td>
+<td>Should the service reject duplicate category names, or only the UI?</td>
+<td><strong>Open.</strong> Default: UI only, for now.</td>
+</tr>
+<tr>
+<td>Q-8</td>
+<td>Should a new summary or category list replace user text without asking?</td>
+<td><strong>Decided: no.</strong> It asks first (AC-6.4).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="12-phased-rollout">12. Phased rollout</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Exit criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1 Service and markers</td>
+<td><code>MemoryEdit</code>, markers, <code>edit</code>, <code>requestSummary</code>, <code>requestCategorization</code>, guards, retry exclusions, <code>update</code> removed</td>
+<td>commonTest and instrumented tests green (§13). Guards hold in the race tests.</td>
+</tr>
+<tr>
+<td>P2 Title and summary editor</td>
+<td>Editor page, title and summary fields, save and failure states</td>
+<td>US-1, US-2, US-3, US-8 met on Android.</td>
+</tr>
+<tr>
+<td>P3 Transcript and banner</td>
+<td>Transcript field and rules, read-only notice, banner with the two actions</td>
+<td>US-4 met on Android.</td>
+</tr>
+<tr>
+<td>P4 Categories</td>
+<td>Chip group, new category dialog, duplicate check in the UI</td>
+<td>US-5 and AC-6.2 met.</td>
+</tr>
+<tr>
+<td>P5 Original transcript</td>
+<td><code>originalTranscription</code>, "Edited" tag, <strong>Restore original transcript</strong></td>
+<td>AC-4.6 and AC-7.3 met. Storage cost checked.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="13-test-plan">13. Test plan</h2>
+<h3 id="unit-commontest">Unit (commonTest)</h3>
+<ul>
+<li><code>MemoryEdit</code> validation: each limit at its boundary, a blank transcript refused, the category rules from <code>categoryIdsViolation</code>.</li>
+<li>Applying an edit sets <code>summaryEditedByUser</code> only when the summary text changed, and sets <code>categoriesEditedByUser</code> only when the list changed.</li>
+<li>A blank summary clears the marker, sets the status to pending, and resets attempts.</li>
+<li>A marked memory is excluded by <code>isSummaryRetryable</code> and <code>isCategorizationRetryable</code>.</li>
+<li><code>MemorySummaryRecoveryJobTest</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/summary/MemorySummaryRecoveryJobTest.kt</code>): the fake service changes the summary while the summarizer is running. The result must not overwrite it.</li>
+<li><code>MemoryCategorizationRecoveryJobTest</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/category/MemoryCategorizationRecoveryJobTest.kt</code>): the same race for categories, plus a failed attempt after a user edit.</li>
+<li>Transcript edit refused while pending or in progress, and accepted (and set to done) while failed.</li>
+<li>The existing <code>FakeMemoryService</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/FakeMemoryService.kt</code>) implements <code>edit</code>, <code>requestSummary</code>, and <code>requestCategorization</code>.</li>
+</ul>
+<h3 id="instrumented-androidinstrumentedtest">Instrumented (androidInstrumentedTest)</h3>
+<ul>
+<li><code>KotbaseMemoryServiceTest</code> (<code>composeApp/src/androidInstrumentedTest/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryServiceTest.kt</code>): edit persists, the markers round-trip, a document without markers reads as <code>false</code>, a guarded write leaves the summary unchanged, and the recording path survives an edit.</li>
+</ul>
+<h3 id="manual-device">Manual (device)</h3>
+<ul>
+<li>Edit each field, save, and check the detail view and the list.</li>
+<li>Blank a summary and wait for a new one.</li>
+<li>Change a transcript, read the banner, then request a new summary and check it asks first.</li>
+<li>Start an edit while a summary is being generated, save the edit, and confirm the summary is not replaced.</li>
+<li>Cancel with changes, then Discard. Confirm nothing was saved.</li>
+<li>Force a save failure (for example, a full disk) and confirm the editor keeps the text.</li>
+<li>Full TalkBack walk-through of the editor and the category chips.</li>
+</ul>
+<hr />
+<h2 id="14-definition-of-done">14. Definition of done</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />Markers, guards, and retry exclusions are in place and tested (§13).</label></li>
+<li><label><input type="checkbox" />No edit can clear the recording path or overwrite a user-edited field.</label></li>
+<li><label><input type="checkbox" />Limits and messages match §6.2 and the string resources.</label></li>
+<li><label><input type="checkbox" />TalkBack walk-through passes on Android.</label></li>
+<li><label><input type="checkbox" /><code>visual-guide.html</code> matches the built UI, or the differences are noted.</label></li>
+<li><label><input type="checkbox" />Phase 5 storage cost is measured before it ships.</label></li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>
