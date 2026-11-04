@@ -11,6 +11,25 @@ interface AudioPlayer {
     /** Stops playback if it is active. */
     fun stop()
 
+    /** Pauses the active playback and keeps its position. Does nothing when nothing is playing. */
+    fun pause() {}
+
+    /**
+     * Resumes paused playback from its position. Throws [PlaybackUnavailableException] if playback cannot resume,
+     * such as when another app holds the audio focus.
+     */
+    fun resume() {}
+
+    /** Moves the position to [positionMillis]. The playing or paused state does not change. */
+    fun seekTo(positionMillis: Long) {}
+
+    /** The current position in milliseconds, or null when this player cannot report it. */
+    fun positionMillis(): Long? = null
+
+    /** True when [pause], [resume], [seekTo], and [positionMillis] work on this platform. */
+    val controlsAvailable: Boolean
+        get() = false
+
     /**
      * Registers a callback for when the platform stops playback on its own, such as when another app takes audio
      * focus. The callback runs after the player has already stopped.

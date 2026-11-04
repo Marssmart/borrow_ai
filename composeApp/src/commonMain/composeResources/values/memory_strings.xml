@@ -5,7 +5,13 @@
     <string name="memory_waiting_transcription">Waiting for transcription…</string>
     <string name="memory_transcription_failed">Transcription failed</string>
     <string name="memory_play_recording">Play recording</string>
+    <string name="memory_pause_recording">Pause recording</string>
     <string name="memory_stop_recording">Stop recording playback</string>
+    <string name="memory_playback_back_15">Back 15 seconds</string>
+    <string name="memory_playback_forward_15">Forward 15 seconds</string>
+    <string name="memory_playback_position_of">Playback position, %1$s of %2$s</string>
+    <string name="memory_playback_position_elapsed">Playback position, %1$s</string>
+    <string name="memory_duration_unknown">Duration unknown</string>
     <string name="memory_open_details">Open memory details</string>
     <string name="memory_dismiss">Dismiss</string>
     <string name="memory_playback_confirmation_title">Stop recording and play?</string>
@@ -15,6 +21,7 @@
     <string name="memory_playback_error_title">Playback unavailable</string>
     <string name="memory_playback_memory_missing_message">This saved memory is no longer available.</string>
     <string name="memory_playback_request_failed_message">Playback could not be started. Try again.</string>
+    <string name="memory_playback_resume_failed_message">Playback could not resume. Try again.</string>
     <string name="memory_playback_recording_unavailable_message">The recording for this memory is not available on this device.</string>
     <string name="memory_summary_model_missing">Summaries are paused because the summary model is not downloaded yet. Model setup status is shown on the capture screen.</string>
     <string name="memory_search_label">Search memories</string>

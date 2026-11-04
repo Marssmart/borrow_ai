@@ -91,6 +91,9 @@ internal class SavedMemoriesStateHolder(
     /** Playback buttons are disabled when the media service cannot play recorded media. */
     val playbackAvailable: Boolean get() = mediaSessionService.playbackAvailable
 
+    /** When false, playback has no pause, seek, or skip, so the detail view shows only play and stop. */
+    val playbackControlsAvailable: Boolean get() = mediaSessionService.playbackControlsAvailable
+
     init {
         scope.launch {
             memoryService.getState().collect { memories ->
@@ -176,12 +179,24 @@ internal class SavedMemoriesStateHolder(
         if (!playbackAvailable) return
         val target = PlaybackTarget(memoryId = memoryId, content = content)
         val currentPlayback = uiState.value.mediaSessionState as? MediaSessionState.Playing
-        if (currentPlayback?.target == target) {
-            mediaSessionService.stopPlayback()
+        if (currentPlayback != null && currentPlayback.target == target) {
+            when {
+                !playbackControlsAvailable -> mediaSessionService.stopPlayback()
+                currentPlayback.paused -> mediaSessionService.resumePlayback().fold({ setPlaybackError(it) }, {})
+                else -> mediaSessionService.pausePlayback()
+            }
             return
         }
 
         mediaSessionService.requestPlayback(target).fold({ setPlaybackError(it) }, {})
+    }
+
+    fun seekPlayback(positionMillis: Long) {
+        mediaSessionService.seekPlayback(positionMillis)
+    }
+
+    fun skipPlayback(deltaMillis: Long) {
+        mediaSessionService.skipPlayback(deltaMillis)
     }
 
     fun confirmPendingPlayback() {

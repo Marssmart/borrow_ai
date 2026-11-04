@@ -263,6 +263,19 @@ No manifest change is needed for v1. The microphone permission and the microphon
 - The service tries to finalise the file. If the finalise call fails, the partial file is kept only if it has a readable duration (`MediaMetadataRetriever`). Otherwise it is discarded, as it is today (`finishRecording`, line 307).
 - The result is one of these: a saved memory with the message "Recording was interrupted. The audio up to here was saved.", or the existing failure state. Q-2 decides which one applies on each device.
 
+### 8.6 Phase 1 as built
+
+These decisions refine §8.3 and §8.4. They were made when P1 was built.
+
+- `AudioPlayer.positionMillis()` returns `Long?`. It returns null when the player cannot report its position. The service then estimates the position from the monotonic clock, as before. This keeps the iOS player's behaviour unchanged.
+- `AudioPlayer.controlsAvailable` is true on Android only. `MediaSessionService` also gets `playbackControlsAvailable` (default false), so the UI knows whether to show the panel. Without controls, the play button stops playback, the detail view shows the old single button, and playback ends by going idle. That is the iOS behaviour today.
+- `resumePlayback()` returns `Either<PlaybackError, Unit>`. When a resume fails (for example, another app holds the audio focus), the memory stays paused at the same position and the service returns the new `PlaybackError.ResumeFailed`. Until P2 adds the notice in §8.4, that error shows in the existing error dialog.
+- The Android player treats the completion listener and the error listener of `MediaPlayer` as the end of the file. From then on `positionMillis()` returns the duration, and the audio focus is released. The service keeps the playback paused at its end and does not call `pause()` on the finished player. Resume seeks to 0 before it starts the player, so playing again starts from the beginning.
+- A seek sets a pending target that reads return until the platform confirms the seek, so the position does not jump back to the old value.
+- The seek bar sends the seek when the drag or accessibility step ends (`onValueChangeFinished`). Material 3 1.4.0 calls that callback after each accessibility step too. Material 3 sets its own state description (the raw numeric value), which overrides one set outside the slider. The time text therefore goes in the content description, for example "Playback position, 0:24 of 1:05".
+- Seek and skip need an active playback. An idle memory has no position to move, so the seek bar and the skip buttons are disabled for it.
+- The focus listener still stops playback until P2 (§8.4). Instrumented tests for `AndroidAudioPlayer` (§13) are not in P1, because they need a device and an audio fixture.
+
 ---
 
 ## 9. Platform split
@@ -320,6 +333,10 @@ API levels (checked against the Android SDK `api-versions.xml` for platform 36.1
 | Q-8 | Should list cards show durations? | **Open.** Default: yes, in P3. |
 | Q-9 | Should icons come from Material Icons Extended, or from `Canvas` drawings? | **Open.** Default: `Canvas`, as the app already does. |
 | Q-10 | For P5, use Media3 or keep `MediaPlayer` with a `MediaSession`? | **Open.** Check the Media3 minSdk against 24 first. The name `MediaSessionService` is already used by the domain interface, so Media3 classes need aliases. |
+| Q-11 | Does `MediaPlayer` play from 0 after a seek to 0 that follows its completion? | **Open.** Device check for P1. The service seeks to 0 before it starts the player, so the default matches §5.1. |
+| Q-12 | Does a drag that starts on the seek bar leave the memory page in place? | **Open.** Device check for P1 (§7, pager). |
+| Q-13 | Do TalkBack and the seek bar's content description read as §7 describes? | **Open.** TalkBack check for P1 (§7). Material 3 overrides the state description (§8.6). |
+| Q-14 | Does a resume that fails on the audio focus show the error dialog as the P1 build does? | **Open.** Device check with another app holding the focus. P2 replaces the dialog with the notice. |
 
 ---
 

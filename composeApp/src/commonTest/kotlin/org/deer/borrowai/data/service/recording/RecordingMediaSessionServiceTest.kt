@@ -83,21 +83,73 @@ class RecordingMediaSessionServiceTest {
         epochClock = EpochClock { 1_800_000_000_000L },
     )
 
+    /**
+     * Plays like a real player: while playing, the position follows [clockMillis], and the player stops itself at the
+     * end of the file. With [controlsAvailable] false it reports no position and ignores pause and seek, like iOS.
+     */
     private class FakeAudioPlayer(
         private val durationMillis: Long = 2_000L,
         var failOnPlay: Boolean = false,
+        var failOnResume: Boolean = false,
+        override val controlsAvailable: Boolean = true,
+        private val clockMillis: () -> Long = { 0L },
     ) : AudioPlayer {
         val playedPaths = mutableListOf<String>()
+        val seeks = mutableListOf<Long>()
         var stopCount = 0
+        var pauseCount = 0
+        var resumeCount = 0
+        private var playing = false
+        private var positionAtAnchor = 0L
+        private var anchorMillis = 0L
 
         override fun play(absolutePath: String): Long {
             if (failOnPlay) throw PlaybackUnavailableException("cannot play")
             playedPaths += absolutePath
+            playing = true
+            positionAtAnchor = 0L
+            anchorMillis = clockMillis()
             return durationMillis
         }
 
         override fun stop() {
             stopCount++
+            playing = false
+        }
+
+        override fun pause() {
+            if (!controlsAvailable) return
+            if (!playing) return
+            positionAtAnchor = currentPosition()
+            playing = false
+            pauseCount++
+        }
+
+        override fun resume() {
+            if (failOnResume) throw PlaybackUnavailableException("focus held by another app")
+            if (!controlsAvailable || playing) return
+            playing = true
+            anchorMillis = clockMillis()
+            resumeCount++
+        }
+
+        override fun seekTo(positionMillis: Long) {
+            if (!controlsAvailable) return
+            seeks += positionMillis
+            positionAtAnchor = positionMillis.coerceIn(0L, durationMillis)
+            anchorMillis = clockMillis()
+        }
+
+        override fun positionMillis(): Long? = if (controlsAvailable) currentPosition() else null
+
+        private fun currentPosition(): Long {
+            if (playing) {
+                val position = positionAtAnchor + clockMillis() - anchorMillis
+                if (position < durationMillis) return position
+                playing = false
+                positionAtAnchor = durationMillis
+            }
+            return positionAtAnchor
         }
     }
 
@@ -732,8 +784,8 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
-    fun playbackFinishesWhenDurationElapses() = runTest {
-        val player = FakeAudioPlayer(durationMillis = 2_000L)
+    fun playbackWithoutControlsStopsWhenDurationElapses() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L, controlsAvailable = false)
         val fs = FakeFileSystem()
         val memories = memories()
         val memory = savedRecording(memories, fs)
@@ -757,7 +809,7 @@ class RecordingMediaSessionServiceTest {
 
     @Test
     fun playbackIgnoresWallClockJumps() = runTest {
-        val player = FakeAudioPlayer(durationMillis = 2_000L)
+        val player = FakeAudioPlayer(durationMillis = 2_000L, clockMillis = { testScheduler.currentTime })
         val fs = FakeFileSystem()
         val memories = memories()
         val memory = savedRecording(memories, fs)
@@ -778,11 +830,13 @@ class RecordingMediaSessionServiceTest {
         epochOffsetMillis = -100_000L
         advanceTimeBy(1_000L)
         runCurrent()
-        assertIs<MediaSessionState.Playing>(service.state.value)
+        assertIs<MediaSessionState.Playing>(service.state.value).also { assertFalse(it.paused) }
 
         advanceTimeBy(1_000L)
         runCurrent()
-        assertIs<MediaSessionState.Idle>(service.state.value)
+        val ended = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(ended.paused)
+        assertEquals(2_000L, ended.elapsedMillis)
     }
 
     @Test
@@ -930,6 +984,308 @@ class RecordingMediaSessionServiceTest {
         val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
 
         service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        service.close()
+
+        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertEquals(1, player.stopCount)
+    }
+
+    @Test
+    fun playbackPositionComesFromPlayerNotClock() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(
+            FakeRecorder(),
+            FakePermission(CompletableDeferred(true)),
+            memories,
+            fs,
+            backgroundScope,
+            player,
+            monotonicMillis = { 0L },
+        )
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(249L)
+        runCurrent()
+        assertEquals(0L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(250L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+
+        advanceTimeBy(250L)
+        runCurrent()
+        assertEquals(500L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
+    fun pausePlaybackKeepsPositionAndPausesThePlayer() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+
+        service.pausePlayback()
+        advanceTimeBy(5_000L)
+        runCurrent()
+
+        val paused = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(paused.paused)
+        assertEquals(1_000L, paused.elapsedMillis)
+        assertEquals(1, player.pauseCount)
+        assertTrue(service.playbackControlsAvailable)
+    }
+
+    @Test
+    fun resumePlaybackContinuesFromThePausedPosition() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
+        advanceTimeBy(3_000L)
+        runCurrent()
+
+        assertEquals(Unit.right(), service.resumePlayback())
+        val resumed = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertFalse(resumed.paused)
+        assertEquals(1_000L, resumed.elapsedMillis)
+        assertEquals(1, player.resumeCount)
+
+        advanceTimeBy(250L)
+        runCurrent()
+        assertEquals(1_250L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
+    fun resumeFailureKeepsPlaybackPausedAtTheSamePosition() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
+        player.failOnResume = true
+
+        assertEquals(PlaybackError.ResumeFailed.left(), service.resumePlayback())
+        val paused = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(paused.paused)
+        assertEquals(1_000L, paused.elapsedMillis)
+        assertEquals(0, player.resumeCount)
+    }
+
+    @Test
+    fun stopPlaybackWhilePausedReturnsToIdle() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
+        service.stopPlayback()
+
+        assertIs<MediaSessionState.Idle>(service.state.value)
+        assertEquals(1, player.stopCount)
+    }
+
+    @Test
+    fun seekPlaybackMovesPositionAndKeepsPlaying() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.seekPlayback(4_000L)
+
+        val seeked = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertEquals(4_000L, seeked.elapsedMillis)
+        assertFalse(seeked.paused)
+        assertEquals(listOf(4_000L), player.seeks)
+
+        advanceTimeBy(250L)
+        runCurrent()
+        assertEquals(4_250L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
+    fun seekWhilePausedKeepsPlaybackPaused() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
+        service.seekPlayback(500L)
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        val paused = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(paused.paused)
+        assertEquals(500L, paused.elapsedMillis)
+    }
+
+    @Test
+    fun seekAndSkipAreClampedToTheStartAndTheDuration() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 40_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(5_000L)
+        runCurrent()
+
+        service.seekPlayback(-1L)
+        assertEquals(0L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        service.skipPlayback(-15_000L)
+        assertEquals(0L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        service.skipPlayback(15_000L)
+        assertEquals(15_000L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        service.seekPlayback(99_999L)
+        assertEquals(40_000L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        service.skipPlayback(15_000L)
+        assertEquals(40_000L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
+    fun skipWorksWhilePaused() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 40_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(10_000L)
+        runCurrent()
+        service.pausePlayback()
+
+        service.skipPlayback(15_000L)
+        val forward = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(forward.paused)
+        assertEquals(25_000L, forward.elapsedMillis)
+
+        service.skipPlayback(-15_000L)
+        val back = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(back.paused)
+        assertEquals(10_000L, back.elapsedMillis)
+    }
+
+    @Test
+    fun reachingTheEndPausesAtTheEndWithoutStoppingThePlayer() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        val ended = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(ended.paused)
+        assertEquals(2_000L, ended.elapsedMillis)
+        assertEquals(0, player.stopCount)
+    }
+
+    @Test
+    fun playingAgainAfterTheEndStartsFromTheBeginning() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        assertEquals(Unit.right(), service.resumePlayback())
+        assertEquals(listOf(0L), player.seeks)
+        val restarted = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertFalse(restarted.paused)
+        assertEquals(0L, restarted.elapsedMillis)
+
+        advanceTimeBy(250L)
+        runCurrent()
+        assertEquals(250L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+    }
+
+    @Test
+    fun pauseSeekAndSkipAreIgnoredWhenThePlayerHasNoControls() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, controlsAvailable = false)
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
+        service.seekPlayback(5_000L)
+        service.skipPlayback(15_000L)
+
+        assertFalse(assertIs<MediaSessionState.Playing>(service.state.value).paused)
+        assertEquals(0, player.pauseCount)
+        assertTrue(player.seeks.isEmpty())
+        assertFalse(service.playbackControlsAvailable)
+    }
+
+    @Test
+    fun pauseResumeSeekAndSkipAreNoOpsWhenIdle() = runTest {
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories(), FakeFileSystem(), backgroundScope)
+
+        service.pausePlayback()
+        service.seekPlayback(1_000L)
+        service.skipPlayback(15_000L)
+
+        assertEquals(Unit.right(), service.resumePlayback())
+        assertIs<MediaSessionState.Idle>(service.state.value)
+    }
+
+    @Test
+    fun closeWhilePausedStopsPlayerAndLeavesIdle() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 10_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(1_000L)
+        runCurrent()
+        service.pausePlayback()
         service.close()
 
         assertIs<MediaSessionState.Idle>(service.state.value)
