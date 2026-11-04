@@ -289,7 +289,8 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 - New "Speakers" section below the transcript, above the category.
 - One card per occurrence, showing: label or name, speech duration, a Play button for the sample, and the action button.
 - Action button is "Assign" for unknown, "Change" for matched, and "Not this person" as a secondary action on auto-matched cards.
-- Empty state: "No speakers detected in this memory."
+- Empty state: "No speakers detected in this memory." Shown only when analysis is DONE and found no speakers (Q-10).
+- P2 (1.10.0): the section is left out while the memory has no speakers and its analysis is PENDING, ANALYZING, FAILED, or SKIPPED. Cards show the label, "Speech m:ss", and Play sample. A missing recording shows "Audio unavailable" with no button (AC-2.4). The visual guide's "Audio unavailable. The original recording is missing." is shortened to the AC-2.4 text.
 
 ### 9.3 Assign sheet
 
@@ -301,6 +302,8 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 - Row: "Speaker recognition" toggle, explanation line (AC-6.2). Turning it on shows the consent screen first (§9.8).
 - Row: model status (downloaded, downloading, not available on this device).
 - Row: "Withdraw consent and delete speaker data" (AC-6.6). Confirmed with a dialog.
+- P2 (1.10.0): the switch is disabled while the feature is off, so analysis cannot start without consent. It can only be switched off until the consent screen (§9.8) ships. The model row is labelled "Speaker models" and reads "Not available on this device" while no model is pinned. The withdraw row is not in P2.
+- iOS hides the Settings rows, the detail section, and the list chips (Q-5). The shared code checks `speakerRecognitionSupported`.
 
 ### 9.8 Consent screen
 
@@ -376,7 +379,7 @@ The spike writes its numbers into this file (§11 table, filled in) before imple
 
 ## 12. Open questions
 
-These were open before implementation. All nine are decided, recorded in the Decision column below.
+These were open before implementation. Q-1 to Q-9 are decided, recorded in the Decision column below. Q-10 onward were found while building P2 and are open.
 
 | # | Question | Decision |
 |---|---|---|
@@ -389,6 +392,9 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Explicit in-app consent** (decided, §9.8). Analysis does not start until the user agrees. Legal concerns (BIPA, GDPR Art. 9, CUBI) are treated as covered by this explicit opt-in and the delete-all path (AC-6.6). |
 | Q-8 | Which speaker model license is acceptable? | **Any license that allows commercial use** (decided). S-5 still verifies each model. |
 | Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
+| Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (`SpeakerAnalysisRunner`, empty drafts), and SKIPPED also covers a feature that is off. | **Open.** P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE. |
+| Q-11 | §9.7 says a library speaker keeps a stored colour, but `Speaker` has no colour field. | **Open.** Needed for the list chips (P2, second MR). Add a stored colour in P3, or derive one per memory until then. |
+| Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Open.** The consent screen must ship before any UI path can call `setFeatureEnabled(true)`. |
 
 ---
 
@@ -429,7 +435,7 @@ These were open before implementation. All nine are decided, recorded in the Dec
 | P4 Re-analysis | Queue on opt-in, speaker creation and model upgrade; drain on app launch | US-5 met. |
 | P5 iOS | Only after an iOS transcriber exists | Separate plan. |
 
-Each phase is a separate MR with its own CHANGELOG entry and version bump (see `AGENTS.md`).
+Each phase is a separate MR with its own CHANGELOG entry and version bump (see `AGENTS.md`). P2 ships in two MRs: the detail section, sample playback, and Settings first, then the list chips once the search and filter LazyColumn change is on main.
 
 ---
 

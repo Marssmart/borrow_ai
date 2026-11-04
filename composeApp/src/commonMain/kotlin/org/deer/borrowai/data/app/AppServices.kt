@@ -71,6 +71,8 @@ class AppServices internal constructor(
     val modelSetup: ModelSetupService,
     val memories: MemoryService,
     val speakers: SpeakerService,
+    /** Finds speakers in recordings. Settings reads its availability, which stays false until a model is pinned. */
+    val speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
     val mediaSession: MediaSessionService,
     /** Runs the transcription jobs. Android's WorkManager workers reach it through a holder. */
     val transcriptionRunner: TranscriptionWorkRunner,
@@ -334,6 +336,7 @@ class AppServices internal constructor(
                     modelSetup = modelSetup,
                     memories = memories,
                     speakers = speakers,
+                    speakerAnalyzer = speakerAnalyzer,
                     mediaSession = mediaSession,
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
