@@ -727,15 +727,15 @@ class RecordingMediaSessionServiceTest {
             player,
             monotonicMillis = { testScheduler.currentTime },
         )
-        val target = PlaybackTarget(memory.id, PlaybackContent.SPEAKER_SAMPLE, PlaybackSample(startMs = 10_000L, endMs = 12_500L))
+        val target = PlaybackTarget(memory.id, PlaybackContent.SPEAKER_SAMPLE, PlaybackSample(startMs = 10_000L, endMs = 12_400L))
 
         assertEquals(PlaybackRequest.Started.right(), service.requestPlayback(target))
 
         assertEquals(listOf(10_000L), player.seeks)
         val playing = assertIs<MediaSessionState.Playing>(service.state.value)
         assertEquals(10_000L, playing.elapsedMillis)
-        assertEquals(12_500L, playing.durationMillis)
-        advanceTimeBy(2_499L)
+        assertEquals(12_400L, playing.durationMillis)
+        advanceTimeBy(2_399L)
         runCurrent()
         assertIs<MediaSessionState.Playing>(service.state.value)
         advanceTimeBy(1L)
@@ -831,8 +831,8 @@ class RecordingMediaSessionServiceTest {
             monotonicMillis = { testScheduler.currentTime },
         )
 
-        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.SPEAKER_SAMPLE, PlaybackSample(10_000L, 12_500L)))
-        advanceTimeBy(2_499L)
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.SPEAKER_SAMPLE, PlaybackSample(10_000L, 12_400L)))
+        advanceTimeBy(2_399L)
         runCurrent()
         assertIs<MediaSessionState.Playing>(service.state.value)
         advanceTimeBy(1L)

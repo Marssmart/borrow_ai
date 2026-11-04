@@ -275,11 +275,13 @@ class RecordingMediaSessionService(
         // The position comes from the player. A player that cannot report it falls back to a monotonic clock, so
         // changing the wall clock cannot stop or extend playback.
         val startedAtMillis = monotonicMillis()
+        fun currentPosition(): Long = audioPlayer.positionMillis() ?: (startMillis + monotonicMillis() - startedAtMillis)
         tickerJob.launch {
             while (isActive) {
-                delay(PLAYBACK_TICK_INTERVAL_MILLIS)
-                val positionMillis = audioPlayer.positionMillis()
-                    ?: (startMillis + monotonicMillis() - startedAtMillis)
+                // Wakes at the end when that comes first, so a speaker sample stops at its end and not a tick later.
+                val remainingMillis = durationMillis - currentPosition()
+                delay(minOf(PLAYBACK_TICK_INTERVAL_MILLIS, remainingMillis.coerceAtLeast(0L)))
+                val positionMillis = currentPosition()
                 if (positionMillis >= durationMillis) {
                     finishPlayback()
                     return@launch
