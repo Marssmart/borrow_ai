@@ -85,9 +85,23 @@ class KotbaseSpeakerServiceTest {
         val service = openService()
         val first = service.createSpeaker("Ana").getOrNull()!!
         val second = service.createSpeaker("Ben").getOrNull()!!
+        val third = service.createSpeaker("Carl").getOrNull()!!
 
         val stored = service.findSpeakers().getOrNull()!!.associate { it.id to it.colorIndex }
-        assertEquals(mapOf(first.id to 0, second.id to 1), stored)
+        assertEquals(mapOf(first.id to 0, second.id to 1, third.id to 2), stored)
+    }
+
+    @Test
+    fun renamingASpeakerKeepsItsColour() = runTest {
+        val service = openService()
+        service.createSpeaker("Ana")
+        val ben = service.createSpeaker("Ben").getOrNull()!!
+
+        assertTrue(service.renameSpeaker(ben.id, "Bea").isRight())
+
+        val renamed = service.findSpeaker(ben.id).getOrNull()!!
+        assertEquals("Bea", renamed.name)
+        assertEquals(1, renamed.colorIndex)
     }
 
     @Test

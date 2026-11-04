@@ -165,7 +165,7 @@ class AppServices internal constructor(
     }
 
     companion object {
-        private const val DATABASE_NAME = "borrow-ai"
+        internal const val DATABASE_NAME = "borrow-ai"
 
         /**
          * Builds the production graph, opening the Kotbase database named [databaseName] in the

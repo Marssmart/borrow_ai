@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.22.1]
+
+- Fixed speaker colours. Each speaker keeps its own colour when the speaker library is read, and renaming a speaker no longer resets it to the first colour.
+- Tests of the app services view model use their own database, so they no longer write to the app's data on a device.
+- Updated Android and iOS versioning to 1.22.1 (build 82).
+
 ## [1.22.0]
 
 - Added category chips to the memory editor on Android. Choose up to three categories. The count shows how many are chosen. A fourth choice shows a message.

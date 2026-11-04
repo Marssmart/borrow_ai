@@ -39,6 +39,8 @@ import org.deer.borrowai.data.service.recording.MicrophonePermission
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppServicesViewModelTest {
+    private val databaseName = "app-services-vm-test-${System.nanoTime()}"
+
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -60,6 +62,7 @@ class AppServicesViewModelTest {
             recorder = FakeRecorder(),
             audioPlayer = FakeAudioPlayer(),
             microphonePermission = FakeMicrophonePermission(),
+            databaseName = databaseName,
         )
         val first = ViewModelProvider(store, factory).get(AppServicesViewModel::class.java)
         val services = runBlocking {
@@ -92,6 +95,7 @@ class AppServicesViewModelTest {
             recorder = FakeRecorder(),
             audioPlayer = FakeAudioPlayer(),
             microphonePermission = FakeMicrophonePermission(),
+            databaseName = databaseName,
             // Creation ignores cancellation, as a graph build that completes after clear would.
             createServices = { withContext(NonCancellable) { gate.await() } },
         )
