@@ -25,8 +25,7 @@
 <article>
 <h1 id="gap-analysis">Gap analysis</h1>
 <p>Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, <code>site/content/*</code>, <code>features/*</code>, and <code>CHANGELOG.md</code>. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.</p>
-<p><strong>Status at 1.16.0:</strong> G4 phases 1 and 2 are merged (#75 and 1.14.0), and the accessibility phase is open. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
-<p>Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.</p>
+<p><strong>Status at 1.17.0:</strong> G4 is merged (#75, #83, and 1.17.0), with all of its phases done. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, and stored durations and recording pause remain. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes. Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.</p>
 <h2 id="1-what-exists-today">1. What exists today</h2>
 <ul>
 <li><strong>Android:</strong> recording in a foreground service, live transcript (Whisper tiny, English), batch transcript (Whisper base or large-v3 by RAM tier), one-paragraph summary and AI categories (Gemma 4 E2B/E4B or Qwen3 0.6B through LiteRT-LM, optional GPU), saved list, memory detail with "Play recording", background activity pill, and a Settings screen.</li>
@@ -353,7 +352,7 @@
 </table>
 <h2 id="5-suggested-sequencing">5. Suggested sequencing</h2>
 <ol type="1">
-<li><strong>Quick fixes (about a week):</strong> G4 accessibility, G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.</li>
+<li><strong>Quick fixes (about a week):</strong> G7 auto-titles, G14 dark theme, G16 notification permission, G17 licenses, G15 backup decision.</li>
 <li><strong>Core usability (two to four weeks):</strong> G6 keyboard and back polish, G5 edit and recategorize, G11 stored durations, G8 export, G12 language setting, G19 manual retry.</li>
 <li><strong>Differentiators:</strong> U2 privacy ledger (cheap, on-brand), then U1 offline Ask, U3 speaker UI, U4 commitments.</li>
 </ol>

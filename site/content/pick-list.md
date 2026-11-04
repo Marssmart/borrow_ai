@@ -2,15 +2,15 @@
 
 **Scope: Android only.** Removed as iOS-only: G1, G2, G3, G10. Removed as non-Android surfaces: P14, P16. Narrowed to Android: G15, G20, G24, P4, U7. Use the IDs to pick work, for example "G4, G7, U2". The evidence for each G and U item is in the [gap analysis](gap-analysis.html). Peer features come from the competitor research in the gap analysis (Appendix A), unless marked "market", which means general market knowledge that was not checked in the research.
 
-**Status at 1.16.0:** G4 phases 1 and 2 are merged (#75 and 1.14.0), and the accessibility phase is open. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77), and speed is in playback phase 2. G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.
+**Status at 1.17.0:** G4 is merged (#75, #83, and 1.17.0), with all of its phases done. G6 search, count, and category filters are merged (#76, #79). G11 pause, seek, and skip are merged (#77), and speed is in playback phase 2. G5 has a merged design (#74) and no implementation. Items are checked off when their work is merged.
 
 Size is rough for one developer: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks. Items marked "verify on device" are inferred from code paths.
 
-**Recommended first picks:** G7, G14, G16, G17 (quick wins), then G4 (accessibility), G11 (durations and recording pause), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.
+**Recommended first picks:** G7, G14, G16, G17 (quick wins), then G11 (durations and recording pause), G5, U2, U1. Decide G15 (backup behaviour) early, because it affects the privacy claim.
 
 ## A. Missing core features (G)
 
-- [ ] **G4** Delete memories. Partly done: phases 1 and 2 are merged (#75 and 1.14.0). Still open: the accessibility phase (TalkBack action and long-press shortcut). · S
+- [x] **G4** Delete memories. Merged in three phases: the state and commit rules (#75), the delete UI (#83), and the list card long-press and TalkBack action (1.17.0). · S
 - [ ] **G5** Edit title, summary, transcript, and categories. The service exists, the UI does not. · M
 - [ ] **G7** Automatic titles (blank today). · S
 - [ ] **G8** Export and share: audio (m4a), transcript (txt, md, and srt once timestamps exist), summary. · M

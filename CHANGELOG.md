@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.17.0]
+
+- Added a long-press shortcut to each card in Saved memories on Android. A long-press starts the same delete as More actions, with the same 10-second Undo.
+- Added a TalkBack custom action named Delete memory to each card in Saved memories on Android. It starts the same delete.
+- The Undo message and the delete error message are a polite live region, so screen readers announce them. Undo comes first in the TalkBack reading order.
+- Updated Android and iOS versioning to 1.17.0 (build 75).
+
 ## [1.16.0]
 
 - Added a playback speed menu (0.75x, 1x, 1.25x, 1.5x, and 2x) to the memory detail view. The speed applies at once, keeps the position and the playing or paused state, and resets to 1x when the app starts.
