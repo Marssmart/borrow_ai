@@ -143,7 +143,7 @@ As a user, I want to correct a memory from the screen where I read it.
 - `update(id, draft)` copies `draft.recordingPath` onto the memory (`KotbaseMemoryService.kt`, lines 141 to 152). A caller that omits the path clears the audio link. A new `edit` method avoids this by not taking a path.
 - `update` does not touch the transcript status (`TranscriptionStatus`, `Memory.kt`), so a transcript edit on a pending memory could be overwritten later by the speech model, which claims pending memories (`claimNextPendingTranscription`).
 - The summary job reads a snapshot (`findAll`, `MemorySummaryRecoveryJob.kt`, line 40). It calls the model, which can take up to 60 seconds (`DEFAULT_TIMEOUT_MILLIS`, line 122), and then calls `recordSummary` (line 84). `recordSummary` writes unconditionally (`KotbaseMemoryService.kt`, line 213).
-- A failed attempt also changes the status without checking the text. `recordFinishedAttempt` (line 207) runs `afterFinishedAttempt` (`Memory.kt`, line 136), which sets the summary to pending. A pending summary is then regenerated and overwritten. The same happens with categories: `recordCategorizationAttempt` (`KotbaseMemoryService.kt`, line 224) runs `afterFinishedCategorizationAttempt` (`Memory.kt`, line 229).
+- A failed attempt also changes the status without checking the text. `recordFinishedAttempt` (line 207) runs `afterFinishedAttempt` (`Memory.kt`, line 136), which sets the summary's status to pending (or to empty or given up, depending on the attempt count). A pending summary is then regenerated and overwritten. The same happens with categories: `recordCategorizationAttempt` (`KotbaseMemoryService.kt`, line 224) runs `afterFinishedCategorizationAttempt` (`Memory.kt`, line 229).
 
 ### 6.2 Validation
 
