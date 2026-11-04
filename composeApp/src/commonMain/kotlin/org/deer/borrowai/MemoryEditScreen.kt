@@ -56,6 +56,10 @@ import borrowai.composeapp.generated.resources.memory_edit_keep_editing
 import borrowai.composeapp.generated.resources.memory_edit_retry
 import borrowai.composeapp.generated.resources.memory_edit_save
 import borrowai.composeapp.generated.resources.memory_edit_summary_changed
+import borrowai.composeapp.generated.resources.memory_edit_transcript_empty
+import borrowai.composeapp.generated.resources.memory_edit_transcript_label
+import borrowai.composeapp.generated.resources.memory_edit_transcript_pending
+import borrowai.composeapp.generated.resources.memory_edit_transcript_too_long
 import borrowai.composeapp.generated.resources.memory_edit_summary_helper
 import borrowai.composeapp.generated.resources.memory_edit_summary_label
 import borrowai.composeapp.generated.resources.memory_edit_summary_too_long
@@ -63,6 +67,8 @@ import borrowai.composeapp.generated.resources.memory_edit_title_label
 import borrowai.composeapp.generated.resources.memory_edit_title_too_long
 import org.deer.borrowai.data.domain.MEMORY_SUMMARY_MAX_LENGTH
 import org.deer.borrowai.data.domain.MEMORY_TITLE_MAX_LENGTH
+import org.deer.borrowai.data.domain.MEMORY_TRANSCRIPTION_MAX_LENGTH
+import org.deer.borrowai.data.domain.isTranscriptEditable
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.currentEdit
@@ -73,21 +79,23 @@ import org.jetbrains.compose.resources.stringResource
 private const val TITLE_COUNTER_THRESHOLD = 60
 
 /**
- * Full-screen editor for a memory's title and summary. The transcript and categories are not editable here yet, so
+ * Full-screen editor for a memory's title, summary, and transcript. Categories are not editable here yet, so
  * [MemoryEdit] carries their current values unchanged. [onSave] reports the outcome through its callback.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun MemoryEditScreen(
     memory: Memory,
-    onSave: (String?, String?, String, (Either<MemoryError, Unit>) -> Unit) -> Unit,
+    onSave: (String?, String?, String?, String, (Either<MemoryError, Unit>) -> Unit) -> Unit,
     onClose: () -> Unit,
     onDeletedElsewhere: () -> Unit,
 ) {
     var title by rememberSaveable(memory.id) { mutableStateOf(memory.title) }
     var summary by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
+    var transcript by rememberSaveable(memory.id) { mutableStateOf(memory.transcription) }
     var titleEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
     var summaryEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
+    var transcriptEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
     // The summary the editor opened with. A different live summary means a new one was written during the edit.
     val summaryAtEntry by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
     var saving by remember { mutableStateOf(false) }
@@ -102,14 +110,21 @@ internal fun MemoryEditScreen(
     val draft = live.copy(
         title = if (titleEdited) title else live.title,
         summary = if (summaryEdited) summary else live.summary,
+        transcription = if (transcriptEdited) transcript else live.transcription,
     )
     val changed = draft != live
     val summaryConflict = summaryEdited && memory.summary != summaryAtEntry
     val titleTooLong = title.length > MEMORY_TITLE_MAX_LENGTH
     val summaryTooLong = summary.length > MEMORY_SUMMARY_MAX_LENGTH
-    // The service still checks the transcript and categories and reports a refusal, so a failed transcript that is
-    // blank does not keep the title from saving here.
-    val valid = !titleTooLong && !summaryTooLong
+    val transcriptEditable = memory.transcriptionStatus.isTranscriptEditable()
+    val transcriptBeingCreated = !transcriptEditable
+    // Until the user types in the field, it follows the live transcript, so a transcript that completes while the
+    // editor is open shows up in the field.
+    val shownTranscript = if (transcriptEdited) transcript else memory.transcription
+    val transcriptBlank = transcriptEditable && shownTranscript.isBlank()
+    val transcriptTooLong = transcriptEditable && shownTranscript.length > MEMORY_TRANSCRIPTION_MAX_LENGTH
+    // The service still checks the categories and reports a refusal the editor shows.
+    val valid = !titleTooLong && !summaryTooLong && !transcriptBlank && !transcriptTooLong
 
     fun save() {
         if (saving || !valid || !changed || summaryConflict) return
@@ -119,6 +134,7 @@ internal fun MemoryEditScreen(
         onSave(
             if (titleEdited) title else null,
             if (summaryEdited) summary else null,
+            if (transcriptEdited) transcript else null,
             summaryAtEntry,
         ) { result ->
             saving = false
@@ -229,6 +245,33 @@ internal fun MemoryEditScreen(
                             stringResource(Res.string.memory_edit_summary_too_long, MEMORY_SUMMARY_MAX_LENGTH)
                         } else {
                             stringResource(Res.string.memory_edit_summary_helper)
+                        },
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = shownTranscript,
+                onValueChange = {
+                    transcript = it
+                    transcriptEdited = true
+                    rejected = null
+                    failed = false
+                },
+                label = { Text(stringResource(Res.string.memory_edit_transcript_label)) },
+                readOnly = saving || transcriptBeingCreated,
+                enabled = !transcriptBeingCreated,
+                isError = transcriptBlank || transcriptTooLong,
+                minLines = 4,
+                supportingText = {
+                    Text(
+                        when {
+                            transcriptBeingCreated -> stringResource(Res.string.memory_edit_transcript_pending)
+                            transcriptBlank -> stringResource(Res.string.memory_edit_transcript_empty)
+                            transcriptTooLong ->
+                                stringResource(Res.string.memory_edit_transcript_too_long, MEMORY_TRANSCRIPTION_MAX_LENGTH)
+                            else -> ""
                         },
                     )
                 },

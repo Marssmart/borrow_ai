@@ -18,9 +18,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.CategorizationStatus
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemorySearchResults
+import org.deer.borrowai.data.domain.SummaryStatus
+import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.MediaSessionService
@@ -265,7 +268,7 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("missing", "t", null, "") { result ->
+        holder.saveMemoryEdit("missing", "t", null, null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()
@@ -279,13 +282,115 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("a", "t", null, "") { result ->
+        holder.saveMemoryEdit("a", "t", null, null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()
 
         assertTrue(errors.single() is MemoryError.InvalidInput)
     }
+
+    @Test
+    fun changedTranscriptShowsTheBannerForThatMemory() = runTest {
+        val holder = holder(memoryService(transcribed("a", "old")))
+        runCurrent()
+
+        holder.saveMemoryEdit("a", null, null, "new", "") { }
+        runCurrent()
+
+        assertEquals("a", holder.uiState.value.transcriptChangedMemoryId)
+    }
+
+    @Test
+    fun unchangedTranscriptDoesNotShowTheBanner() = runTest {
+        val holder = holder(memoryService(transcribed("a", "old")))
+        runCurrent()
+
+        holder.saveMemoryEdit("a", "renamed", null, "old", "") { }
+        runCurrent()
+
+        assertNull(holder.uiState.value.transcriptChangedMemoryId)
+    }
+
+    @Test
+    fun refusedTranscriptEditDoesNotShowTheBanner() = runTest {
+        val holder = holder(memoryService(transcribed("a", "old")))
+        runCurrent()
+
+        holder.saveMemoryEdit("a", null, null, "", "") { }
+        runCurrent()
+
+        assertNull(holder.uiState.value.transcriptChangedMemoryId)
+    }
+
+    @Test
+    fun writeNewSummaryClearsTheBannerAndRequestsASummary() = runTest {
+        val service = memoryService(transcribed("a", "old", summaryEditedByUser = true))
+        val holder = holder(service)
+        runCurrent()
+        holder.saveMemoryEdit("a", null, null, "new", "") { }
+        runCurrent()
+
+        holder.requestNewSummary("a")
+        runCurrent()
+
+        assertNull(holder.uiState.value.transcriptChangedMemoryId)
+        val stored = service.findById("a").getOrNull()!!
+        assertEquals(SummaryStatus.PENDING, stored.summaryStatus)
+        assertFalse(stored.summaryEditedByUser)
+    }
+
+    @Test
+    fun suggestCategoriesClearsTheBannerAndRequestsCategories() = runTest {
+        val service = memoryService(transcribed("a", "old", categoriesEditedByUser = true))
+        val holder = holder(service)
+        runCurrent()
+        holder.saveMemoryEdit("a", null, null, "new", "") { }
+        runCurrent()
+
+        holder.requestNewCategories("a")
+        runCurrent()
+
+        assertNull(holder.uiState.value.transcriptChangedMemoryId)
+        val stored = service.findById("a").getOrNull()!!
+        assertEquals(CategorizationStatus.PENDING, stored.categorizationStatus)
+        assertFalse(stored.categoriesEditedByUser)
+    }
+
+    @Test
+    fun failedSummaryRequestKeepsTheBannerAndCountsTheFailure() = runTest {
+        val service = memoryService(transcribed("a", "old"))
+        service.requestFailure = MemoryError.Persistence(IllegalStateException("disk full"))
+        val holder = holder(service)
+        runCurrent()
+        holder.saveMemoryEdit("a", null, null, "new", "") { }
+        runCurrent()
+
+        holder.requestNewSummary("a")
+        runCurrent()
+
+        assertEquals("a", holder.uiState.value.transcriptChangedMemoryId)
+        assertEquals(1, holder.uiState.value.transcriptRequestFailures)
+    }
+
+    private fun transcribed(
+        id: String,
+        transcription: String,
+        summaryEditedByUser: Boolean = false,
+        categoriesEditedByUser: Boolean = false,
+    ) = Memory(
+        id = id,
+        createdAtEpochMillis = 1L,
+        title = id,
+        summary = if (summaryEditedByUser) "mine" else "",
+        transcription = transcription,
+        transcriptionStatus = TranscriptionStatus.DONE,
+        summaryStatus = if (summaryEditedByUser) SummaryStatus.SUMMARIZED else SummaryStatus.PENDING,
+        summaryEditedByUser = summaryEditedByUser,
+        categories = if (categoriesEditedByUser) listOf(1) else emptyList(),
+        categorizationStatus = if (categoriesEditedByUser) CategorizationStatus.CATEGORIZED else CategorizationStatus.PENDING,
+        categoriesEditedByUser = categoriesEditedByUser,
+    )
 
     private fun memory(id: String, createdAt: Long) = Memory(
         id = id,

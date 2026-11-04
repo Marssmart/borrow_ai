@@ -39,6 +39,18 @@ class MemoryEditServiceTest {
     }
 
     @Test
+    fun typedInFailedTranscriptBecomesDone() = runTest {
+        val service = service()
+        val created = service.create(TranscriptionStatus.FAILED)
+
+        assertTrue(service.edit(created.id, MemoryEdit("t", "", "typed", emptyList())).isRight())
+
+        val stored = service.findById(created.id).getOrNull()!!
+        assertEquals("typed", stored.transcription)
+        assertEquals(TranscriptionStatus.DONE, stored.transcriptionStatus)
+    }
+
+    @Test
     fun unchangedTranscriptIsAcceptedWhilePending() = runTest {
         val service = service()
         val created = service.create(TranscriptionStatus.PENDING)

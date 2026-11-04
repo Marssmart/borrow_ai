@@ -88,6 +88,7 @@ import org.deer.borrowai.data.service.PlaybackError
 import org.deer.borrowai.data.service.PlaybackTarget
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.memory_delete
+import borrowai.composeapp.generated.resources.memory_banner_request_failed
 import borrowai.composeapp.generated.resources.memory_dismiss
 import borrowai.composeapp.generated.resources.memory_edit
 import borrowai.composeapp.generated.resources.memory_edit_deleted
@@ -164,6 +165,10 @@ internal fun SavedMemoriesScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val deletedElsewhereMessage = stringResource(Res.string.memory_edit_deleted)
+    val requestFailedMessage = stringResource(Res.string.memory_banner_request_failed)
+    LaunchedEffect(uiState.transcriptRequestFailures) {
+        if (uiState.transcriptRequestFailures > 0) snackbarHostState.showSnackbar(requestFailedMessage)
+    }
     val onEditedMemoryDeleted: () -> Unit = {
         // Runs once per editor session: a second call, after the editor has closed, does nothing.
         if (editingMemoryId != null) {
@@ -269,6 +274,12 @@ internal fun SavedMemoriesScreen(
                         onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
                         onDelete = { stateHolder.deleteFromDetail(memory.id) },
                         onEdit = { editingMemoryId = memory.id },
+                        showTranscriptBanner = uiState.transcriptChangedMemoryId == memory.id,
+                        summaryWrittenByUser = memory.summaryEditedByUser,
+                        categoriesChosenByUser = memory.categoriesEditedByUser,
+                        onWriteSummary = { stateHolder.requestNewSummary(memory.id) },
+                        onSuggestCategories = { stateHolder.requestNewCategories(memory.id) },
+                        onDismissTranscriptBanner = stateHolder::dismissTranscriptBanner,
                     )
                 }
 
@@ -278,8 +289,8 @@ internal fun SavedMemoriesScreen(
         editedMemory?.let { memory ->
             MemoryEditScreen(
                 memory = memory,
-                onSave = { title, summary, entry, onResult ->
-                    stateHolder.saveMemoryEdit(memory.id, title, summary, entry, onResult)
+                onSave = { title, summary, transcript, entry, onResult ->
+                    stateHolder.saveMemoryEdit(memory.id, title, summary, transcript, entry, onResult)
                 },
                 onClose = { editingMemoryId = null },
                 onDeletedElsewhere = onEditedMemoryDeleted,
@@ -619,6 +630,12 @@ private fun MemoryDetailScreen(
     onSpeakerFocusHandled: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
+    showTranscriptBanner: Boolean,
+    summaryWrittenByUser: Boolean,
+    categoriesChosenByUser: Boolean,
+    onWriteSummary: () -> Unit,
+    onSuggestCategories: () -> Unit,
+    onDismissTranscriptBanner: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -661,6 +678,15 @@ private fun MemoryDetailScreen(
                     }
                     MemoryMoreActions(onDelete = onDelete)
                 }
+            }
+            if (showTranscriptBanner) {
+                MemoryTranscriptBanner(
+                    summaryWrittenByUser = summaryWrittenByUser,
+                    categoriesChosenByUser = categoriesChosenByUser,
+                    onWriteSummary = onWriteSummary,
+                    onSuggestCategories = onSuggestCategories,
+                    onDismiss = onDismissTranscriptBanner,
+                )
             }
             AuroraPanel(
                 shape = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_SHAPE,
