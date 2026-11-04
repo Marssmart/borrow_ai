@@ -230,6 +230,13 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 - **Detail slide.** Deleting from the detail view calls `requestDelete` and then `backToList`. The detail keeps its memory until the slide finishes.
 - **Snackbar placement.** The Undo snackbar is a bottom-aligned child of a `Box` around the pager, with 8 dp of padding. `App.kt` already pads the pager for the dock, so the snackbar sits above the dock. Not seen on a device (Q-6).
 
+### 8.5 Implementation notes (P3)
+
+- **Entry points.** Long-press on a card uses `combinedClickable` with `onLongClick`, and the TalkBack custom action "Delete memory" uses `CustomAccessibilityAction`. Both call `requestDelete`, the same call the menu makes, so there is no sheet and the same Undo window. Only the detail view slides back to the list.
+- **Announcements.** The Undo and error snackbars are a polite live region (`LiveRegionMode.Polite`), as section 7 asks. The snackbar host has traversal index -1, so TalkBack reaches Undo before the list instead of after every card. This is a decision to review. Not seen on a device (Q-7).
+- **Unchanged.** Focus after delete (phase 2) and `DeletedMemoryPurger.kt`.
+- **Tests.** No Compose UI test dependency exists, so the semantics are not unit-tested. `SavedMemoriesDeleteTest` covers the state path for a delete from the list.
+
 ---
 
 ## 9. Platform split
@@ -263,9 +270,10 @@ An immediate soft delete plus a `restore(id)` method would also work. But the pu
 | Q-1 | Is 10 seconds enough with TalkBack on? | **Open.** Test on a device, and lengthen the window if needed. |
 | Q-2 | Should the design use an immediate soft delete, plus `restore(id)` and a purge grace period? | **Decided: no** for v1 (§8.2). Revisit when the 30-day trash (G27) is designed. |
 | Q-3 | Should a long recording (for example, over 5 minutes) need a confirmation dialog? | **Open.** Default: no. |
-| Q-4 | Keep the long-press shortcut as well as the TalkBack action? | **Open.** Default: keep both. |
+| Q-4 | Keep the long-press shortcut as well as the TalkBack action? | **Decided: keep both** (phase 3). Long-press starts the same delete, with no sheet. |
 | Q-5 | Should any memory require a confirmation dialog? | **Decided: no.** Undo is the safety net. |
 | Q-6 | Do the Undo snackbar, the empty state, the error snackbar, and the focus move after a delete look and behave as §6 describes on a device? | **Open.** The state rules are unit-tested; the screens are not. Not run on a device or emulator. Check on a device before phase 3 starts. |
+| Q-7 | Does TalkBack announce the Undo message once, reach Undo by swipe, and move focus to the heading after a delete? | **Open.** In code: a polite live region on the snackbar, Undo first in traversal order, and focus on the heading. Not run on a device. |
 
 ---
 

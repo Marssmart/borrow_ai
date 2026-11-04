@@ -344,6 +344,13 @@
 <li><strong>Detail slide.</strong> Deleting from the detail view calls <code>requestDelete</code> and then <code>backToList</code>. The detail keeps its memory until the slide finishes.</li>
 <li><strong>Snackbar placement.</strong> The Undo snackbar is a bottom-aligned child of a <code>Box</code> around the pager, with 8 dp of padding. <code>App.kt</code> already pads the pager for the dock, so the snackbar sits above the dock. Not seen on a device (Q-6).</li>
 </ul>
+<h3 id="85-implementation-notes-p3">8.5 Implementation notes (P3)</h3>
+<ul>
+<li><strong>Entry points.</strong> Long-press on a card uses <code>combinedClickable</code> with <code>onLongClick</code>, and the TalkBack custom action "Delete memory" uses <code>CustomAccessibilityAction</code>. Both call <code>requestDelete</code>, the same call the menu makes, so there is no sheet and the same Undo window. Only the detail view slides back to the list.</li>
+<li><strong>Announcements.</strong> The Undo and error snackbars are a polite live region (<code>LiveRegionMode.Polite</code>), as section 7 asks. The snackbar host has traversal index -1, so TalkBack reaches Undo before the list instead of after every card. This is a decision to review. Not seen on a device (Q-7).</li>
+<li><strong>Unchanged.</strong> Focus after delete (phase 2) and <code>DeletedMemoryPurger.kt</code>.</li>
+<li><strong>Tests.</strong> No Compose UI test dependency exists, so the semantics are not unit-tested. <code>SavedMemoriesDeleteTest</code> covers the state path for a delete from the list.</li>
+</ul>
 <hr />
 <h2 id="9-platform-split">9. Platform split</h2>
 <table>
@@ -449,7 +456,7 @@
 <tr>
 <td>Q-4</td>
 <td>Keep the long-press shortcut as well as the TalkBack action?</td>
-<td><strong>Open.</strong> Default: keep both.</td>
+<td><strong>Decided: keep both</strong> (phase 3). Long-press starts the same delete, with no sheet.</td>
 </tr>
 <tr>
 <td>Q-5</td>
@@ -460,6 +467,11 @@
 <td>Q-6</td>
 <td>Do the Undo snackbar, the empty state, the error snackbar, and the focus move after a delete look and behave as §6 describes on a device?</td>
 <td><strong>Open.</strong> The state rules are unit-tested; the screens are not. Not run on a device or emulator. Check on a device before phase 3 starts.</td>
+</tr>
+<tr>
+<td>Q-7</td>
+<td>Does TalkBack announce the Undo message once, reach Undo by swipe, and move focus to the heading after a delete?</td>
+<td><strong>Open.</strong> In code: a polite live region on the snackbar, Undo first in traversal order, and focus on the heading. Not run on a device.</td>
 </tr>
 </tbody>
 </table>

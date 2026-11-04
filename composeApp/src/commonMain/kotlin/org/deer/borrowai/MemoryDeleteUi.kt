@@ -11,6 +11,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -26,10 +27,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -110,7 +114,14 @@ internal fun MemoryDeleteSnackbarHost(
         snapshotFlow { currentUndoWindow == null }.first { it }
         hostState.showSnackbar(message = failedMessage, duration = SnackbarDuration.Long)
     }
-    SnackbarHost(hostState = hostState, modifier = modifier)
+    SnackbarHost(
+        hostState = hostState,
+        // First in TalkBack's order, so a swipe reaches Undo without passing every card.
+        modifier = modifier.semantics { traversalIndex = -1f },
+    ) { data ->
+        // Polite, so TalkBack announces the message once as it appears (AC-7.3).
+        Snackbar(snackbarData = data, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
 }
 
 /** The empty library: a heading, one line of text, and a way to the Record tab. It shows in place of the cards. */
