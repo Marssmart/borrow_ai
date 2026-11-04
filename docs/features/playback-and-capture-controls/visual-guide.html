@@ -337,7 +337,7 @@
     </p>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 1 · Playback panel</p>
+      <p class="eyebrow">Screen · 1 · Playback panel</p>
       <h2>Seek, skip, pause, and speed <span class="tag tag-shipped">Shipped</span> <span class="tag tag-mock">Speed and notice: mockup</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">The panel in the detail view shows elapsed and total time, a seek bar, skips of 15 seconds, one play or pause button, and the speed. Speed is chosen from a short menu. Shipped: the seek bar, the times, the skips, and play or pause. Dashed outlines mark the speed chip, the speed menu, and the interruption notice, which come in phase 2.</p>
       <div class="mock-grid">
@@ -420,9 +420,9 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · Legacy memories</p>
-      <h2>Duration unknown, never an estimate <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">A memory saved before this release has no stored duration. It shows "Duration unknown" until it is played once. Play works from the start, and forward skip waits for the duration.</p>
+      <p class="eyebrow">Screen · 2 · Legacy memories</p>
+      <h2>Duration unknown, never an estimate <span class="tag tag-shipped">Shipped</span> <span class="tag tag-mock">Speed: mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">A memory saved before this release has no stored duration. Idle memories show "Duration unknown" until P3 stores durations. While a memory plays or is paused, its duration comes from the player, and the seek bar and skips work then. Play works from the start. The speed chip is a mockup until phase 2.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -435,15 +435,15 @@
               <div class="times"><span>0:00</span><span class="unknown">Duration unknown</span></div>
               <div class="controls-row">
                 <div class="controls">
-                  <span class="skip" aria-hidden="true">back<br>15 s</span>
+                  <span class="skip disabled" aria-hidden="true">back<br>15 s</span>
                   <span class="round" aria-hidden="true">Play</span>
                   <span class="skip disabled" aria-hidden="true">fwd<br>15 s</span>
                 </div>
-                <span class="speed">1×</span>
+                <span class="speed mockup-only">1×</span>
               </div>
             </div>
           </div></div>
-          <p class="screen-caption">Legacy memory, not yet played <span class="tag tag-mock">Mockup</span></p>
+          <p class="screen-caption">Legacy memory, not yet played <span class="tag tag-shipped">Shipped</span></p>
         </figure>
       </div>
     </section>
@@ -503,7 +503,7 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 4 · List cards</p>
+      <p class="eyebrow">Screen · 4 · List cards</p>
       <h2>Play or pause, and the duration label <span class="tag tag-shipped">Pause shipped</span> <span class="tag tag-mock">Duration label: mockup</span> <span class="tag tag-android">Android only</span></h2>
       <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total. Shipped: the Pause state. Dashed: the duration label, which comes in phase 3.</p>
       <div class="mock-grid">
@@ -541,7 +541,7 @@
           <tr><td>Another app takes audio focus</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Playback stops, as before. The paused notice comes in a later phase.</td><td>Not shown.</td></tr>
           <tr><td>Paused by another app</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>Play button and the notice.</td><td>The player's position, frozen.</td></tr>
           <tr><td>Ended</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>Paused at the end. Play starts again from 0.</td><td>The player's duration. A stored duration comes in a later phase.</td></tr>
-          <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and forward skip disabled while the memory is not playing.</td><td>No stored duration yet. Stored on first play in a later phase.</td></tr>
+          <tr><td>Duration unknown</td><td><span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></td><td>"Duration unknown" with the slider and both skips disabled while the memory is not playing.</td><td>No stored duration yet. Stored on first play in a later phase.</td></tr>
           <tr><td>Recording</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
           <tr><td>Recording paused</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>
           <tr><td>Recording interrupted</td><td><span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></td><td>"Recording was interrupted. The audio up to here was saved." (Q-2).</td><td>The file's readable length.</td></tr>

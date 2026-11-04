@@ -274,6 +274,7 @@ These decisions refine §8.3 and §8.4. They were made when P1 was built.
 - A seek sets a pending target that reads return until the platform confirms the seek, so the position does not jump back to the old value.
 - The seek bar sends the seek when the drag or accessibility step ends (`onValueChangeFinished`). Material 3 1.4.0 calls that callback after each accessibility step too. Material 3 sets its own state description (the raw numeric value), which overrides one set outside the slider. The time text therefore goes in the content description, for example "Playback position, 0:24 of 1:05".
 - Seek and skip need an active playback. An idle memory has no position to move, so the seek bar and the skip buttons are disabled for it.
+- P1 stores no duration. The duration exists only while the memory plays or is paused. Once playback stops, the total time shows "Duration unknown" again until P3 stores durations. AC-1.6 and AC-7.2 are P3 targets.
 - The focus listener still stops playback until P2 (§8.4). Instrumented tests for `AndroidAudioPlayer` (§13) are not in P1, because they need a device and an audio fixture.
 
 ---
