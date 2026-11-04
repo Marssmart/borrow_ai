@@ -151,7 +151,13 @@ class KotbaseSpeakerService private constructor(
                     Unit
                 }
             }.bind()
-            batchFailure?.let { raise(SpeakerError.Persistence(it)) }
+            batchFailure?.let { failure ->
+                // The batch can commit rows written before the failure. Remove them so a failed attempt leaves no partial result.
+                write {
+                    applyPlan(planMemory(memoryId, rows = emptyList(), linkedSpeakerIds = emptySet(), usedAtEpochMillis = null))
+                }.bind()
+                raise(SpeakerError.Persistence(failure))
+            }
         }
     }
 
