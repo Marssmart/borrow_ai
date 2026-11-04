@@ -277,6 +277,8 @@
     .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .tag-mock { background: #fde3c8; color: #8a4b0a; }
     .tag-android { background: #e3e7e9; color: #4a5558; }
+    .tag-shipped { background: #d3efdd; color: #1c5a31; }
+    .mockup-only { outline: 1.5px dashed #c46a16; outline-offset: 2px; }
 
     table {
       width: 100%;
@@ -329,14 +331,15 @@
     </header>
 
     <p class="status-note">
-      <span class="tag tag-mock">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag tag-shipped">Shipped</span> The playback panel (seek bar, skips of 15 seconds, play or pause) and the list-card Pause state are built in phase 1.
+      <span class="tag tag-mock">Mockup</span> Dashed outlines mark what is still a mockup: speed, the interruption notice, recording pause, and the duration label.
       <span class="tag tag-android">Android only</span> Background playback with notification controls is a later phase (P5), not shown here.
     </p>
 
     <section class="section">
       <p class="eyebrow">Mockup · 1 · Playback panel</p>
-      <h2>Seek, skip, pause, and speed <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The panel in the detail view shows elapsed and total time, a seek bar, skips of 15 seconds, one play or pause button, and the speed. Speed is chosen from a short menu.</p>
+      <h2>Seek, skip, pause, and speed <span class="tag tag-shipped">Shipped</span> <span class="tag tag-mock">Speed and notice: mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The panel in the detail view shows elapsed and total time, a seek bar, skips of 15 seconds, one play or pause button, and the speed. Speed is chosen from a short menu. Shipped: the seek bar, the times, the skips, and play or pause. Dashed outlines mark the speed chip, the speed menu, and the interruption notice, which come in phase 2.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -353,7 +356,7 @@
                   <span class="round" aria-hidden="true">Pause</span>
                   <span class="skip" aria-hidden="true">fwd<br>15 s</span>
                 </div>
-                <span class="speed">1×</span>
+                <span class="speed mockup-only">1×</span>
               </div>
             </div>
             <div class="panel">
@@ -378,10 +381,10 @@
                   <span class="round" aria-hidden="true">Play</span>
                   <span class="skip" aria-hidden="true">fwd<br>15 s</span>
                 </div>
-                <span class="speed">1×</span>
+                <span class="speed mockup-only">1×</span>
               </div>
             </div>
-            <div class="menu" role="menu" aria-label="Playback speed">
+            <div class="menu mockup-only" role="menu" aria-label="Playback speed">
               <div class="menu-item">0.75×</div>
               <div class="menu-item selected">1× <span class="radio on" aria-hidden="true"></span></div>
               <div class="menu-item">1.25×</div>
@@ -397,7 +400,7 @@
               <div class="card-meta">3 Nov 2026 · 08:14</div>
               <div class="screen-title">Sunday trip plan</div>
             </div>
-            <div class="notice" role="status">Paused because another app started audio.</div>
+            <div class="notice mockup-only" role="status">Paused because another app started audio.</div>
             <div class="panel">
               <div class="slider"><div class="track"></div><div class="fill" style="width:37%"></div><div class="thumb" style="left:37%"></div></div>
               <div class="times"><span>0:24</span><span>1:05</span></div>
@@ -407,7 +410,7 @@
                   <span class="round" aria-hidden="true">Play</span>
                   <span class="skip" aria-hidden="true">fwd<br>15 s</span>
                 </div>
-                <span class="speed">1×</span>
+                <span class="speed mockup-only">1×</span>
               </div>
             </div>
           </div></div>
@@ -501,14 +504,14 @@
 
     <section class="section">
       <p class="eyebrow">Mockup · 4 · List cards</p>
-      <h2>Play or pause, and the duration label <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total.</p>
+      <h2>Play or pause, and the duration label <span class="tag tag-shipped">Pause shipped</span> <span class="tag tag-mock">Duration label: mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total. Shipped: the Pause state. Dashed: the duration label, which comes in phase 3.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Saved memories</div>
             <div class="list-card">
-              <div class="list-head"><span class="list-date">3 Nov 2026 · 08:14</span><span class="duration-label">1:05</span></div>
+              <div class="list-head"><span class="list-date">3 Nov 2026 · 08:14</span><span class="duration-label mockup-only">1:05</span></div>
               <div class="list-summary">Meet at the station at nine. Bring the tent, check the bus times.</div>
               <div class="list-actions"><span class="pill-btn">Pause</span></div>
             </div>
@@ -526,6 +529,7 @@
     <section class="section">
       <p class="eyebrow">States</p>
       <h2>What the user sees <span class="tag tag-mock">Mockup</span></h2>
+      <p class="section-note">Playing, paused by user, ended, and the idle "Duration unknown" label are shipped in phase 1. Paused by another app, the recording states, and stored durations are later phases.</p>
       <table>
         <thead>
           <tr><th>State</th><th>What the user sees</th><th>Source of the time shown</th></tr>
