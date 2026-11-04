@@ -4,6 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.20.0]
+
+- Added Pause and Resume under the microphone while a tap-to-record capture runs on Android. Pausing keeps the same file, so there is no gap in the audio.
+- The elapsed time counts only active recording and stops while paused. The live transcript pauses too, and the notification says "Recording paused" until you resume.
+- Hold-to-record has no pause control.
+- If the recorder reports an error, the recording keeps the audio captured so far when the file can still be read, and says so.
+- Updated Android and iOS versioning to 1.20.0 (build 79).
+
 ## [1.19.0]
 
 - Added an Edit memory button to the memory detail view on Android. It opens a full-screen editor for the title and summary.
