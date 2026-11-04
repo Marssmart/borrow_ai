@@ -3,6 +3,9 @@ package org.deer.borrowai
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SpeakerOccurrence
 import org.deer.borrowai.data.domain.SpeakerStatus
+import org.deer.borrowai.data.service.PlaybackContent
+import org.deer.borrowai.data.service.PlaybackSample
+import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.SpeakerService
 
 /** What the Speakers section of a memory detail shows (section 9.2). */
@@ -29,18 +32,12 @@ internal sealed interface SpeakerLabel {
 }
 
 internal sealed interface SpeakerAudio {
-    /** Plays this speaker's sample from the memory's recording. */
-    data class Playable(val sample: SpeakerSample) : SpeakerAudio
+    /** Plays this speaker's sample. [target] is the sample's range in the memory's recording. */
+    data class Playable(val target: PlaybackTarget) : SpeakerAudio
 
     /** The original recording is missing, so there is nothing to play (AC-2.4). */
     data object Unavailable : SpeakerAudio
 }
-
-/**
- * One stretch of a memory's recording where one speaker talks, in milliseconds from the start of the recording. Playback
- * turns it into a request for that range (section 10).
- */
-internal data class SpeakerSample(val memoryId: String, val startMs: Long, val endMs: Long)
 
 /**
  * The Speakers section for [memory], with cards in ordinal order. Returns null when the section is left out. A memory
@@ -61,10 +58,10 @@ internal fun speakersSectionState(
                 speechMillis = occurrence.totalSpeechMs,
                 audio = if (audioAvailable) {
                     SpeakerAudio.Playable(
-                        SpeakerSample(
+                        PlaybackTarget(
                             memoryId = memory.id,
-                            startMs = occurrence.sampleStartMs,
-                            endMs = occurrence.sampleEndMs,
+                            content = PlaybackContent.SPEAKER_SAMPLE,
+                            sample = PlaybackSample(occurrence.sampleStartMs, occurrence.sampleEndMs),
                         ),
                     )
                 } else {

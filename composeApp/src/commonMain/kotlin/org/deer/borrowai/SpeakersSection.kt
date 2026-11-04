@@ -21,6 +21,7 @@ import borrowai.composeapp.generated.resources.speaker_unknown_label
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onStart
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.SpeakerService
 import org.jetbrains.compose.resources.stringResource
 
@@ -33,8 +34,8 @@ internal fun SpeakersSection(
     memory: Memory,
     speakers: SpeakerService,
     hasRecordingFile: (Memory) -> Boolean,
-    playingSample: SpeakerSample?,
-    onPlaySample: (SpeakerSample) -> Unit,
+    playingTarget: PlaybackTarget?,
+    onPlaySample: (PlaybackTarget) -> Unit,
 ) {
     val state by produceState<SpeakersSectionState?>(initialValue = null, memory, speakers) {
         speakers.changes.onStart { emit(Unit) }.collect {
@@ -56,7 +57,7 @@ internal fun SpeakersSection(
         )
         when (section) {
             is SpeakersSectionState.Cards -> section.cards.forEach { card ->
-                SpeakerCardPanel(card = card, playingSample = playingSample, onPlaySample = onPlaySample)
+                SpeakerCardPanel(card = card, playingTarget = playingTarget, onPlaySample = onPlaySample)
             }
 
             SpeakersSectionState.NoneDetected -> AuroraPanel(
@@ -75,8 +76,8 @@ internal fun SpeakersSection(
 @Composable
 private fun SpeakerCardPanel(
     card: SpeakerCard,
-    playingSample: SpeakerSample?,
-    onPlaySample: (SpeakerSample) -> Unit,
+    playingTarget: PlaybackTarget?,
+    onPlaySample: (PlaybackTarget) -> Unit,
 ) {
     AuroraPanel(
         containerColor = Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SURFACE_ALPHA),
@@ -94,10 +95,10 @@ private fun SpeakerCardPanel(
         )
         when (val audio = card.audio) {
             is SpeakerAudio.Playable -> PlaybackButton(
-                playing = playingSample == audio.sample,
+                playing = playingTarget == audio.target,
                 playLabel = Res.string.speaker_play_sample,
-                stopLabel = Res.string.speaker_stop_sample,
-                onClick = { onPlaySample(audio.sample) },
+                playingLabel = Res.string.speaker_stop_sample,
+                onClick = { onPlaySample(audio.target) },
             )
 
             SpeakerAudio.Unavailable -> Text(
