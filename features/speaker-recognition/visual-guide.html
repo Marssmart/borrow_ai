@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BorrowAI — Speaker Recognition Visual Guide</title>
+  <title>BorrowAI — Feature Visual Guide</title>
   <style>
     :root {
       color-scheme: light;
@@ -324,6 +324,39 @@
     }
     .step strong { display: block; color: #17201d; font-size: 13px; margin-bottom: 3px; }
 
+
+    /* background activity indicator */
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      align-self: center;
+      padding: 6px 12px;
+      border: 1px solid #5d7c80;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 2px 6px rgb(20 40 44 / 14%);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #cfe3e5;
+      border-top-color: #14757b;
+      border-radius: 50%;
+    }
+    .status-note {
+      margin: 0 0 18px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 12px;
+      line-height: 1.5;
+      max-width: 820px;
+    }
+
     @media (max-width: 1000px) {
       .mock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -343,6 +376,43 @@
         Master spec: <code>SPEAKER_RECOGNITION.md</code>.
       </p>
     </header>
+
+    <section class="section">
+      <p class="eyebrow">0 · Shipped in 1.9.1</p>
+      <h2>Background activity indicator</h2>
+      <p class="status-note">Implemented. The speaker recognition screens below are design mockups: only the data layer and analysis pipeline exist so far (1.8.0), and the speaker analysis step already reports to this indicator.</p>
+      <p class="section-note">A small pill at the top of every screen with a spinner and the names of work the app is doing on its own. It names up to two activities, in a fixed order, and shows the rest as “+N”. It fades out when the last activity ends. Activities: Downloading models, Transcribing, Analyzing speakers, Summarizing, Categorizing, Cleaning up.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="pill"><span class="spinner"></span><span>Transcribing</span></div>
+            <div class="screen-title">Saved memories</div>
+            <div class="row"><div class="row-title">Call with Sam</div><div class="row-meta">Today · 4 min</div></div>
+            <div class="row"><div class="row-title">Grocery ideas</div><div class="row-meta">Yesterday · 1 min</div></div>
+          </div></div>
+          <p class="screen-caption">One activity</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="pill"><span class="spinner"></span><span>Transcribing · Summarizing +1</span></div>
+            <div class="screen-title">Saved memories</div>
+            <div class="row"><div class="row-title">Call with Sam</div><div class="row-meta">Today · 4 min</div></div>
+            <div class="row"><div class="row-title">Grocery ideas</div><div class="row-meta">Yesterday · 1 min</div></div>
+          </div></div>
+          <p class="screen-caption">Three activities: two named, rest counted</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Settings</div>
+            <div class="setting">
+              <div class="setting-row"><span>Background activity indicator</span><span class="toggle"></span></div>
+              <div class="setting-note">Show a small indicator at the top of the screen while the app transcribes, summarizes, categorizes, analyzes speakers, downloads models, or cleans up in the background.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Settings · on by default</p>
+        </figure>
+      </div>
+    </section>
 
     <section class="section">
       <p class="eyebrow">1 · Memory list</p>

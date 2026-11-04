@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.2]
+
+- Updated the feature visual guide with the implemented background activity indicator and its Settings switch, and marked the speaker recognition screens as design mockups.
+- Updated Android and iOS versioning to 1.9.2 (build 58).
+
 ## [1.9.1]
 
 - Added a background activity indicator: a small pill at the top of the screen shows while the app downloads models, transcribes, summarizes, categorizes, analyzes speakers, or cleans up in the background. It names up to two running activities and shows the rest as a count.
