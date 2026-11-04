@@ -35,7 +35,7 @@ Not applicable until iOS transcription and summarization exist. When they do, pr
 
 1. **Setting**: add an `Acceleration` setting with values `Auto` (default), `CPU only`, and `GPU`. Store it in the local settings collection, next to `showBackgroundActivityIndicator`.
 2. **Selector**: add a common `AcceleratorSelector` that returns the preferred backend per role (`LIVE_VOICE`, `VOICE`, `LLM`) from the setting, the model tier and device capabilities. Keep it a pure function so it is unit-testable in `commonTest`.
-3. **Platform mapping**: in `androidMain`, map the selection to `Backend.GPU()` for the LLM and to the sherpa `provider` string for speech.
+3. **Platform mapping**: in `androidMain`, map the selection to `Backend.GPU()` for the LLM. Speech stays on `provider = "cpu"` regardless of the setting, because the prebuilt sherpa-onnx AAR has no GPU provider. NNAPI is not treated as GPU. If it is ever offered, it will be a separate, explicitly experimental setting with its own CPU fallback.
 4. **Fallback**: if engine creation or the first inference fails on an accelerator, retry once on the CPU for that session and remember the failure for the model and device. Do not retry the accelerator again until the app version or the setting changes.
 5. **Defaults**: `Auto` uses the GPU for the LLM on the MID and LATEST tiers only. Speech stays on the CPU until benchmarks show a gain, because live transcription is latency-sensitive and small models run well on the CPU.
 6. **Memory**: GPU backends use more memory and can be killed under pressure. Do not run GPU inference while recording on the LEGACY tier.
