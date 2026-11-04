@@ -189,6 +189,12 @@ class MemoryEditTest {
         assertFalse(updated.categoriesEditedByUser)
     }
 
+    @Test
+    fun categoryNameTakenIgnoresCaseAndSurroundingSpaces() {
+        assertTrue(categoryNameTaken("  work ", listOf("Work", "Home")))
+        assertFalse(categoryNameTaken("Office", listOf("Work", "Home")))
+    }
+
     private fun edit(
         title: String = "",
         summary: String = "",

@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.CategoryFilterChip
+import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.currentEdit
 import org.deer.borrowai.data.domain.MemorySearch
@@ -236,6 +237,7 @@ internal class SavedMemoriesStateHolder(
         summary: String?,
         transcript: String?,
         summaryAtEntry: String,
+        categories: List<Int>? = null,
         onResult: (Either<MemoryError, Unit>) -> Unit,
     ) {
         launchWrite {
@@ -250,6 +252,7 @@ internal class SavedMemoriesStateHolder(
                     title = title ?: current.title,
                     summary = summary ?: current.summary,
                     transcription = transcript ?: current.transcription,
+                    categoryIds = categories ?: current.categories,
                 )
                 memoryService.edit(memoryId, edit).bind()
             }
@@ -262,6 +265,20 @@ internal class SavedMemoriesStateHolder(
 
     fun dismissTranscriptBanner() {
         mutableUiState.update { it.copy(transcriptChangedMemoryId = null) }
+    }
+
+    /**
+     * Creates a category for the editor. On success the new name joins the names the editor offers. [onResult] runs on
+     * the holder's scope.
+     */
+    fun createCategory(name: String, description: String, onResult: (Either<MemoryError, Category>) -> Unit) {
+        launchWrite {
+            val result = memoryService.createCategory(name, description)
+            result.onRight { category ->
+                mutableUiState.update { state -> state.copy(categoryNames = state.categoryNames + (category.id to category.name)) }
+            }
+            scope.launch { onResult(result) }
+        }
     }
 
     /** Asks the recovery job for a new summary. The caller has already confirmed when that replaces the user's text. */
