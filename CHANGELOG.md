@@ -4,9 +4,14 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
-## [1.9.5]
+## [1.9.6]
 
 - Expanded the feature visual guide to cover the implemented features: navigation dock, capture screen and its setup and error states, saved memories list and detail, the background transcription, summary and categorization pipeline, the background activity indicator, the Settings screen, the GitHub Pages docs site, and the speaker data layer. The speaker recognition screens are marked as design mockups, and Android-only features are labeled.
+- Updated Android and iOS versioning to 1.9.6 (build 62).
+
+## [1.9.5]
+
+- Added a GPU support design doc under `features/gpu-support/`. It covers GPU and NPU options for transcription and summarization, with a CPU fallback.
 - Updated Android and iOS versioning to 1.9.5 (build 61).
 
 ## [1.9.4]
