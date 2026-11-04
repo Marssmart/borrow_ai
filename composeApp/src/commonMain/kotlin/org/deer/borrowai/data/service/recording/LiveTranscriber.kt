@@ -15,6 +15,12 @@ interface LiveTranscriber {
 
     /** Stops capturing. After this returns, [onPartial] and [onFailure] are never called again. */
     fun stop()
+
+    /** Stops feeding audio to the recognizer while the recording is paused. The live text stops changing. */
+    fun pause() {}
+
+    /** Feeds audio to the recognizer again after [pause]. Text from before the pause is kept. */
+    fun resume() {}
 }
 
 /** Why live transcription could not run or stopped early. The saved recording is never affected. */

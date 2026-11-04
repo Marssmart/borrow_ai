@@ -281,6 +281,38 @@ class AndroidLiveTranscriberTest {
         assertTrue(failures.isEmpty(), "A user stop must not be reported as a failure, got $failures")
     }
 
+    @Test
+    fun pausedCaptureEmitsNoPartialsUntilResumed() {
+        val partials = CopyOnWriteArrayList<String>()
+        val firstPartial = CountDownLatch(1)
+        val counter = AtomicInteger(0)
+        val decoder = object : LiveDecoder {
+            override fun decode(samples: FloatArray): String = "text ${counter.incrementAndGet()}"
+
+            override fun release() = Unit
+        }
+        val transcriber = transcriber(audio = FakeAudio(), decoder = decoder)
+
+        transcriber.start(
+            onPartial = {
+                partials.add(it)
+                firstPartial.countDown()
+            },
+            onFailure = {},
+        )
+        try {
+            awaitLatch(firstPartial)
+            transcriber.pause()
+            // Lets a decode that was already running when the pause began finish; its text must be dropped.
+            Thread.sleep(200)
+            val countWhilePaused = partials.size
+            Thread.sleep(400)
+            assertEquals(countWhilePaused, partials.size)
+        } finally {
+            transcriber.stop()
+        }
+    }
+
     private fun transcriber(
         audio: LiveAudioSource? = FakeAudio(),
         decoder: LiveDecoder = FakeDecoder(),

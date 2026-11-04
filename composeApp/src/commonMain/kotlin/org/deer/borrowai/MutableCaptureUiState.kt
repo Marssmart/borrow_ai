@@ -13,6 +13,9 @@ internal class MutableCaptureUiState(initial: UiState) {
         val elapsedSeconds: Int = 0,
         val transcript: String = "",
         val liveTranscriptionFailure: LiveTranscriptionFailure? = null,
+        val isPaused: Boolean = false,
+        /** The recorder reported an error. The saved audio is only what was captured up to it. */
+        val recordingInterrupted: Boolean = false,
     )
 
     private val mutableState = MutableStateFlow(initial)

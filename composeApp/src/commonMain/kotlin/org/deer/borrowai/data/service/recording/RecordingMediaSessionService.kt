@@ -81,6 +81,8 @@ class RecordingMediaSessionService(
 
     init {
         audioPlayer.setInterruptionHandler { interruption -> onPlaybackInterruption(interruption) }
+        // The recorder reports errors on its own thread, so the state change is posted to the service's scope.
+        recorder.setErrorListener { scope.launch { onRecorderError() } }
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
@@ -92,6 +94,8 @@ class RecordingMediaSessionService(
     override val playbackAvailable: Boolean = true
     override val playbackControlsAvailable: Boolean
         get() = audioPlayer.controlsAvailable
+    override val recordingPauseAvailable: Boolean
+        get() = recorder.pauseAvailable
     override val microphoneDenial: StateFlow<MicrophoneDenial?>
         get() = microphonePermission.denial
 
@@ -108,6 +112,42 @@ class RecordingMediaSessionService(
             currentCoroutineContext().ensureActive()
             beginRecording(holdToRecord) { coroutineContext.isActive }
         }
+    }
+
+    override fun pauseRecording() {
+        ensureOpen()
+        val recording = activeRecording ?: return
+        val current = recordingOrNull() ?: return
+        // Hold-to-record has no pause control, so the service refuses it as well.
+        if (current.paused || current.holdToRecord) return
+        try {
+            recorder.pause()
+        } catch (exception: RecordingUnavailableException) {
+            // The capture keeps running, so no audio is lost. The state stays Recording.
+            return
+        }
+        runCatching { liveTranscriber?.pause() }
+        val now = epochClock.nowEpochMillis()
+        recording.pausedAtMillis = now
+        mutableState.value = current.copy(paused = true, elapsedMillis = recording.activeElapsedMillis(now))
+    }
+
+    override fun resumeRecording() {
+        ensureOpen()
+        val recording = activeRecording ?: return
+        val current = recordingOrNull() ?: return
+        val pausedAt = recording.pausedAtMillis ?: return
+        try {
+            recorder.resume()
+        } catch (exception: RecordingUnavailableException) {
+            // The recording stays paused, so the user can resume again or save what was captured.
+            return
+        }
+        runCatching { liveTranscriber?.resume() }
+        val now = epochClock.nowEpochMillis()
+        recording.pausedTotalMillis += now - pausedAt
+        recording.pausedAtMillis = null
+        mutableState.value = current.copy(paused = false, elapsedMillis = recording.activeElapsedMillis(now))
     }
 
     override fun stopRecording(): RecordingResult? {
@@ -505,7 +545,7 @@ class RecordingMediaSessionService(
         tickerJob.cancel()
         liveTranscriber?.let { transcriber -> runCatching { transcriber.stop() } }
         mutableState.value = MediaSessionState.Idle
-        val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
+        val elapsedMillis = recording.activeElapsedMillis(epochClock.nowEpochMillis())
         var savedDurationMillis: Long? = null
         // The save is registered as pending before the file is promoted, so RecordingReconciler never sees a
         // finished file whose memory is still being written.
@@ -533,9 +573,16 @@ class RecordingMediaSessionService(
         pendingSaves.update { it + save }
         save.invokeOnCompletion { pendingSaves.update { jobs -> jobs - save } }
         try {
-            recorder.stop()
+            val stopFailure = runCatching { recorder.stop() }.exceptionOrNull()
+            // After a recorder error, a partial file that fails to finalize is kept only when it has a readable duration.
+            val partialDurationMillis = if (stopFailure != null && recording.interrupted) {
+                readDuration(recording.temporaryPath)
+            } else {
+                null
+            }
+            if (stopFailure != null && partialDurationMillis == null) throw stopFailure
             fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
-            savedDurationMillis = runCatching { durationReader.durationMillis(recording.absolutePath.toString()) }.getOrNull()
+            savedDurationMillis = partialDurationMillis ?: readDuration(recording.absolutePath)
         } catch (exception: Exception) {
             // Any finalize failure leaves no usable file. Cancelling the pending save keeps close() and busy checks from waiting on it.
             discardUnfinishedRecording(recording, save)
@@ -543,8 +590,10 @@ class RecordingMediaSessionService(
             return null
         }
         save.start()
-        return RecordingResult(elapsedMillis = elapsedMillis, transcription = "")
+        return RecordingResult(elapsedMillis = elapsedMillis, transcription = "", interrupted = recording.interrupted)
     }
+
+    private fun readDuration(path: Path): Long? = runCatching { durationReader.durationMillis(path.toString()) }.getOrNull()
 
     private fun failRecordingStart(temporaryPath: Path, error: RecordingError) {
         deleteBestEffort(temporaryPath)
@@ -570,12 +619,27 @@ class RecordingMediaSessionService(
                 (state !is MediaSessionState.Idle && state !is MediaSessionState.Failed)
         }
 
+    /** Records a recorder error. The capture is kept, so stopping still saves the audio captured before the error. */
+    private fun onRecorderError() {
+        val recording = activeRecording ?: return
+        recording.interrupted = true
+        mutableState.update { current ->
+            if (current is MediaSessionState.Recording) current.copy(interrupted = true) else current
+        }
+    }
+
+    /** Active recording time: the wall clock since the start, minus every paused stretch, including the current one. */
+    private fun ActiveRecording.activeElapsedMillis(nowMillis: Long): Long {
+        val currentPauseMillis = pausedAtMillis?.let { nowMillis - it } ?: 0L
+        return nowMillis - startedAtMillis - pausedTotalMillis - currentPauseMillis
+    }
+
     private fun startTicker() {
         tickerJob.launch {
             while (isActive) {
                 delay(TICK_INTERVAL_MILLIS)
                 val recording = activeRecording ?: return@launch
-                val elapsedMillis = epochClock.nowEpochMillis() - recording.startedAtMillis
+                val elapsedMillis = recording.activeElapsedMillis(epochClock.nowEpochMillis())
                 mutableState.update { current ->
                     if (current is MediaSessionState.Recording) current.copy(elapsedMillis = elapsedMillis) else current
                 }
@@ -593,7 +657,11 @@ class RecordingMediaSessionService(
         val absolutePath: Path,
         val temporaryPath: Path,
         val startedAtMillis: Long,
-    )
+    ) {
+        var pausedAtMillis: Long? = null
+        var pausedTotalMillis: Long = 0L
+        var interrupted: Boolean = false
+    }
 
     private companion object {
         const val TICK_INTERVAL_MILLIS = 1_000L

@@ -106,6 +106,8 @@ import borrowai.composeapp.generated.resources.capture_recording_error_microphon
 import borrowai.composeapp.generated.resources.capture_recording_error_save
 import borrowai.composeapp.generated.resources.capture_recording_error_title
 import borrowai.composeapp.generated.resources.capture_recording_label
+import borrowai.composeapp.generated.resources.capture_paused_label
+import borrowai.composeapp.generated.resources.capture_recording_interrupted
 import borrowai.composeapp.generated.resources.capture_release_to_stop
 import borrowai.composeapp.generated.resources.capture_start_recording_description
 import borrowai.composeapp.generated.resources.capture_stop_recording_description
@@ -197,6 +199,7 @@ internal fun BorrowCaptureScreen(
                 buttonSize = microphoneSize,
                 isRecording = uiState.isRecording,
                 isHoldRecording = uiState.isHoldRecording,
+                isPaused = uiState.isPaused,
                 isEnabled = canRecord || uiState.isRecording,
                 elapsedSeconds = uiState.elapsedSeconds,
                 statusLabel = modelStatus.takeUnless { uiState.isRecording },
@@ -216,6 +219,13 @@ internal fun BorrowCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(CaptureUiStateHolder.FOOTER_ITEM_SPACING),
             ) {
+                if (uiState.isRecording && !uiState.isHoldRecording && stateHolder.recordingPauseAvailable) {
+                    RecordingPauseControl(
+                        isPaused = uiState.isPaused,
+                        onPause = stateHolder::togglePause,
+                        onResume = stateHolder::togglePause,
+                    )
+                }
                 if (canRecord || uiState.isRecording) {
                     Text(
                         text = if (uiState.isRecording) {
@@ -258,6 +268,15 @@ internal fun BorrowCaptureScreen(
                 uiState.liveTranscriptionFailure?.let { failure ->
                     Text(
                         text = stringResource(liveTranscriptionFailureResource(failure)),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (uiState.recordingInterrupted) {
+                    Text(
+                        text = stringResource(Res.string.capture_recording_interrupted),
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelSmall,
@@ -315,6 +334,7 @@ private fun MicrophoneButton(
     buttonSize: Dp,
     isRecording: Boolean,
     isHoldRecording: Boolean,
+    isPaused: Boolean,
     isEnabled: Boolean,
     elapsedSeconds: Int,
     statusLabel: String?,
@@ -484,7 +504,11 @@ private fun MicrophoneButton(
                 Spacer(Modifier.height(CaptureUiStateHolder.BUTTON_GLYPH_SPACING))
                 Text(
                     text = statusLabel ?: stringResource(
-                        if (isRecording) Res.string.capture_recording_label else Res.string.capture_tap_or_hold,
+                        when {
+                            isPaused -> Res.string.capture_paused_label
+                            isRecording -> Res.string.capture_recording_label
+                            else -> Res.string.capture_tap_or_hold
+                        },
                     ),
                     color = buttonContentColor,
                     style = if (isEnabled) MaterialTheme.typography.labelLarge

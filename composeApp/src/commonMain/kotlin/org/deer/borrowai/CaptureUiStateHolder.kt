@@ -24,6 +24,8 @@ internal class CaptureUiStateHolder(
 
     val microphoneDenial: StateFlow<MicrophoneDenial?> get() = mediaSessionService.microphoneDenial
 
+    val recordingPauseAvailable: Boolean get() = mediaSessionService.recordingPauseAvailable
+
     fun openMicrophoneSettings() = mediaSessionService.openMicrophoneSettings()
 
     suspend fun observeMediaSession() {
@@ -40,6 +42,17 @@ internal class CaptureUiStateHolder(
         } else {
             startRecording(holdToRecord = false)
         }
+    }
+
+    /** Pauses or resumes a tap-to-record capture. Hold-to-record has no pause. */
+    fun togglePause() {
+        if (!uiState.isRecording() || uiState.isHoldRecording()) return
+        if (uiState.value().isPaused) {
+            mediaSessionService.resumeRecording()
+        } else {
+            mediaSessionService.pauseRecording()
+        }
+        bindMediaSession(mediaSessionService.state.value)
     }
 
     fun startHoldRecording() {
@@ -75,6 +88,8 @@ internal class CaptureUiStateHolder(
                 elapsedSeconds = (result.elapsedMillis / MILLIS_PER_SECOND).toInt(),
                 transcript = "",
                 liveTranscriptionFailure = null,
+                isPaused = false,
+                recordingInterrupted = result.interrupted,
             )
         }
     }
@@ -88,6 +103,7 @@ internal class CaptureUiStateHolder(
                     isHoldRecording = false,
                     transcript = "",
                     liveTranscriptionFailure = null,
+                    isPaused = false,
                 )
             }
         }
@@ -101,6 +117,8 @@ internal class CaptureUiStateHolder(
                 elapsedSeconds = (elapsedMillis / MILLIS_PER_SECOND).toInt(),
                 transcript = transcription,
                 liveTranscriptionFailure = liveTranscriptionFailure,
+                isPaused = paused,
+                recordingInterrupted = interrupted,
             )
 
             MediaSessionState.Idle, is MediaSessionState.Playing, is MediaSessionState.Failed ->
