@@ -23,12 +23,16 @@ import androidx.compose.ui.unit.dp
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.settings_background_indicator_description
 import borrowai.composeapp.generated.resources.settings_background_indicator_title
+import borrowai.composeapp.generated.resources.settings_gpu_acceleration_description
+import borrowai.composeapp.generated.resources.settings_gpu_acceleration_title
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SettingsScreen(
     showBackgroundActivityIndicator: Boolean,
     onShowBackgroundActivityIndicatorChange: (Boolean) -> Unit,
+    useGpuAcceleration: Boolean,
+    onUseGpuAccelerationChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -62,6 +66,33 @@ internal fun SettingsScreen(
             }
             Switch(
                 checked = showBackgroundActivityIndicator,
+                onCheckedChange = null,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = useGpuAcceleration,
+                    role = Role.Switch,
+                    onValueChange = onUseGpuAccelerationChange,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(
+                    text = stringResource(Res.string.settings_gpu_acceleration_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(Res.string.settings_gpu_acceleration_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = useGpuAcceleration,
                 onCheckedChange = null,
             )
         }

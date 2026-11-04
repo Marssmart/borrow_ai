@@ -18,4 +18,9 @@ class FakeAppSettingsService(
         mutableSettings.value = mutableSettings.value.copy(showBackgroundActivityIndicator = show)
         return Unit.right()
     }
+
+    override suspend fun setUseGpuAcceleration(use: Boolean): Either<AppSettingsError, Unit> {
+        mutableSettings.value = mutableSettings.value.copy(useGpuAcceleration = use)
+        return Unit.right()
+    }
 }

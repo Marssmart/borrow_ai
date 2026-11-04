@@ -8,10 +8,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 import okio.Path
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.service.model.ModelDevice
+import org.deer.borrowai.data.service.settings.AppSettingsService
 import org.deer.borrowai.data.service.category.createCategoryModel
 import org.deer.borrowai.data.service.llm.createLocalLlm
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
@@ -35,6 +37,8 @@ internal class AppServicesViewModel(
     private val transcriptionWorkerFactory: TranscriptionWorkerFactory =
         (appContext.applicationContext as BorrowAiApplication).transcriptionWorkerFactory,
     private val createServices: suspend () -> AppServices = {
+        // The runtime asks for the setting on each engine load. Until the settings store opens, the default applies.
+        val settings = AtomicReference<AppSettingsService?>(null)
         // The transcriber resolves model files when recording starts, so creation stays free of file IO.
         val liveTranscriber = createLiveTranscriber(
             modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
@@ -44,6 +48,7 @@ internal class AppServicesViewModel(
             modelDirectory = modelDirectoryUnder(recordingsRoot.toString()),
             totalRamBytes = modelDevice.totalRamBytes,
             cacheDirectory = modelDirectoryUnder(recordingsRoot.toString()).toString(),
+            useGpuAcceleration = { settings.get()?.settings?.value?.useGpuAcceleration ?: true },
         )
         AppServices.create(
             modelDevice = modelDevice,
@@ -58,6 +63,7 @@ internal class AppServicesViewModel(
             summarizer = createSummarizer(runtime = runtime),
             categoryModel = createCategoryModel(runtime = runtime),
             closeModelRuntime = runtime::close,
+            onSettingsReady = settings::set,
         )
     },
 ) : ViewModel() {

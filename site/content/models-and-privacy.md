@@ -10,7 +10,7 @@ Each tier uses up to three models.
 |------|----------|
 | `LIVE_VOICE` | Live transcription while recording (16 kHz path). |
 | `VOICE` | Batch transcription of the finished recording. |
-| `LLM` | Summaries and categories. |
+| `LLM` | Summaries and categories. Runs on the GPU on the MID and LATEST tiers when the GPU acceleration setting is on (default), and falls back to the CPU if the GPU fails. |
 
 ## Tiers
 

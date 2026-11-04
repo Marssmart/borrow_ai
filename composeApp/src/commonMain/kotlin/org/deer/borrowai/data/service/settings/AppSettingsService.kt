@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 data class AppSettings(
     /** Shows the top indicator while background work runs. On by default. */
     val showBackgroundActivityIndicator: Boolean = true,
+    /** Lets on-device models use the GPU where the device and model tier support it. On by default. */
+    val useGpuAcceleration: Boolean = true,
 )
 
 sealed interface AppSettingsError {
@@ -19,4 +21,7 @@ interface AppSettingsService {
 
     /** Stores whether the background activity indicator is shown. [settings] changes only after the write succeeds. */
     suspend fun setShowBackgroundActivityIndicator(show: Boolean): Either<AppSettingsError, Unit>
+
+    /** Stores whether GPU acceleration may be used. [settings] changes only after the write succeeds. */
+    suspend fun setUseGpuAcceleration(use: Boolean): Either<AppSettingsError, Unit>
 }

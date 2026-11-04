@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import org.deer.borrowai.data.service.model.Accelerator
 import org.deer.borrowai.data.service.model.ModelFileStore
 import org.deer.borrowai.data.service.model.ModelRole
 import org.deer.borrowai.data.service.model.ModelSpec
@@ -279,14 +280,56 @@ class LocalLlmRuntimeTest {
         assertEquals(1, factory.created.size)
     }
 
+    @Test
+    fun usesTheGpuWhenPreferred() {
+        writeModel()
+        val factory = FakeEngineFactory()
+
+        val result = runBlocking { runtime(factory, { Accelerator.GPU }).generate("system", "hi", TIMEOUT_MILLIS) }
+
+        assertIs<LlmOutcome.Text>(result)
+        assertEquals(listOf(Accelerator.GPU), factory.requested)
+    }
+
+    @Test
+    fun fallsBackToTheCpuOnceWhenTheGpuFailsAndDoesNotRetryTheGpu() {
+        writeModel()
+        val factory = FakeEngineFactory(gpuLoadFailure = IllegalStateException("no gpu"))
+        val runtime = runtime(factory, { Accelerator.GPU })
+
+        val first = runBlocking { runtime.generate("system", "one", TIMEOUT_MILLIS) }
+        val second = runBlocking { runtime.generate("system", "two", TIMEOUT_MILLIS) }
+
+        assertIs<LlmOutcome.Text>(first)
+        assertIs<LlmOutcome.Text>(second)
+        assertEquals(listOf(Accelerator.GPU, Accelerator.CPU), factory.requested)
+    }
+
+    @Test
+    fun rebuildsTheEngineWhenThePreferredAcceleratorChanges() {
+        writeModel()
+        val factory = FakeEngineFactory()
+        var preferred = Accelerator.GPU
+        val runtime = runtime(factory, { preferred })
+
+        runBlocking { runtime.generate("system", "one", TIMEOUT_MILLIS) }
+        preferred = Accelerator.CPU
+        runBlocking { runtime.generate("system", "two", TIMEOUT_MILLIS) }
+
+        assertEquals(listOf(Accelerator.GPU, Accelerator.CPU), factory.requested)
+        assertEquals(1, factory.created[0].closeCount)
+    }
+
     private fun runtime(
         factory: LlmEngineFactory,
+        preferredAccelerator: () -> Accelerator = { Accelerator.CPU },
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         closeTimeoutMillis: Long = 5_000L,
     ) = LocalLlmRuntime(
         store = ModelFileStore(modelDirectory.toString().toPath(), FileSystem.SYSTEM) { spec.sha256 },
         spec = spec,
         cacheDirectory = modelDirectory.toString(),
+        preferredAccelerator = preferredAccelerator,
         engineFactory = factory,
         scope = scope,
         closeTimeoutMillis = closeTimeoutMillis,
@@ -312,11 +355,15 @@ class LocalLlmRuntimeTest {
 private class FakeEngineFactory(
     private val onReply: (String) -> String = { "reply to $it" },
     var loadFailure: Throwable? = null,
+    var gpuLoadFailure: Throwable? = null,
     private val closeFailure: Throwable? = null,
 ) : LlmEngineFactory {
     val created = mutableListOf<FakeEngine>()
+    val requested = mutableListOf<Accelerator>()
 
-    override fun create(modelPath: String, cacheDirectory: String): LlmEngine {
+    override fun create(modelPath: String, cacheDirectory: String, accelerator: Accelerator): LlmEngine {
+        requested += accelerator
+        if (accelerator == Accelerator.GPU) gpuLoadFailure?.let { throw it }
         loadFailure?.let { throw it }
         return FakeEngine(onReply, closeFailure).also { created += it }
     }

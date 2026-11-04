@@ -1,6 +1,13 @@
 # GPU support (design)
 
-Status: proposal. No code changes yet.
+Status: step 1 and 2 implemented in 1.9.7 (Android LLM only). Speech stays on the CPU.
+
+## Implemented
+
+- Setting `useGpuAcceleration` (Settings > GPU acceleration), on by default, stored with the other app settings. It is a simple on/off switch rather than the `Auto` / `CPU only` / `GPU` choice proposed below.
+- `AcceleratorSelector` (`commonMain`) returns the accelerator per role. The LLM uses the GPU on the MID and LATEST tiers when the setting is on. Everything else uses the CPU.
+- `LocalLlmRuntime` creates the LiteRT-LM engine with `Backend.GPU()` when selected. If engine creation or the reply fails on the GPU, it retries once on the CPU and keeps using the CPU until the setting is turned off and on again. The failure is remembered for the app process only. The engine is rebuilt when the setting changes.
+- iOS has no LLM, so the setting has no effect there yet.
 
 ## Goal
 
