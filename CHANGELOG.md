@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.3]
+
+- Added a GPU support design doc under `features/gpu-support/`. It covers GPU and NPU options for transcription and summarization, with a CPU fallback.
+- Updated Android and iOS versioning to 1.9.3 (build 59).
+
 ## [1.9.1]
 
 - Added a background activity indicator: a small pill at the top of the screen shows while the app downloads models, transcribes, summarizes, categorizes, analyzes speakers, or cleans up in the background. It names up to two running activities and shows the rest as a count.
