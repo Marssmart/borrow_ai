@@ -2099,6 +2099,24 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun recorderErrorThatStillStopsCleanlyDiscardsAFileWithoutADuration() = runTest {
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val recorder = FakeRecorder(fileSystem = fs)
+        val service = service(recorder, FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope)
+
+        service.startRecording()
+        runCurrent()
+        recorder.emitError()
+        runCurrent()
+
+        assertNull(service.stopRecording())
+        service.awaitPendingWork()
+        assertTrue(memories.getState().value.isEmpty())
+        assertFalse(fs.exists(recordingFile))
+    }
+
+    @Test
     fun recorderErrorDiscardsAPartialFileWithoutADuration() = runTest {
         val fs = FakeFileSystem()
         val memories = memories()

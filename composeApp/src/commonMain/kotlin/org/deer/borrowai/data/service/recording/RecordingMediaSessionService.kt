@@ -81,8 +81,7 @@ class RecordingMediaSessionService(
 
     init {
         audioPlayer.setInterruptionHandler { interruption -> onPlaybackInterruption(interruption) }
-        // The recorder reports errors on its own thread, so the state change is posted to the service's scope.
-        recorder.setErrorListener { scope.launch { onRecorderError() } }
+        recorder.setErrorListener { onRecorderError() }
     }
 
     override val state: StateFlow<MediaSessionState> = mutableState.asStateFlow()
@@ -574,15 +573,16 @@ class RecordingMediaSessionService(
         save.invokeOnCompletion { pendingSaves.update { jobs -> jobs - save } }
         try {
             val stopFailure = runCatching { recorder.stop() }.exceptionOrNull()
-            // After a recorder error, a partial file that fails to finalize is kept only when it has a readable duration.
-            val partialDurationMillis = if (stopFailure != null && recording.interrupted) {
-                readDuration(recording.temporaryPath)
+            // After a recorder error, the partial file is kept only when it has a readable duration, whether or not it finalized.
+            if (recording.interrupted || stopFailure != null) {
+                val partialDurationMillis = readDuration(recording.temporaryPath)
+                    ?: throw (stopFailure ?: RecordingUnavailableException("Interrupted recording has no readable duration"))
+                fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
+                savedDurationMillis = partialDurationMillis
             } else {
-                null
+                fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
+                savedDurationMillis = readDuration(recording.absolutePath)
             }
-            if (stopFailure != null && partialDurationMillis == null) throw stopFailure
-            fileSystem.atomicMove(recording.temporaryPath, recording.absolutePath)
-            savedDurationMillis = partialDurationMillis ?: readDuration(recording.absolutePath)
         } catch (exception: Exception) {
             // Any finalize failure leaves no usable file. Cancelling the pending save keeps close() and busy checks from waiting on it.
             discardUnfinishedRecording(recording, save)
@@ -619,12 +619,17 @@ class RecordingMediaSessionService(
                 (state !is MediaSessionState.Idle && state !is MediaSessionState.Failed)
         }
 
-    /** Records a recorder error. The capture is kept, so stopping still saves the audio captured before the error. */
+    /**
+     * Records a recorder error. It is called from the recorder's thread, so it only sets flags that finishRecording reads.
+     * The state update follows on the service's scope, so a stop that races the error still keeps the audio.
+     */
     private fun onRecorderError() {
         val recording = activeRecording ?: return
         recording.interrupted = true
-        mutableState.update { current ->
-            if (current is MediaSessionState.Recording) current.copy(interrupted = true) else current
+        scope.launch {
+            mutableState.update { current ->
+                if (current is MediaSessionState.Recording) current.copy(interrupted = true) else current
+            }
         }
     }
 
@@ -660,7 +665,7 @@ class RecordingMediaSessionService(
     ) {
         var pausedAtMillis: Long? = null
         var pausedTotalMillis: Long = 0L
-        var interrupted: Boolean = false
+        @Volatile var interrupted: Boolean = false
     }
 
     private companion object {

@@ -308,6 +308,10 @@ class AndroidLiveTranscriberTest {
             val countWhilePaused = partials.size
             Thread.sleep(400)
             assertEquals(countWhilePaused, partials.size)
+
+            transcriber.resume()
+            // Decoding resumes after the pause, so new text arrives again.
+            awaitCount(partials, countWhilePaused + 1)
         } finally {
             transcriber.stop()
         }
