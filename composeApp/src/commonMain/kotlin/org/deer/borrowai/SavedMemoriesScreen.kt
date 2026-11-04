@@ -269,6 +269,12 @@ internal fun SavedMemoriesScreen(
                         onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
                         onDelete = { stateHolder.deleteFromDetail(memory.id) },
                         onEdit = { editingMemoryId = memory.id },
+                        showTranscriptBanner = uiState.transcriptChangedMemoryId == memory.id,
+                        summaryWrittenByUser = memory.summaryEditedByUser,
+                        categoriesChosenByUser = memory.categoriesEditedByUser,
+                        onWriteSummary = { stateHolder.requestNewSummary(memory.id) },
+                        onSuggestCategories = { stateHolder.requestNewCategories(memory.id) },
+                        onDismissTranscriptBanner = stateHolder::dismissTranscriptBanner,
                     )
                 }
 
@@ -278,8 +284,8 @@ internal fun SavedMemoriesScreen(
         editedMemory?.let { memory ->
             MemoryEditScreen(
                 memory = memory,
-                onSave = { title, summary, entry, onResult ->
-                    stateHolder.saveMemoryEdit(memory.id, title, summary, entry, onResult)
+                onSave = { title, summary, transcript, entry, onResult ->
+                    stateHolder.saveMemoryEdit(memory.id, title, summary, transcript, entry, onResult)
                 },
                 onClose = { editingMemoryId = null },
                 onDeletedElsewhere = onEditedMemoryDeleted,
@@ -619,6 +625,12 @@ private fun MemoryDetailScreen(
     onSpeakerFocusHandled: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
+    showTranscriptBanner: Boolean,
+    summaryWrittenByUser: Boolean,
+    categoriesChosenByUser: Boolean,
+    onWriteSummary: () -> Unit,
+    onSuggestCategories: () -> Unit,
+    onDismissTranscriptBanner: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -661,6 +673,15 @@ private fun MemoryDetailScreen(
                     }
                     MemoryMoreActions(onDelete = onDelete)
                 }
+            }
+            if (showTranscriptBanner) {
+                MemoryTranscriptBanner(
+                    summaryWrittenByUser = summaryWrittenByUser,
+                    categoriesChosenByUser = categoriesChosenByUser,
+                    onWriteSummary = onWriteSummary,
+                    onSuggestCategories = onSuggestCategories,
+                    onDismiss = onDismissTranscriptBanner,
+                )
             }
             AuroraPanel(
                 shape = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_SHAPE,

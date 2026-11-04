@@ -265,7 +265,7 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("missing", "t", null, "") { result ->
+        holder.saveMemoryEdit("missing", "t", null, null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()
@@ -279,7 +279,7 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("a", "t", null, "") { result ->
+        holder.saveMemoryEdit("a", "t", null, null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()

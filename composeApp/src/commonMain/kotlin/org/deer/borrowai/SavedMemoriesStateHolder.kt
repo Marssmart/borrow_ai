@@ -78,6 +78,8 @@ internal data class SavedMemoriesUiState(
     val memoriesLoaded: Boolean = false,
     /** Set once the save state has arrived, for the same reason as [memoriesLoaded]. */
     val saveStatusLoaded: Boolean = false,
+    /** The memory whose transcript was just changed in the editor. Its detail view shows the banner until dismissed. */
+    val transcriptChangedMemoryId: String? = null,
 ) {
     /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
     val visibleMemories: List<Memory>
@@ -223,29 +225,53 @@ internal class SavedMemoriesStateHolder(
     /**
      * Saves the fields the user changed. Each write reads the live memory first, so a transcript, category, or summary
      * write that landed while the editor was open is kept. A null field is left as it is. A typed summary is refused
-     * when the memory's summary changed since the editor opened ([summaryAtEntry]). [onResult] runs on the holder's scope.
+     * when the memory's summary changed since the editor opened ([summaryAtEntry]). A changed transcript sets the
+     * transcript banner for this memory until it is dismissed. [onResult] runs on the holder's scope.
      */
     fun saveMemoryEdit(
         memoryId: String,
         title: String?,
         summary: String?,
+        transcript: String?,
         summaryAtEntry: String,
         onResult: (Either<MemoryError, Unit>) -> Unit,
     ) {
         launchWrite {
+            var transcriptChanged = false
             val result = either {
                 val current = memoryService.findById(memoryId).bind()
                 if (summary != null && current.summary != summaryAtEntry) {
                     raise(MemoryError.InvalidInput(SUMMARY_WRITTEN_AGAIN))
                 }
+                transcriptChanged = transcript != null && transcript != current.transcription
                 val edit = current.currentEdit().copy(
                     title = title ?: current.title,
                     summary = summary ?: current.summary,
+                    transcription = transcript ?: current.transcription,
                 )
                 memoryService.edit(memoryId, edit).bind()
             }
+            if (result.isRight() && transcriptChanged) {
+                mutableUiState.update { it.copy(transcriptChangedMemoryId = memoryId) }
+            }
             scope.launch { onResult(result) }
         }
+    }
+
+    fun dismissTranscriptBanner() {
+        mutableUiState.update { it.copy(transcriptChangedMemoryId = null) }
+    }
+
+    /** Asks the recovery job for a new summary. The caller has already confirmed when that replaces the user's text. */
+    fun requestNewSummary(memoryId: String) {
+        dismissTranscriptBanner()
+        launchWrite { memoryService.requestSummary(memoryId) }
+    }
+
+    /** Asks the recovery job for new categories. The caller has already confirmed when that replaces the user's choice. */
+    fun requestNewCategories(memoryId: String) {
+        dismissTranscriptBanner()
+        launchWrite { memoryService.requestCategorization(memoryId) }
     }
 
     private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {
