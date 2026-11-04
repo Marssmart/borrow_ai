@@ -4,9 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.11.0]
+
 - Added pause and resume for memory playback on Android. Pausing keeps the position and releases the audio focus, so other apps can play while a memory is paused.
 - Added a playback panel in the memory detail view with a seek bar, elapsed and total time, skips back and forward 15 seconds, and a play or pause button. The seek bar and skips work while a memory is playing.
 - The playback position now updates every 250 milliseconds and comes from the audio player. The total time shows "Duration unknown" until durations are stored in a later release.
+- Updated Android and iOS versioning to 1.11.0 (build 68).
 
 ## [1.10.0]
 
