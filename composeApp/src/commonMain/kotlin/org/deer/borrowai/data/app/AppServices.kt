@@ -95,6 +95,12 @@ class AppServices internal constructor(
     private val closed = MutableStateFlow(false)
 
     /**
+     * Scope of the app graph. Work that must finish after the screen that started it leaves composition, such as a
+     * memory delete, runs here.
+     */
+    val graphScope: CoroutineScope get() = closeScope
+
+    /**
      * Closes the media session, then cancels the graph and runs [onClose] once any memory save started
      * before close has finished. Saves are joined first so they are not cut off by the cancellation.
      */

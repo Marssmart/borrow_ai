@@ -180,7 +180,7 @@ No schema change and no new storage. The commit timing lives in the UI state hol
 
 | File | Change |
 |---|---|
-| `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt` | Add the pending-delete state (memory id and deadline), plus request, undo, and commit functions. Filter the pending memory out of `uiState.memories` (`updateMemories`, line 144). Call `mediaSessionService.stopPlayback()` when the playing target is the memory being deleted. Commit on tab leave, on background, and on a second delete. |
+| `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt` | Add the pending-delete state (`PendingMemoryDelete`), plus request, undo, and commit functions. The list shows `visibleMemories`, which leaves out the pending memories. `memories` keeps them, so the detail view can slide back with its memory (§8.3). Call `mediaSessionService.stopPlayback()` when the playing target is the memory being deleted. Commit on tab leave, on background, and on a second delete. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/PendingMemoryDelete.kt` (new) | A pure class for the window and commit rules, so the rules can be unit tested without Compose. |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt` | **More actions** button and `DropdownMenu` in `MemoryDetailScreen` (line 388). Long-press and the TalkBack custom action in `MemoryCard` (line 272). `SnackbarHost`. Empty state in `MemoryListScreen` (line 225). |
 | `composeApp/src/commonMain/kotlin/org/deer/borrowai/App.kt` | Pass a "go to Record" callback into `SavedMemoriesScreen`. |
@@ -209,6 +209,16 @@ A failed step keeps the record, so the next run retries. The purger is created i
 ### 8.2 Why not delete immediately and restore?
 
 An immediate soft delete plus a `restore(id)` method would also work. But the purger would then need a grace period, so it knows when the memory was deleted. That needs a new field (`deletedAtEpochMillis`) and a schema change. The deferred commit gives the same result for the user without either change. Q-2 records this decision.
+
+### 8.3 Implementation notes (P1)
+
+- **Commit scope.** Soft-delete writes run on `AppServices.graphScope`, not on the Memories screen's scope. A write started when that page leaves composition would otherwise be cancelled with it.
+- **Commit triggers.** The 10-second window timer runs on the screen scope. Leaving the Memories tab is seen when its page leaves composition (`DisposableEffect`), which happens after the swipe settles. Going to the background is `LifecycleEventEffect(ON_STOP)`. A second delete commits the first one before it opens its own window.
+- **Hidden while writing.** A memory stays hidden until its write returns. A `Persistence` or `Malformed` result shows it again and counts one error. `NotFound` counts as done (AC-6.2).
+- **Stale timers.** Each window has a request id. A timer left over from an earlier window does nothing.
+- **Visible list.** `SavedMemoriesUiState.visibleMemories` leaves out the pending memories. The `memories` field keeps them, so the detail view keeps its memory while the pager slides back to the list. The first draft filtered `memories` itself, which would have blanked the detail view during that slide.
+- **Background tracking.** The soft-delete write is short and started by the user, so it is not reported as background activity. The purge that follows is still reported as **Cleaning up**.
+- **Playback.** Requesting a delete stops playback of that memory, and cancels a playback confirmation waiting for it.
 
 ---
 

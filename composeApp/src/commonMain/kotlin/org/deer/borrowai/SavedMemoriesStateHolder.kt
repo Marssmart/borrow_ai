@@ -9,11 +9,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MediaSessionService
@@ -32,7 +34,14 @@ internal data class SavedMemoriesUiState(
     val playbackError: PlaybackError? = null,
     val summaryModelMissing: Boolean = false,
     val categoryNames: Map<Int, String> = emptyMap(),
-)
+    val pendingDelete: PendingMemoryDelete = PendingMemoryDelete(),
+    /** Counts failed deletes. The screen shows an error each time the count goes up. */
+    val deleteFailures: Int = 0,
+) {
+    /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
+    val visibleMemories: List<Memory>
+        get() = memories.filterNot { it.id in pendingDelete.hiddenMemoryIds }
+}
 
 internal class SavedMemoriesStateHolder(
     private val memoryService: MemoryService,
@@ -42,8 +51,11 @@ internal class SavedMemoriesStateHolder(
     val memoriesScrollState: ScrollState,
     val detailScrollState: ScrollState,
     private val scope: CoroutineScope,
+    /** Runs the soft-delete writes. It outlives the screen, so a delete still commits after the screen leaves composition. */
+    private val commitScope: CoroutineScope,
 ) {
     private val mutableUiState = MutableStateFlow(SavedMemoriesUiState())
+    private var lastUndoRequestId = 0L
 
     val uiState = mutableUiState.asStateFlow()
 
@@ -129,6 +141,79 @@ internal class SavedMemoriesStateHolder(
 
     fun dismissPlaybackError() {
         mutableUiState.update { it.copy(playbackError = null) }
+    }
+
+    /**
+     * Hides [memoryId] at once and opens its Undo window. Playback of the memory stops first. Its soft delete is written
+     * when the window ends, or earlier when a commit trigger fires.
+     */
+    fun requestDelete(memoryId: String) {
+        if (uiState.value.memories.none { it.id == memoryId }) return
+        stopPlaybackOf(memoryId)
+        val requestId = ++lastUndoRequestId
+        val updated = applyDeleteStep { it.request(memoryId, requestId) }
+        if (updated.undoWindow?.requestId == requestId) startUndoWindow(requestId)
+    }
+
+    /** Restores the memory whose Undo window is open. Nothing is written. */
+    fun undoDelete(memoryId: String) {
+        mutableUiState.update { it.copy(pendingDelete = it.pendingDelete.undo(memoryId)) }
+    }
+
+    /**
+     * Writes the open window's delete now. Called when the Memories tab is left and when the app goes to the background,
+     * so a deleted memory is not left waiting for its window to end.
+     */
+    fun commitPendingDelete() {
+        applyDeleteStep { it.commitPending() }
+    }
+
+    private fun startUndoWindow(requestId: Long) {
+        scope.launch {
+            delay(MEMORY_UNDO_WINDOW_MILLIS)
+            applyDeleteStep { it.windowEnded(requestId) }
+        }
+    }
+
+    /** Applies one delete step to the UI state, starts the write it asks for, and returns the new delete state. */
+    private fun applyDeleteStep(step: (PendingMemoryDelete) -> PendingMemoryDelete.Step): PendingMemoryDelete {
+        var toWrite: String? = null
+        val updated = mutableUiState.updateAndGet { state ->
+            val next = step(state.pendingDelete)
+            toWrite = next.toWrite
+            state.copy(pendingDelete = next.state)
+        }
+        toWrite?.let(::writeDelete)
+        return updated.pendingDelete
+    }
+
+    private fun writeDelete(memoryId: String) {
+        commitScope.launch {
+            val outcome = deleteOutcome(memoryService.delete(memoryId))
+            mutableUiState.update { state ->
+                state.copy(
+                    pendingDelete = state.pendingDelete.writeFinished(memoryId),
+                    deleteFailures = if (outcome == DeleteOutcome.FAILED) {
+                        state.deleteFailures + 1
+                    } else {
+                        state.deleteFailures
+                    },
+                )
+            }
+        }
+    }
+
+    /** A deleted memory must not keep playing, and its playback confirmation must not start it later. */
+    private fun stopPlaybackOf(memoryId: String) {
+        when (val state = mediaSessionService.state.value) {
+            is MediaSessionState.Playing ->
+                if (state.target.memoryId == memoryId) mediaSessionService.stopPlayback()
+
+            is MediaSessionState.Recording ->
+                if (state.pendingPlayback?.memoryId == memoryId) mediaSessionService.cancelPendingPlayback()
+
+            else -> Unit
+        }
     }
 
     private fun closeDetailState() {
