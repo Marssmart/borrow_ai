@@ -20,6 +20,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.EpochClock
@@ -291,6 +292,67 @@ class SavedMemoriesStateHolderTest {
         holder.onPagerPageSettled(SavedMemoriesStateHolder.MEMORY_LIST_PAGE)
         runCurrent()
         assertEquals(listOf("m2"), resultIds(holder))
+    }
+
+    @Test
+    fun theLibraryCountStaysFrozenWhileTheDetailIsOpen() = runTest {
+        val memoryService = FakeMemoryService(libraryMemories(), EpochClock { 0L })
+        val holder = holder(this, memoryService)
+        runCurrent()
+        holder.openMemory("budget")
+        runCurrent()
+
+        memoryService.create(MemoryDraft(title = "", summary = "", transcription = "New note"))
+        runCurrent()
+        assertEquals(3, holder.uiState.value.searchResults.total)
+
+        holder.onPagerPageSettled(SavedMemoriesStateHolder.MEMORY_LIST_PAGE)
+        runCurrent()
+        assertEquals(4, holder.uiState.value.searchResults.total)
+    }
+
+    @Test
+    fun theFieldAndChipsKeepTheirValuesWhenTheDetailCloses() = runTest {
+        val holder = categorizedHolder()
+        runCurrent()
+        holder.onSearchTextChanged("budget")
+        holder.toggleCategory(1)
+        holder.submitSearch()
+        runCurrent()
+        assertEquals(listOf("m2", "m1"), resultIds(holder))
+
+        holder.openMemory("m2")
+        runCurrent()
+        holder.onPagerPageSettled(SavedMemoriesStateHolder.MEMORY_LIST_PAGE)
+        runCurrent()
+
+        assertEquals("budget", holder.uiState.value.searchText)
+        assertEquals(setOf(1), holder.uiState.value.activeCategoryIds)
+        assertEquals(listOf("m2", "m1"), resultIds(holder))
+    }
+
+    @Test
+    fun aQueryThatMatchesNothingNamesTheQueryInTheNoResultsState() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+
+        holder.onSearchTextChanged("insurance")
+        holder.submitSearch()
+        runCurrent()
+
+        assertEquals(MemoryNoResults.Query("insurance"), memoryNoResults(holder.uiState.value.searchResults))
+    }
+
+    @Test
+    fun anEmptyLibraryHasNoNoResultsStateEvenWithAQuery() = runTest {
+        val holder = holder(this, emptyList())
+        runCurrent()
+
+        holder.onSearchTextChanged("insurance")
+        holder.submitSearch()
+        runCurrent()
+
+        assertNull(memoryNoResults(holder.uiState.value.searchResults))
     }
 
     private suspend fun TestScope.categorizedHolder(): SavedMemoriesStateHolder {

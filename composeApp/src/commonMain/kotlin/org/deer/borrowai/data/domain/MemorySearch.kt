@@ -24,11 +24,15 @@ object MemorySearch {
     private val WHITESPACE_RUN = Regex("\\s+")
 }
 
-/** The memories that match a query, newest first, with the normalized query they were matched with. */
+/**
+ * The memories that match a query, newest first, with the normalized query they were matched with. [total] is how many
+ * memories were searched, so the count line and the empty states describe the same list.
+ */
 data class MemorySearchResults(
     val memories: List<Memory> = emptyList(),
     val query: String = "",
     val categories: Set<Int> = emptySet(),
+    val total: Int = memories.size,
 ) {
     val isFiltered: Boolean
         get() = query.isNotEmpty() || categories.isNotEmpty()
@@ -53,6 +57,7 @@ class MemorySearcher {
             memories = matches.sortedByDescending(Memory::createdAtEpochMillis),
             query = normalized,
             categories = categories,
+            total = memories.size,
         )
     }
 

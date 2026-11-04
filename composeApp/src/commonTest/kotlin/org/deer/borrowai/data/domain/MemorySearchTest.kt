@@ -135,6 +135,16 @@ class MemorySearchTest {
     }
 
     @Test
+    fun resultsReportHowManyMemoriesWereSearched() {
+        val memories = listOf(memory("a", 1, transcription = "budget"), memory("b", 2, transcription = "dentist"))
+
+        val results = MemorySearcher().search(memories, "budget")
+
+        assertEquals(2, results.total)
+        assertEquals(listOf("a"), results.memories.map { it.id })
+    }
+
+    @Test
     fun categoriesCombineAsOrAndTheQueryAsAnd() {
         val memories = listOf(
             memory("travel", 3, transcription = "budget for the trip", categories = listOf(1)),

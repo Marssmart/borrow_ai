@@ -62,6 +62,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.components.resources)
             implementation(compose.ui)
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.arrow.core)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
@@ -105,7 +106,7 @@ android {
         applicationId = "org.deer.borrowai"
         minSdk = 24
         targetSdk = 36
-        versionCode = 72
+        versionCode = 73
         versionName = rootProject.version.toString()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

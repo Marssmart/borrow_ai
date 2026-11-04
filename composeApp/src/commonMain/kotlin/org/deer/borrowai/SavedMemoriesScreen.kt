@@ -185,6 +185,7 @@ internal fun SavedMemoriesScreen(
                 SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
                     memories = uiState.listMemories,
                     libraryCount = uiState.visibleMemories.size,
+                    noResults = memoryNoResults(uiState.searchResults),
                     isFiltered = uiState.searchResults.isFiltered,
                     searchText = uiState.searchText,
                     searchTextCut = uiState.searchTextCut,
@@ -325,7 +326,9 @@ private fun MemoryListScreen(
     showEmptyState: Boolean,
     headingFocus: FocusRequester,
     onGoToRecord: () -> Unit,
+    noResults: MemoryNoResults?,
 ) {
+    MemoryListSearchKeys(listState = listState, searchText = searchText, onClearSearch = onClearSearch)
     Column(
         modifier = Modifier.fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
@@ -379,6 +382,16 @@ private fun MemoryListScreen(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            noResults?.let { result ->
+                item {
+                    MemoryNoResultsContent(
+                        noResults = result,
+                        hasCategoryFilter = selectedCategoryIds.isNotEmpty(),
+                        onClearSearch = onClearSearch,
+                        onClearFilters = onClearCategoryFilters,
                     )
                 }
             }
