@@ -25,7 +25,7 @@
 <article>
 <h1 id="gap-analysis">Gap analysis</h1>
 <p>Snapshot: BorrowAI v1.9.7 (build 63). Evidence is from the code, <code>site/content/*</code>, <code>features/*</code>, and <code>CHANGELOG.md</code>. Scope is Android only: iOS-only items were removed from the pick list (G1, G2, G3, G10), and mixed items were narrowed to Android. Nothing was run on a device.</p>
-<p><strong>Status at 1.18.0:</strong> G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, stored durations are in playback phase 3, and recording pause remains. G5 has a merged design (#74) and no implementation. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
+<p><strong>Status at 1.18.0:</strong> G4 phases 1 and 2 are merged (#75 and #83). Phase 3 (list long-press and TalkBack action) is in review and stays open until the TalkBack walkthrough passes on a device. G6 search, count, and category filters are merged (#76, #79), with keyboard and back behavior still open. G11 pause, seek, and skip are merged (#77), speed is in playback phase 2, stored durations are in playback phase 3, and recording pause remains. G5 has a merged design (#74), its service is merged (#88), and its title and summary editor is in review. Transcript and categories are still open. The speaker recognition UI is merged (1.13.0), but speaker analysis does not run until a speech model is pinned. The <a href="pick-list.html">pick list</a> has the same items as checkboxes.</p>
 <p>Size is a rough single-developer estimate: S = under a week, M = 1 to 3 weeks, L = more than 3 weeks.</p>
 <h2 id="1-what-exists-today">1. What exists today</h2>
 <ul>
@@ -55,9 +55,9 @@
 </tr>
 <tr>
 <td>G5</td>
-<td><strong>No edit.</strong> Title, summary, transcript, and categories cannot be changed in the UI. The service supports it through <code>update</code>, <code>updateCategories</code>, and <code>withEditedSummary</code>.</td>
-<td><code>MemoryService.kt</code>; <code>Memory.kt</code> (<code>withEditedSummary</code>, <code>withUserCategories</code>); no UI caller</td>
-<td>Wrong AI output is permanent.</td>
+<td><strong>Edit is partly built.</strong> Title and summary can be edited from the detail view (in review). Transcript and categories cannot be changed in the UI yet. The service supports all four through <code>edit</code>, <code>requestSummary</code>, and <code>requestCategorization</code>.</td>
+<td><code>MemoryService.kt</code>; <code>MemoryEdit.kt</code>; <code>MemoryEditScreen.kt</code></td>
+<td>Wrong AI output is permanent until transcript and categories are editable too.</td>
 <td>M</td>
 </tr>
 <tr>

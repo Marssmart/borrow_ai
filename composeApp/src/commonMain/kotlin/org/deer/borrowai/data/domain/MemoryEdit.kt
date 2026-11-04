@@ -40,3 +40,6 @@ fun Memory.withEdit(edit: MemoryEdit): Memory {
     val summarized = if (edit.summary == summary) transcribed else transcribed.withUserSummary(edit.summary)
     return summarized.withUserCategories(edit.categoryIds)
 }
+
+/** The edit that keeps every field of this memory as it is. An editor starts from it and changes only what it shows. */
+fun Memory.currentEdit(): MemoryEdit = MemoryEdit(title, summary, transcription, categories)

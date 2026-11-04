@@ -2,6 +2,7 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.PaddingValues
+import arrow.core.Either
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.MemorySearch
 import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.domain.MemorySearcher
@@ -39,6 +41,7 @@ import org.deer.borrowai.data.domain.categoriesInUse
 import org.deer.borrowai.data.domain.effectiveCategoryFilter
 import org.deer.borrowai.data.service.MediaSessionService
 import org.deer.borrowai.data.service.MediaSessionState
+import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.PlaybackContent
 import org.deer.borrowai.data.service.PlaybackError
@@ -212,6 +215,17 @@ internal class SavedMemoriesStateHolder(
 
     fun clearFocusedSpeaker() {
         mutableUiState.update { it.copy(focusedSpeakerOrdinal = null) }
+    }
+
+    /**
+     * Saves [edit] for [memoryId] through the pending-write gate, so closing the app waits for it. [onResult] runs on
+     * the state holder's scope, where the editor screen can update its state.
+     */
+    fun saveMemoryEdit(memoryId: String, edit: MemoryEdit, onResult: (Either<MemoryError, Unit>) -> Unit) {
+        launchWrite {
+            val result = memoryService.edit(memoryId, edit)
+            scope.launch { onResult(result) }
+        }
     }
 
     private fun openDetail(memoryId: String, focusedSpeakerOrdinal: Int?) {

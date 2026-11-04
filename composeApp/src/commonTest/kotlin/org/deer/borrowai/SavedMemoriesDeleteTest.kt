@@ -20,6 +20,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
@@ -257,6 +258,34 @@ class SavedMemoriesDeleteTest {
 
         runCurrent()
         assertTrue(holder.uiState.value.showsEmptyMemories)
+    }
+
+    @Test
+    fun savingAnEditOfAMissingMemoryReportsNotFound() = runTest {
+        val holder = holder(memoryService(memory("a", createdAt = 1)))
+        runCurrent()
+        val errors = mutableListOf<MemoryError?>()
+
+        holder.saveMemoryEdit("missing", MemoryEdit("t", "", "x", emptyList())) { result ->
+            errors += result.fold(ifLeft = { it }, ifRight = { null })
+        }
+        runCurrent()
+
+        assertEquals(listOf<MemoryError?>(MemoryError.NotFound("missing")), errors)
+    }
+
+    @Test
+    fun savingAnInvalidEditReportsInvalidInput() = runTest {
+        val holder = holder(memoryService(memory("a", createdAt = 1)))
+        runCurrent()
+        val errors = mutableListOf<MemoryError?>()
+
+        holder.saveMemoryEdit("a", MemoryEdit("t", "", "", emptyList())) { result ->
+            errors += result.fold(ifLeft = { it }, ifRight = { null })
+        }
+        runCurrent()
+
+        assertTrue(errors.single() is MemoryError.InvalidInput)
     }
 
     private fun memory(id: String, createdAt: Long) = Memory(
