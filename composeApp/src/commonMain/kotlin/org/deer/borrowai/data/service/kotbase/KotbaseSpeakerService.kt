@@ -430,6 +430,7 @@ class KotbaseSpeakerService private constructor(
         withContext(Dispatchers.Default) { persisting(block) }.also { if (it.isRight()) changeEvents.tryEmit(Unit) }
     }
 
+    /** Every field [toSpeaker] reads must be selected here. An unselected int reads as 0 without an error. */
     private fun readSpeakers(condition: Expression? = null): List<Speaker> = queryRows(
         TYPE_SPEAKER,
         condition,
@@ -438,6 +439,7 @@ class KotbaseSpeakerService private constructor(
         SelectResult.property(KEY_CREATED_AT),
         SelectResult.property(KEY_LAST_USED_AT),
         SelectResult.property(KEY_EMBEDDING_COUNT),
+        SelectResult.property(KEY_COLOR_INDEX),
     ).map { it.toSpeaker() }.sortedByDescending { it.lastUsedAtEpochMillis }
 
     private fun readEmbeddings(keep: (Result) -> Boolean = { true }): List<SpeakerEmbedding> = queryRows(
