@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPU support (design) — BorrowAI docs</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../index.html">BorrowAI</a>
+    <nav>
+      <a href="../../index.html">Home</a>
+      <a href="../../how-it-works.html">How it works</a>
+      <a href="../../architecture.html">Architecture</a>
+      <a href="../../models-and-privacy.html">Models and privacy</a>
+      <a href="../../platforms.html">Platforms</a>
+      <a href="../../features/index.html" aria-current="page">Features</a>
+      <a href="../../design/index.html">Design guides</a>
+      <a href="../../developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="gpu-support-design">GPU support (design)</h1>
+<p>Status: proposal. No code changes yet.</p>
+<h2 id="goal">Goal</h2>
+<p>Run on-device inference on the GPU or NPU where it is faster, and fall back to the CPU when it is not available or not stable. Transcription and summarization are the two heavy workloads.</p>
+<h2 id="current-state">Current state</h2>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Runtime</th>
+<th>Where</th>
+<th>Accelerator today</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Live transcription</td>
+<td>sherpa-onnx 1.13.8</td>
+<td><code>AndroidLiveTranscriber</code></td>
+<td><code>provider = "cpu"</code></td>
+</tr>
+<tr>
+<td>Batch transcription</td>
+<td>sherpa-onnx 1.13.8</td>
+<td><code>AndroidBatchTranscriber</code></td>
+<td><code>provider = "cpu"</code></td>
+</tr>
+<tr>
+<td>Summary / categories (LLM)</td>
+<td>LiteRT-LM 0.16.1</td>
+<td><code>LocalLlmRuntime</code></td>
+<td><code>Backend.CPU()</code></td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>No transcriber or LLM implementation found under <code>iosMain</code></td>
+<td>n/a</td>
+<td>n/a</td>
+</tr>
+</tbody>
+</table>
+<p>Every call site hard-codes the CPU, so the change is small and local on Android.</p>
+<h2 id="options-per-workload">Options per workload</h2>
+<h3 id="llm-litert-lm">LLM (LiteRT-LM)</h3>
+<p><code>EngineConfig</code> takes a <code>Backend</code>. Options are <code>CPU()</code>, <code>GPU()</code> and, where supported, an NPU backend. Switching is a one-line change plus fallback handling. Models must be compatible with the chosen backend, so check the pinned model files in <code>ModelCatalog</code> before enabling GPU for a tier.</p>
+<h3 id="speech-sherpa-onnx">Speech (sherpa-onnx)</h3>
+<p>The provider string selects the execution provider. The prebuilt Android AAR supports <code>cpu</code> and <code>nnapi</code>. NNAPI is deprecated since Android 15 and its operator coverage is uneven, so it can be slower than the CPU or fail on some devices. Treat it as experimental. A GPU or QNN build would need a custom sherpa-onnx build and is out of scope.</p>
+<h3 id="ios">iOS</h3>
+<p>Not applicable until iOS transcription and summarization exist. When they do, prefer Core ML or Metal through the platform runtime.</p>
+<h2 id="design">Design</h2>
+<ol type="1">
+<li><strong>Setting</strong>: add an <code>Acceleration</code> setting with values <code>Auto</code> (default), <code>CPU only</code>, and <code>GPU</code>. Store it in the local settings collection, next to <code>showBackgroundActivityIndicator</code>.</li>
+<li><strong>Selector</strong>: add a common <code>AcceleratorSelector</code> that returns the preferred backend per role (<code>LIVE_VOICE</code>, <code>VOICE</code>, <code>LLM</code>) from the setting, the model tier and device capabilities. Keep it a pure function so it is unit-testable in <code>commonTest</code>.</li>
+<li><strong>Platform mapping</strong>: in <code>androidMain</code>, map the selection to <code>Backend.GPU()</code> for the LLM. Speech stays on <code>provider = "cpu"</code> regardless of the setting, because the prebuilt sherpa-onnx AAR has no GPU provider. NNAPI is not treated as GPU. If it is ever offered, it will be a separate, explicitly experimental setting with its own CPU fallback.</li>
+<li><strong>Fallback</strong>: if engine creation or the first inference fails on an accelerator, retry once on the CPU for that session and remember the failure for the model and device. Do not retry the accelerator again until the app version or the setting changes.</li>
+<li><strong>Defaults</strong>: <code>Auto</code> uses the GPU for the LLM on the MID and LATEST tiers only. Speech stays on the CPU until benchmarks show a gain, because live transcription is latency-sensitive and small models run well on the CPU.</li>
+<li><strong>Memory</strong>: GPU backends use more memory and can be killed under pressure. Do not run GPU inference while recording on the LEGACY tier.</li>
+</ol>
+<h2 id="validation">Validation</h2>
+<ul>
+<li>Benchmark each workload on CPU and on each accelerator on at least one low, one mid and one high tier device. Record real-time factor for speech and tokens per second for the LLM.</li>
+<li>Compare output quality. The transcript word error rate and summary quality must not regress.</li>
+<li>Test the fallback by forcing an accelerator failure.</li>
+<li>Unit tests for <code>AcceleratorSelector</code>. Instrumented test for fallback.</li>
+</ul>
+<h2 id="risks">Risks</h2>
+<ul>
+<li>Driver bugs and crashes on some GPUs, mitigated by the fallback and the remembered failure.</li>
+<li>Thermal throttling and battery use on long sessions.</li>
+<li>Larger APK or model size if extra backend libraries are needed.</li>
+<li>NNAPI deprecation for speech.</li>
+</ul>
+<h2 id="open-questions">Open questions</h2>
+<ul>
+<li>Which devices and models does the benchmarking session cover?</li>
+<li>Should <code>GPU</code> be exposed to users, or kept as an internal <code>Auto</code> decision only?</li>
+<li>Is an NPU path (Qualcomm or Tensor) worth the build and maintenance cost?</li>
+</ul>
+<h2 id="rollout">Rollout</h2>
+<ol type="1">
+<li>Add the setting and selector with CPU behavior unchanged.</li>
+<li>Enable the LLM GPU path behind <code>Auto</code> on MID and LATEST.</li>
+<li>Revisit speech acceleration after the benchmark results.</li>
+</ol>
+<p>Each step ships as its own pull request with a changelog entry and version bump.</p>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>
