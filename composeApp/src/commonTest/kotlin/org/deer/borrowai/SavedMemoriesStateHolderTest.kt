@@ -8,6 +8,7 @@ import arrow.core.left
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -165,6 +166,24 @@ class SavedMemoriesStateHolderTest {
         assertEquals(4, resultIds(holder).size)
     }
 
+    @Test
+    fun memoryHiddenByAPendingDeleteIsNotSearchedUntilRestored() = runTest {
+        val holder = holder(this, libraryMemories())
+        runCurrent()
+        holder.onSearchTextChanged("budget")
+        holder.submitSearch()
+        runCurrent()
+        assertEquals(listOf("budget"), resultIds(holder))
+
+        holder.requestDelete("budget")
+        runCurrent()
+        assertEquals(emptyList(), resultIds(holder))
+
+        holder.undoDelete("budget")
+        runCurrent()
+        assertEquals(listOf("budget"), resultIds(holder))
+    }
+
     private fun libraryMemories(): List<Memory> = listOf(
         memory("budget", createdAt = 1, transcription = "Quarterly budget numbers", title = "Budget review"),
         memory("dentist", createdAt = 2, transcription = "Book the dentist", title = "Dentist"),
@@ -200,6 +219,7 @@ class SavedMemoriesStateHolderTest {
             memoriesListState = LazyListState(),
             detailScrollState = ScrollState(0),
             scope = scope.backgroundScope,
+            launchWrite = { block -> scope.launch { block() } },
             searchDispatcher = StandardTestDispatcher(scope.testScheduler),
         )
 

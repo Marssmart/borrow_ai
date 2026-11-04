@@ -43,6 +43,10 @@ class FakeMemoryService(
     private val mutex = Mutex()
     private val records = initialMemories.associateByTo(mutableMapOf(), Memory::id)
     private val categories = mutableMapOf<Int, Category>()
+    /** Ids passed to [delete], in call order. */
+    val deleteCalls = mutableListOf<String>()
+    /** When set, [delete] returns this error without changing the memory. */
+    var deleteFailure: MemoryError? = null
     private var nextGeneratedId = 1L
     private val memories = MutableStateFlow(
         records.values.filterNot(Memory::deleted).sortedByDescending(Memory::createdAtEpochMillis),
@@ -118,6 +122,8 @@ class FakeMemoryService(
         }
 
     override suspend fun delete(id: String): Either<MemoryError, Unit> = mutex.withLock {
+        deleteCalls += id
+        deleteFailure?.let { return@withLock it.left() }
         val existing = records[id]?.takeIf { !it.deleted } ?: return@withLock MemoryError.NotFound(id).left()
         records[id] = existing.copy(deleted = true)
         publishMemories()

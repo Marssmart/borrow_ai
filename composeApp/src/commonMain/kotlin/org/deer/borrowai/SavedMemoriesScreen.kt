@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -57,6 +58,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -116,12 +119,19 @@ internal fun SavedMemoriesScreen(
             memoriesListState = memoriesListState,
             detailScrollState = detailScrollState,
             scope = scope,
+            launchWrite = services::launchWrite,
             summaryModelMissing = services.summaryModelMissing,
         )
     }
     val uiState by stateHolder.uiState.collectAsState()
     val currentOnDetailVisibilityChanged by rememberUpdatedState(onDetailVisibilityChanged)
     val selectedMemory = uiState.memories.firstOrNull { it.id == uiState.selectedMemoryId }
+
+    // A pending delete is written when this page leaves composition (the Memories tab was left) and when the app stops.
+    DisposableEffect(stateHolder) {
+        onDispose { stateHolder.commitPendingDelete() }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { stateHolder.commitPendingDelete() }
 
     androidx.compose.runtime.LaunchedEffect(stateHolder) {
         onDetailBackRegistered(stateHolder::backToList)
@@ -150,7 +160,7 @@ internal fun SavedMemoriesScreen(
         when (page) {
             SavedMemoriesStateHolder.MEMORY_LIST_PAGE -> MemoryListScreen(
                 memories = uiState.searchResults.memories,
-                libraryCount = uiState.memories.size,
+                libraryCount = uiState.visibleMemories.size,
                 isFiltered = uiState.searchResults.isFiltered,
                 searchText = uiState.searchText,
                 searchTextCut = uiState.searchTextCut,

@@ -9,7 +9,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 - Added search to Saved memories. A search field above the list finds a word, or part of a word, in a memory's title, summary, or transcript. Matching ignores case, and every word typed must be found. Results update 150 ms after you stop typing, and the search key applies the search at once. Queries are cut at 100 characters.
 - Saved memories is now a lazy list, so long libraries scroll without building every card at once.
 - Added a count line above the list: "42 memories", or "Showing 3 of 42" while a search is active.
-- Updated Android and iOS versioning to 1.10.0 (build 65).
+- Updated Android and iOS versioning to 1.10.0 (build 66).
+
+## [1.9.9]
+
+- Added the rules for deleting a memory. A delete hides the memory at once and keeps it restorable for 10 seconds. The soft delete is written when that window ends, when the Memories tab is left, when the app goes to the background, or when a second delete starts. Not shown in the app yet; see `features/delete-memories/`.
+- Updated Android and iOS versioning to 1.9.9 (build 65).
 
 ## [1.9.8]
 

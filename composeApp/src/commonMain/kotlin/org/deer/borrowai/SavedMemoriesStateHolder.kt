@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.deer.borrowai.data.domain.Memory
@@ -50,7 +51,14 @@ internal data class SavedMemoriesUiState(
     val searchText: String = "",
     val searchTextCut: Boolean = false,
     val searchResults: MemorySearchResults = MemorySearchResults(),
-)
+    val pendingDelete: PendingMemoryDelete = PendingMemoryDelete(),
+    /** Counts failed deletes. The screen shows an error each time the count goes up. */
+    val deleteFailures: Int = 0,
+) {
+    /** The memories the list shows. [memories] keeps the hidden ones, so the detail view can slide back with its memory. */
+    val visibleMemories: List<Memory>
+        get() = memories.filterNot { it.id in pendingDelete.hiddenMemoryIds }
+}
 
 /** The query and the library to search. The result set is recalculated from one of these. */
 private data class SearchRequest(
@@ -66,11 +74,14 @@ internal class SavedMemoriesStateHolder(
     val memoriesListState: LazyListState,
     val detailScrollState: ScrollState,
     private val scope: CoroutineScope,
+    /** Starts the soft-delete writes through the app, so close waits for them and a write outlives the screen. */
+    private val launchWrite: (suspend () -> Unit) -> Unit,
     /** Serial, so the searcher's cache is never used by two searches at once. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val searchDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
     private val mutableUiState = MutableStateFlow(SavedMemoriesUiState())
+    private var lastUndoRequestId = 0L
     private val appliedQuery = MutableStateFlow("")
     private val searcher = MemorySearcher()
     private var searchJob: Job? = null
@@ -97,9 +108,15 @@ internal class SavedMemoriesStateHolder(
                 mutableUiState.update { it.copy(summaryModelMissing = missing) }
             }
         }
+        observeSearchResults()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeSearchResults() {
         scope.launch {
+            // Searches the memories the list shows, so a memory waiting out its delete Undo window is not found.
             combine(
-                mutableUiState.map { it.memories }.distinctUntilChanged(),
+                mutableUiState.map { it.visibleMemories }.distinctUntilChanged(),
                 appliedQuery,
                 mutableUiState.map { it.selectedMemoryId != null }.distinctUntilChanged(),
             ) { memories, query, isDetailOpen ->
@@ -203,6 +220,79 @@ internal class SavedMemoriesStateHolder(
         searchJob?.cancel()
         mutableUiState.update { it.copy(searchText = "", searchTextCut = false) }
         appliedQuery.value = ""
+    }
+
+    /**
+     * Hides [memoryId] at once and opens its Undo window. Playback of the memory stops first. Its soft delete is written
+     * when the window ends, or earlier when a commit trigger fires.
+     */
+    fun requestDelete(memoryId: String) {
+        if (uiState.value.memories.none { it.id == memoryId }) return
+        stopPlaybackOf(memoryId)
+        val requestId = ++lastUndoRequestId
+        val updated = applyDeleteStep { it.request(memoryId, requestId) }
+        if (updated.undoWindow?.requestId == requestId) startUndoWindow(requestId)
+    }
+
+    /** Restores the memory whose Undo window is open. Nothing is written. */
+    fun undoDelete(memoryId: String) {
+        mutableUiState.update { it.copy(pendingDelete = it.pendingDelete.undo(memoryId)) }
+    }
+
+    /**
+     * Writes the open window's delete now. Called when the Memories tab is left and when the app goes to the background,
+     * so a deleted memory is not left waiting for its window to end.
+     */
+    fun commitPendingDelete() {
+        applyDeleteStep { it.commitPending() }
+    }
+
+    private fun startUndoWindow(requestId: Long) {
+        scope.launch {
+            delay(MEMORY_UNDO_WINDOW_MILLIS)
+            applyDeleteStep { it.windowEnded(requestId) }
+        }
+    }
+
+    /** Applies one delete step to the UI state, starts the write it asks for, and returns the new delete state. */
+    private fun applyDeleteStep(step: (PendingMemoryDelete) -> PendingMemoryDelete.Step): PendingMemoryDelete {
+        var toWrite: String? = null
+        val updated = mutableUiState.updateAndGet { state ->
+            val next = step(state.pendingDelete)
+            toWrite = next.toWrite
+            state.copy(pendingDelete = next.state)
+        }
+        toWrite?.let(::writeDelete)
+        return updated.pendingDelete
+    }
+
+    private fun writeDelete(memoryId: String) {
+        launchWrite {
+            val outcome = deleteOutcome(memoryService.delete(memoryId))
+            mutableUiState.update { state ->
+                state.copy(
+                    pendingDelete = state.pendingDelete.writeFinished(memoryId),
+                    deleteFailures = if (outcome == DeleteOutcome.FAILED) {
+                        state.deleteFailures + 1
+                    } else {
+                        state.deleteFailures
+                    },
+                )
+            }
+        }
+    }
+
+    /** A deleted memory must not keep playing, and its playback confirmation must not start it later. */
+    private fun stopPlaybackOf(memoryId: String) {
+        when (val state = mediaSessionService.state.value) {
+            is MediaSessionState.Playing ->
+                if (state.target.memoryId == memoryId) mediaSessionService.stopPlayback()
+
+            is MediaSessionState.Recording ->
+                if (state.pendingPlayback?.memoryId == memoryId) mediaSessionService.cancelPendingPlayback()
+
+            else -> Unit
+        }
     }
 
     private fun closeDetailState() {

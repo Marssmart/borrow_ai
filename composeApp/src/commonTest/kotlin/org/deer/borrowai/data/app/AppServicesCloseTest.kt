@@ -1,6 +1,7 @@
 package org.deer.borrowai.data.app
 
 import arrow.core.Either
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -32,7 +33,9 @@ import org.deer.borrowai.data.service.summary.MemorySummarizer
 import org.deer.borrowai.data.service.summary.SummaryResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class AppServicesCloseTest {
     private val recordingsRoot: Path = "/app/files/recordings".toPath()
@@ -104,6 +107,43 @@ class AppServicesCloseTest {
      * Builds the graph around [media] and [summarizer], routing close-scope failures into [failures] and
      * recording each close step in [events]. [advanceUntilIdle] then runs the drain to completion.
      */
+    @Test
+    fun `close waits for a memory write that is still running before the database closes`() = runTest {
+        val events = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val release = CompletableDeferred<Unit>()
+        val media = RecordingMediaSession(events)
+        val services = servicesWith(media, events, failures, RecordingSummarizer(events))
+
+        services.launchWrite {
+            release.await()
+            events += "write"
+        }
+        services.close()
+        advanceUntilIdle()
+
+        assertFalse("database" in events)
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("write", "database"), events.filter { it == "write" || it == "database" })
+    }
+
+    @Test
+    fun `a write launched after close started is refused and the database still closes`() = runTest {
+        val events = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val services = servicesWith(RecordingMediaSession(events), events, failures, RecordingSummarizer(events))
+
+        services.close()
+        services.launchWrite { events += "late write" }
+        advanceUntilIdle()
+
+        assertFalse("late write" in events)
+        assertTrue("database" in events)
+    }
+
     private fun TestScope.servicesWith(
         media: MediaSessionService,
         events: MutableList<String>,

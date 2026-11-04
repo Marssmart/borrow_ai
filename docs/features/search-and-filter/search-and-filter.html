@@ -137,7 +137,7 @@
 <ol type="1">
 <li>The user types in the search field.</li>
 <li>After 150 ms without a keystroke, the query is applied on a background dispatcher.</li>
-<li>The result set is the active memories that match the query and the selected categories, newest first.</li>
+<li>The result set is the memories the list shows that match the query and the selected categories, newest first. A memory hidden by a pending delete (its Undo window, or its write in progress) is left out.</li>
 <li>The list shows the result set, with a count line above it: "3 memories" or "Showing 3 of 42".</li>
 <li>Selecting or clearing a chip recalculates the result set at once, without the 150 ms delay.</li>
 </ol>

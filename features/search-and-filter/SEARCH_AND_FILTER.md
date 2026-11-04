@@ -105,7 +105,7 @@ As a user, I want to find a memory by a word I remember from it.
 
 1. The user types in the search field.
 2. After 150 ms without a keystroke, the query is applied on a background dispatcher.
-3. The result set is the active memories that match the query and the selected categories, newest first.
+3. The result set is the memories the list shows that match the query and the selected categories, newest first. A memory hidden by a pending delete (its Undo window, or its write in progress) is left out.
 4. The list shows the result set, with a count line above it: "3 memories" or "Showing 3 of 42".
 5. Selecting or clearing a chip recalculates the result set at once, without the 150 ms delay.
 
