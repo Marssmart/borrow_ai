@@ -1,6 +1,8 @@
 package org.deer.borrowai.data.service
 
 import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import kotlinx.coroutines.flow.StateFlow
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.recording.LiveTranscriptionFailure
@@ -53,6 +55,7 @@ sealed interface MediaSessionState {
         val target: PlaybackTarget,
         val elapsedMillis: Long,
         val durationMillis: Long,
+        val paused: Boolean = false,
     ) : MediaSessionState
 
     /** A recording could not start or be saved. The UI shows it until [MediaSessionService.dismissRecordingError]. */
@@ -77,6 +80,9 @@ sealed interface PlaybackError {
     data object RecordingUnavailable : PlaybackError
 
     data object NoPendingConfirmation : PlaybackError
+
+    /** Paused playback could not resume, for example because another app holds the audio focus. It stays paused. */
+    data object ResumeFailed : PlaybackError
 }
 
 interface MediaSessionService {
@@ -85,6 +91,13 @@ interface MediaSessionService {
     /** False when this service cannot play back recorded media. Playback controls should be disabled. */
     val playbackAvailable: Boolean
         get() = true
+
+    /**
+     * False when this service cannot pause, resume, or seek playback. The playback button then only plays and stops,
+     * as it did before playback controls existed.
+     */
+    val playbackControlsAvailable: Boolean
+        get() = false
 
     /** False when this service cannot start a raw recording. Recording controls should be disabled. */
     val recordingAvailable: Boolean
@@ -108,6 +121,18 @@ interface MediaSessionService {
     fun cancelPendingPlayback(): Boolean
 
     fun stopPlayback()
+
+    /** Pauses the active playback and keeps its position. */
+    fun pausePlayback() {}
+
+    /** Resumes paused playback from its position. Playback paused at its end starts again from the beginning. */
+    fun resumePlayback(): Either<PlaybackError, Unit> = PlaybackError.RecordingUnavailable.left()
+
+    /** Moves the playback position to [positionMillis], clamped to the start and the end of the recording. */
+    fun seekPlayback(positionMillis: Long) {}
+
+    /** Moves the playback position by [deltaMillis], clamped to the start and the end of the recording. */
+    fun skipPlayback(deltaMillis: Long) {}
 
     /** Clears a [MediaSessionState.Failed] state back to Idle after the user has seen it. */
     fun dismissRecordingError()

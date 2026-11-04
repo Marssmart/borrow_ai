@@ -11,8 +11,15 @@ import android.os.Build
 class AndroidAudioPlayer(context: Context) : AudioPlayer {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var player: MediaPlayer? = null
+    private var durationMillis = 0L
+    // Set when the player reaches the end of the file or fails. The position then reads as the end.
+    private var finished = false
+    // Target of a seek the platform has not completed yet. Reads return it instead of the old position.
+    private var pendingSeekMillis: Long? = null
     private var focusRequest: AudioFocusRequest? = null
     private var interruptionHandler: () -> Unit = {}
+
+    override val controlsAvailable: Boolean = true
 
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (change == AudioManager.AUDIOFOCUS_GAIN) return@OnAudioFocusChangeListener
@@ -32,13 +39,23 @@ class AndroidAudioPlayer(context: Context) : AudioPlayer {
         try {
             mediaPlayer.setDataSource(absolutePath)
             mediaPlayer.prepare()
-            val durationMillis = mediaPlayer.duration.toLong()
-            if (durationMillis <= 0) {
+            val duration = mediaPlayer.duration.toLong()
+            if (duration <= 0) {
                 throw PlaybackUnavailableException("Recording has no playable duration")
+            }
+            mediaPlayer.setOnCompletionListener { finishPlayback(mediaPlayer) }
+            mediaPlayer.setOnErrorListener { _, _, _ ->
+                finishPlayback(mediaPlayer)
+                true
+            }
+            mediaPlayer.setOnSeekCompleteListener {
+                if (player === mediaPlayer) pendingSeekMillis = null
             }
             mediaPlayer.start()
             player = mediaPlayer
-            return durationMillis
+            durationMillis = duration
+            finished = false
+            return duration
         } catch (exception: Exception) {
             mediaPlayer.release()
             abandonFocus()
@@ -49,12 +66,70 @@ class AndroidAudioPlayer(context: Context) : AudioPlayer {
     override fun stop() {
         val mediaPlayer = player ?: return
         player = null
+        pendingSeekMillis = null
         mediaPlayer.release()
         abandonFocus()
     }
 
+    override fun pause() {
+        val mediaPlayer = player ?: return
+        if (!finished) {
+            try {
+                mediaPlayer.pause()
+            } catch (exception: IllegalStateException) {
+                // The player is not in a state that can pause, so there is nothing left to pause.
+            }
+        }
+        // Pausing releases the audio focus, so other apps can play while this recording is paused.
+        abandonFocus()
+    }
+
+    override fun resume() {
+        val mediaPlayer = player ?: throw PlaybackUnavailableException("No recording is loaded")
+        if (!requestFocus()) {
+            throw PlaybackUnavailableException("Audio focus is held by another app")
+        }
+        try {
+            mediaPlayer.start()
+        } catch (exception: IllegalStateException) {
+            abandonFocus()
+            throw PlaybackUnavailableException("Could not resume recording", exception)
+        }
+    }
+
+    override fun seekTo(positionMillis: Long) {
+        val mediaPlayer = player ?: return
+        val target = positionMillis.coerceIn(0L, durationMillis)
+        try {
+            mediaPlayer.seekTo(target.toInt())
+            pendingSeekMillis = target
+            finished = false
+        } catch (exception: IllegalStateException) {
+            // The player cannot seek in its current state, so the position stays where it was.
+        }
+    }
+
+    override fun positionMillis(): Long? {
+        val mediaPlayer = player ?: return null
+        if (finished) return durationMillis
+        pendingSeekMillis?.let { return it }
+        return try {
+            mediaPlayer.currentPosition.toLong()
+        } catch (exception: IllegalStateException) {
+            null
+        }
+    }
+
     override fun setInterruptionHandler(handler: () -> Unit) {
         interruptionHandler = handler
+    }
+
+    private fun finishPlayback(finishedPlayer: MediaPlayer) {
+        if (finishedPlayer !== player) return
+        finished = true
+        pendingSeekMillis = null
+        // A finished recording is paused, so it gives up the audio focus like a paused one.
+        abandonFocus()
     }
 
     private fun requestFocus(): Boolean {

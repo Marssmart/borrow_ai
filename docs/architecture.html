@@ -80,7 +80,7 @@
 </ul>
 <h2 id="recording-and-playback">Recording and playback</h2>
 <ul>
-<li><code>RecordingMediaSessionService</code> implements <code>MediaSessionService</code> and drives the session states Idle, Recording, and Playing.</li>
+<li><code>RecordingMediaSessionService</code> implements <code>MediaSessionService</code> and drives the session states Idle, Recording, and Playing. Playing covers both playing and paused. On Android the position comes from the player, which also handles pause, seek, and skip.</li>
 <li><code>AudioRecorder</code> has Android and iOS implementations and writes M4A files named <code>&lt;id&gt;.m4a</code>. Unfinished captures use a temporary prefix.</li>
 <li><code>LiveTranscriber</code> shows text while recording, on a 16 kHz path.</li>
 <li><code>BatchTranscriber</code> transcribes the finished file.</li>

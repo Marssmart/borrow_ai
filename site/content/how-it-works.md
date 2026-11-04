@@ -36,7 +36,7 @@ Failed steps are retried by recovery jobs. See [Architecture](architecture.html#
 
 ## Saved memories
 
-Each memory has a title, summary, transcription, creation time, and optional categories. The summary and categories fill in after recording, so they can be empty at first. The list shows categories as chips. You can play back the recording. Deleting a memory is a soft delete: it is hidden at once, and a purge job removes the record and its audio later.
+Each memory has a title, summary, transcription, creation time, and optional categories. The summary and categories fill in after recording, so they can be empty at first. The list shows categories as chips. You can play back the recording. On Android you can also pause, seek, and skip 15 seconds back or forward. Deleting a memory is a soft delete: it is hidden at once, and a purge job removes the record and its audio later.
 
 ## Model downloads
 

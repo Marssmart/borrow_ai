@@ -83,6 +83,8 @@ import borrowai.composeapp.generated.resources.memory_playback_error_title
 import borrowai.composeapp.generated.resources.memory_playback_memory_missing_message
 import borrowai.composeapp.generated.resources.memory_playback_recording_unavailable_message
 import borrowai.composeapp.generated.resources.memory_playback_request_failed_message
+import borrowai.composeapp.generated.resources.memory_playback_resume_failed_message
+import borrowai.composeapp.generated.resources.memory_pause_recording
 import borrowai.composeapp.generated.resources.memory_play_recording
 import borrowai.composeapp.generated.resources.memory_saved_memories_title
 import borrowai.composeapp.generated.resources.memory_stop_recording
@@ -167,7 +169,10 @@ internal fun SavedMemoriesScreen(
                 summaryModelMissing = uiState.summaryModelMissing,
                 categoryNames = uiState.categoryNames,
                 listState = stateHolder.memoriesListState,
-                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
+                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                    ?.takeUnless { it.paused }
+                    ?.target,
+                playbackControlsAvailable = stateHolder.playbackControlsAvailable,
                 onOpenMemory = stateHolder::openMemory,
                 onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
                 onSearchTextChanged = stateHolder::onSearchTextChanged,
@@ -179,13 +184,14 @@ internal fun SavedMemoriesScreen(
                 MemoryDetailScreen(
                     memory = memory,
                     scrollState = stateHolder.detailScrollState,
-                    playingContent = (uiState.mediaSessionState as? MediaSessionState.Playing)
-                        ?.takeIf { it.target.memoryId == memory.id }
-                        ?.target
-                        ?.content,
+                    playback = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                        ?.takeIf { it.target.memoryId == memory.id && it.target.content == PlaybackContent.RECORDING },
+                    playbackControlsAvailable = stateHolder.playbackControlsAvailable,
                     onPlayRecording = {
                         stateHolder.togglePlayback(memory.id, PlaybackContent.RECORDING)
                     },
+                    onSeekPlayback = stateHolder::seekPlayback,
+                    onSkipPlayback = stateHolder::skipPlayback,
                 )
             }
 
@@ -229,6 +235,9 @@ internal fun SavedMemoriesScreen(
 
                             PlaybackError.RecordingUnavailable ->
                                 Res.string.memory_playback_recording_unavailable_message
+
+                            PlaybackError.ResumeFailed ->
+                                Res.string.memory_playback_resume_failed_message
                         },
                     ),
                 )
@@ -253,6 +262,7 @@ private fun MemoryListScreen(
     categoryNames: Map<Int, String>,
     listState: LazyListState,
     playingTarget: PlaybackTarget?,
+    playbackControlsAvailable: Boolean,
     onOpenMemory: (String) -> Unit,
     onPlayRecording: (String) -> Unit,
     onSearchTextChanged: (String) -> Unit,
@@ -308,6 +318,7 @@ private fun MemoryListScreen(
                     memory = memory,
                     categoryNames = memory.categories.mapNotNull { categoryNames[it] },
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
+                    playbackControlsAvailable = playbackControlsAvailable,
                     onOpen = { onOpenMemory(memory.id) },
                     onPlayRecording = { onPlayRecording(memory.id) },
                 )
@@ -321,6 +332,7 @@ private fun MemoryCard(
     memory: Memory,
     categoryNames: List<String>,
     playingContent: PlaybackContent?,
+    playbackControlsAvailable: Boolean,
     onOpen: () -> Unit,
     onPlayRecording: () -> Unit,
 ) {
@@ -426,6 +438,7 @@ private fun MemoryCard(
             }
             AudioPlaybackButtons(
                 playingContent = playingContent,
+                playbackControlsAvailable = playbackControlsAvailable,
                 onPlayRecording = onPlayRecording,
             )
         }
@@ -436,8 +449,11 @@ private fun MemoryCard(
 private fun MemoryDetailScreen(
     memory: Memory,
     scrollState: ScrollState,
-    playingContent: PlaybackContent?,
+    playback: MediaSessionState.Playing?,
+    playbackControlsAvailable: Boolean,
     onPlayRecording: () -> Unit,
+    onSeekPlayback: (Long) -> Unit,
+    onSkipPlayback: (Long) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -475,10 +491,21 @@ private fun MemoryDetailScreen(
                 contentPadding = SavedMemoriesStateHolder.MEMORY_DETAIL_PLAYBACK_PADDING,
                 elevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION,
             ) {
-                AudioPlaybackButtons(
-                    playingContent = playingContent,
-                    onPlayRecording = onPlayRecording,
-                )
+                if (playbackControlsAvailable) {
+                    PlaybackPanel(
+                        playback = playback,
+                        durationMillis = playback?.durationMillis,
+                        onTogglePlayback = onPlayRecording,
+                        onSeek = onSeekPlayback,
+                        onSkip = onSkipPlayback,
+                    )
+                } else {
+                    AudioPlaybackButtons(
+                        playingContent = playback?.target?.content,
+                        playbackControlsAvailable = false,
+                        onPlayRecording = onPlayRecording,
+                    )
+                }
             }
             if (memory.summary.isNotBlank()) {
                 AuroraPanel(
@@ -611,6 +638,7 @@ private fun AuroraPanel(
 @Composable
 private fun AudioPlaybackButtons(
     playingContent: PlaybackContent?,
+    playbackControlsAvailable: Boolean,
     onPlayRecording: () -> Unit,
 ) {
     Row(
@@ -620,7 +648,11 @@ private fun AudioPlaybackButtons(
         PlaybackButton(
             playing = playingContent == PlaybackContent.RECORDING,
             playLabel = Res.string.memory_play_recording,
-            stopLabel = Res.string.memory_stop_recording,
+            playingLabel = if (playbackControlsAvailable) {
+                Res.string.memory_pause_recording
+            } else {
+                Res.string.memory_stop_recording
+            },
             onClick = onPlayRecording,
         )
     }
@@ -630,7 +662,7 @@ private fun AudioPlaybackButtons(
 private fun PlaybackButton(
     playing: Boolean,
     playLabel: StringResource,
-    stopLabel: StringResource,
+    playingLabel: StringResource,
     onClick: () -> Unit,
 ) {
     TextButton(
@@ -653,7 +685,7 @@ private fun PlaybackButton(
             )
             Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
             Text(
-                stringResource(if (playing) stopLabel else playLabel),
+                stringResource(if (playing) playingLabel else playLabel),
                 style = MaterialTheme.typography.labelSmall,
             )
         }

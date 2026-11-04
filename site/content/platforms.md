@@ -6,6 +6,7 @@ The app shares its logic across platforms, but not every service is wired on eve
 |------------|---------|-----|
 | Recording (M4A) | Yes (`AndroidAudioRecorder`) | Yes (`IosAudioRecorder`) |
 | Playback | Yes (`AndroidAudioPlayer`) | Yes (`IosAudioPlayer`) |
+| Pause, seek, and skip | Yes (`AndroidAudioPlayer`) | No. iOS has play and stop only. |
 | Microphone permission | Yes | Yes (`IosMicrophonePermission`) |
 | Model downloads | Yes (`PlatformModelHttpClient.android.kt`) | Yes (`PlatformModelHttpClient.ios.kt`) |
 | Live transcription | Yes (`AndroidLiveTranscriber`, sherpa-onnx) | Not wired |
