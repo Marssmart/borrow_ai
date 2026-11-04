@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.4]
+
+- Updated the native-developer agent so every implemented feature must be included in the visual guide.
+- Updated Android and iOS versioning to 1.9.4 (build 60).
+
 ## [1.9.1]
 
 - Added a background activity indicator: a small pill at the top of the screen shows while the app downloads models, transcribes, summarizes, categorizes, analyzes speakers, or cleans up in the background. It names up to two running activities and shows the rest as a count.
