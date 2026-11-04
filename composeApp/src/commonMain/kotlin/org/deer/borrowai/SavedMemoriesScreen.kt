@@ -120,6 +120,7 @@ internal fun SavedMemoriesScreen(
     onDetailBackRegistered: (() -> Unit) -> Unit,
     onDetailVisibilityChanged: (Boolean) -> Unit,
     onGoToRecord: () -> Unit,
+    onEditingChanged: (Boolean) -> Unit,
 ) {
     val memoryPagerState = rememberPagerState(
         pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
@@ -163,6 +164,19 @@ internal fun SavedMemoriesScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val deletedElsewhereMessage = stringResource(Res.string.memory_edit_deleted)
+    val onEditedMemoryDeleted: () -> Unit = {
+        editingMemoryId = null
+        scope.launch { snackbarHostState.showSnackbar(deletedElsewhereMessage) }
+        Unit
+    }
+    // A memory removed from the store while it is being edited, by a path other than this editor, closes the editor
+    // with the same notice as a failed save would.
+    LaunchedEffect(editingMemoryId, uiState.memories) {
+        val id = editingMemoryId ?: return@LaunchedEffect
+        if (uiState.memories.none { it.id == id }) onEditedMemoryDeleted()
+    }
+    LaunchedEffect(editingMemoryId) { onEditingChanged(editingMemoryId != null) }
+    DisposableEffect(Unit) { onDispose { onEditingChanged(false) } }
     val headingFocus = remember { FocusRequester() }
     // After a delete, focus moves to the list heading once the list is back on screen.
     LaunchedEffect(uiState.pendingDelete.undoWindow?.requestId) {
@@ -263,10 +277,7 @@ internal fun SavedMemoriesScreen(
                 memory = memory,
                 onSave = { edit, onResult -> stateHolder.saveMemoryEdit(memory.id, edit, onResult) },
                 onClose = { editingMemoryId = null },
-                onDeletedElsewhere = {
-                    editingMemoryId = null
-                    scope.launch { snackbarHostState.showSnackbar(deletedElsewhereMessage) }
-                },
+                onDeletedElsewhere = onEditedMemoryDeleted,
             )
         }
         // Sits above the dock, because this page is already padded for the dock (App.kt).

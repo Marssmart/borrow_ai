@@ -55,6 +55,7 @@ import borrowai.composeapp.generated.resources.memory_edit_failed
 import borrowai.composeapp.generated.resources.memory_edit_keep_editing
 import borrowai.composeapp.generated.resources.memory_edit_retry
 import borrowai.composeapp.generated.resources.memory_edit_save
+import borrowai.composeapp.generated.resources.memory_edit_summary_changed
 import borrowai.composeapp.generated.resources.memory_edit_summary_helper
 import borrowai.composeapp.generated.resources.memory_edit_summary_label
 import borrowai.composeapp.generated.resources.memory_edit_summary_too_long
@@ -85,15 +86,25 @@ internal fun MemoryEditScreen(
 ) {
     var title by rememberSaveable(memory.id) { mutableStateOf(memory.title) }
     var summary by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
+    var titleEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
+    var summaryEdited by rememberSaveable(memory.id) { mutableStateOf(false) }
+    // The summary the editor opened with. A different live summary means a new one was written during the edit.
+    val summaryAtEntry by rememberSaveable(memory.id) { mutableStateOf(memory.summary) }
     var saving by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var rejected by remember { mutableStateOf<String?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val keepEditingFocus = remember { FocusRequester() }
 
-    val base = memory.currentEdit()
-    val draft = base.copy(title = title, summary = summary)
-    val changed = draft != base
+    val live = memory.currentEdit()
+    // Only the fields the user typed in are sent. Any other field keeps its live value, so a background summary is not
+    // replaced by text from when the editor opened.
+    val draft = live.copy(
+        title = if (titleEdited) title else live.title,
+        summary = if (summaryEdited) summary else live.summary,
+    )
+    val changed = draft != live
+    val summaryConflict = summaryEdited && memory.summary != summaryAtEntry
     val titleTooLong = title.length > MEMORY_TITLE_MAX_LENGTH
     val summaryTooLong = summary.length > MEMORY_SUMMARY_MAX_LENGTH
     // The service still checks the transcript and categories and reports a refusal, so a failed transcript that is
@@ -101,7 +112,7 @@ internal fun MemoryEditScreen(
     val valid = !titleTooLong && !summaryTooLong
 
     fun save() {
-        if (saving || !valid || !changed) return
+        if (saving || !valid || !changed || summaryConflict) return
         saving = true
         failed = false
         rejected = null
@@ -155,7 +166,7 @@ internal fun MemoryEditScreen(
             )
             TextButton(
                 onClick = ::save,
-                enabled = changed && valid && !saving,
+                enabled = changed && valid && !saving && !summaryConflict,
                 modifier = Modifier.size(width = 96.dp, height = 48.dp),
             ) {
                 if (saving) {
@@ -174,6 +185,7 @@ internal fun MemoryEditScreen(
                 value = title,
                 onValueChange = {
                     title = it
+                    titleEdited = true
                     rejected = null
                     failed = false
                 },
@@ -199,6 +211,7 @@ internal fun MemoryEditScreen(
                 value = summary,
                 onValueChange = {
                     summary = it
+                    summaryEdited = true
                     rejected = null
                     failed = false
                 },
@@ -221,6 +234,14 @@ internal fun MemoryEditScreen(
             rejected?.let {
                 Text(
                     it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+            if (summaryConflict) {
+                Text(
+                    stringResource(Res.string.memory_edit_summary_changed),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },

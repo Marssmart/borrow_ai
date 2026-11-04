@@ -145,6 +145,7 @@ fun App(services: AppServices) {
                             onDetailBackRegistered = appStateHolder::registerMemoryDetailBack,
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                             onGoToRecord = { appStateHolder.navigateToPage(AppShellStateHolder.CAPTURE_PAGE) },
+                            onEditingChanged = appStateHolder::setMemoryEditing,
                         )
 
                         AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen(
@@ -169,10 +170,12 @@ fun App(services: AppServices) {
                         .padding(top = 8.dp),
                 )
                 if (appUiState.isMemoryDetailVisible) {
-                    MemoryDetailNavBar(
-                        onBack = appStateHolder::backFromMemoryDetail,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
+                    if (!appUiState.isMemoryEditing) {
+                        MemoryDetailNavBar(
+                            onBack = appStateHolder::backFromMemoryDetail,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 } else {
                     BottomNavBar(
                         selectedPage = appStateHolder.mainPagerState.targetPage,

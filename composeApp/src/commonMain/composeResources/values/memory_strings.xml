@@ -61,6 +61,7 @@
     <string name="memory_edit_failed">Couldn\'t save. Your changes are still here.</string>
     <string name="memory_edit_retry">Retry</string>
     <string name="memory_edit_deleted">This memory was deleted.</string>
+    <string name="memory_edit_summary_changed">The summary was written again while you were editing. Cancel and open the memory again to edit the new summary.</string>
     <string name="memory_untitled">Untitled memory</string>
     <string name="memory_no_match_title">No memories match “%1$s”</string>
     <string name="memory_no_match_categories">No memories in these categories</string>

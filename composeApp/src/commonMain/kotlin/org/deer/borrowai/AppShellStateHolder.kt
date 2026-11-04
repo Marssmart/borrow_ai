@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 
 internal data class AppShellUiState(
     val isMemoryDetailVisible: Boolean = false,
+    val isMemoryEditing: Boolean = false,
 )
 
 internal class AppShellStateHolder(
@@ -23,6 +24,11 @@ internal class AppShellStateHolder(
 
     fun setMemoryDetailVisible(visible: Boolean) {
         mutableUiState.update { it.copy(isMemoryDetailVisible = visible) }
+    }
+
+    /** While the editor is open the detail nav bar is hidden, so its Back button cannot skip the discard check. */
+    fun setMemoryEditing(editing: Boolean) {
+        mutableUiState.update { it.copy(isMemoryEditing = editing) }
     }
 
     fun registerMemoryDetailBack(action: () -> Unit) {

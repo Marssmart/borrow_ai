@@ -223,6 +223,9 @@ Returning an error would make the job log a failure and count an attempt. Return
 - **Failed transcripts.** A title-only edit of a memory whose transcript is failed and blank is refused by the service, with its message shown. Phase 3 lets the user type the transcript in, which fixes this case.
 - **Untitled.** The detail title shows "Untitled memory" when the title is blank (AC-2.2). The list card is not changed in this phase.
 - **Tests.** `MemoryEditTest` covers `currentEdit` and a title-only edit. `SavedMemoriesDeleteTest` covers the holder's NotFound and InvalidInput results. The screen is not unit-tested, because the project has no Compose UI test dependency.
+- **Concurrent changes.** Only fields the user typed in are sent. A summary typed in is refused, with a message, when the memory's summary changed since the editor opened, so a background summary is not overwritten.
+- **Leaving the editor.** While the editor is open the detail nav bar is hidden, so its Back and Memories buttons cannot skip the discard check. System back and Cancel use the discard check.
+- **Deleted elsewhere.** A memory removed from the store while it is open closes the editor with "This memory was deleted." The save path's NotFound uses the same notice.
 
 ---
 
