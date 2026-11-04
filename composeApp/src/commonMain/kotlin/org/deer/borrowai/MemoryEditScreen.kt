@@ -80,7 +80,7 @@ private const val TITLE_COUNTER_THRESHOLD = 60
 @Composable
 internal fun MemoryEditScreen(
     memory: Memory,
-    onSave: (MemoryEdit, (Either<MemoryError, Unit>) -> Unit) -> Unit,
+    onSave: (String?, String?, String, (Either<MemoryError, Unit>) -> Unit) -> Unit,
     onClose: () -> Unit,
     onDeletedElsewhere: () -> Unit,
 ) {
@@ -116,7 +116,11 @@ internal fun MemoryEditScreen(
         saving = true
         failed = false
         rejected = null
-        onSave(draft) { result ->
+        onSave(
+            if (titleEdited) title else null,
+            if (summaryEdited) summary else null,
+            summaryAtEntry,
+        ) { result ->
             saving = false
             result.fold(
                 ifLeft = { error ->

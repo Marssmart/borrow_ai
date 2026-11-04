@@ -20,7 +20,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.Memory
-import org.deer.borrowai.data.domain.MemoryEdit
 import org.deer.borrowai.data.domain.MemorySearchResults
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
@@ -266,7 +265,7 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("missing", MemoryEdit("t", "", "x", emptyList())) { result ->
+        holder.saveMemoryEdit("missing", "t", null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()
@@ -280,7 +279,7 @@ class SavedMemoriesDeleteTest {
         runCurrent()
         val errors = mutableListOf<MemoryError?>()
 
-        holder.saveMemoryEdit("a", MemoryEdit("t", "", "", emptyList())) { result ->
+        holder.saveMemoryEdit("a", "t", null, "") { result ->
             errors += result.fold(ifLeft = { it }, ifRight = { null })
         }
         runCurrent()

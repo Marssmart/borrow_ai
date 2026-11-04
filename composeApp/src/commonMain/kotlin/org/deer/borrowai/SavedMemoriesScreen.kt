@@ -165,8 +165,11 @@ internal fun SavedMemoriesScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val deletedElsewhereMessage = stringResource(Res.string.memory_edit_deleted)
     val onEditedMemoryDeleted: () -> Unit = {
-        editingMemoryId = null
-        scope.launch { snackbarHostState.showSnackbar(deletedElsewhereMessage) }
+        // Runs once per editor session: a second call, after the editor has closed, does nothing.
+        if (editingMemoryId != null) {
+            editingMemoryId = null
+            scope.launch { snackbarHostState.showSnackbar(deletedElsewhereMessage) }
+        }
         Unit
     }
     // A memory removed from the store while it is being edited, by a path other than this editor, closes the editor
@@ -275,7 +278,9 @@ internal fun SavedMemoriesScreen(
         editedMemory?.let { memory ->
             MemoryEditScreen(
                 memory = memory,
-                onSave = { edit, onResult -> stateHolder.saveMemoryEdit(memory.id, edit, onResult) },
+                onSave = { title, summary, entry, onResult ->
+                    stateHolder.saveMemoryEdit(memory.id, title, summary, entry, onResult)
+                },
                 onClose = { editingMemoryId = null },
                 onDeletedElsewhere = onEditedMemoryDeleted,
             )

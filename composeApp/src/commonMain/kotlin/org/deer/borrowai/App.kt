@@ -124,10 +124,13 @@ fun App(services: AppServices) {
                 val navBarInset = WindowInsets.navigationBars
                     .asPaddingValues()
                     .calculateBottomPadding()
+                // The dock or the detail nav bar sits at the bottom. While the editor covers the detail view, no bar is
+                // shown, so the pager takes the full height.
+                val bottomBarShown = !(appUiState.isMemoryDetailVisible && appUiState.isMemoryEditing)
                 HorizontalPager(
                     state = appStateHolder.mainPagerState,
                     modifier = Modifier.fillMaxSize().padding(
-                        bottom = BottomNavDockReserve + navBarInset,
+                        bottom = if (bottomBarShown) BottomNavDockReserve + navBarInset else 0.dp,
                     ),
                     userScrollEnabled = !appUiState.isMemoryDetailVisible,
                 ) { page ->
