@@ -15,6 +15,8 @@ import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
  * Runs speaker analysis one memory at a time. It follows [org.deer.borrowai.data.service.recording.TranscriptionWorkRunner]:
@@ -28,6 +30,7 @@ class SpeakerAnalysisRunner(
     private val recordingsRoot: Path,
     private val isRecording: () -> Boolean,
     private val scope: CoroutineScope,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     /** Held for a whole drain. Shutdown takes it too, so it waits for the drain in progress. */
     private val drainLock = Mutex()
@@ -113,7 +116,7 @@ class SpeakerAnalysisRunner(
                 .fold(ifLeft = { return false }, ifRight = { it })
             val memory = memoryService.claimNextPendingSpeakerAnalysis()
                 .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
-            if (!analyzeClaimed(memory, library)) return false
+            if (!activityTracker.track(BackgroundActivity.SPEAKER_ANALYSIS) { analyzeClaimed(memory, library) }) return false
         }
     }
 

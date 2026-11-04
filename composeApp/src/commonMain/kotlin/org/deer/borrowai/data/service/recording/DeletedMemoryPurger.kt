@@ -10,6 +10,8 @@ import okio.FileSystem
 import okio.Path
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 import org.deer.borrowai.data.service.SpeakerService
 
 /**
@@ -23,6 +25,7 @@ class DeletedMemoryPurger(
     private val isRecording: () -> Boolean,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val speakerService: SpeakerService,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     /** Purges deleted memories. Returns how many were removed. */
     suspend fun purge(): Int {
@@ -43,16 +46,18 @@ class DeletedMemoryPurger(
             if (isRecording()) break
             if (!memory.deleted) continue
             try {
-                // Updates can clear or replace recordingPath, so the audio named after the memory id is also removed.
-                val candidatePaths = setOfNotNull(memory.recordingPath, recordingRelativePath(memory.id))
-                for (relativePath in candidatePaths) {
-                    if (relativePath in activePaths) continue
-                    val file = recordingsRoot / relativePath
-                    if (fileSystem.exists(file)) fileSystem.delete(file)
+                activityTracker.track(BackgroundActivity.CLEANUP) {
+                    // Updates can clear or replace recordingPath, so the audio named after the memory id is also removed.
+                    val candidatePaths = setOfNotNull(memory.recordingPath, recordingRelativePath(memory.id))
+                    for (relativePath in candidatePaths) {
+                        if (relativePath in activePaths) continue
+                        val file = recordingsRoot / relativePath
+                        if (fileSystem.exists(file)) fileSystem.delete(file)
+                    }
+                    // Speaker rows go before the record. Once the record is gone, nothing would find them again.
+                    if (speakerService.deleteForMemory(memory.id).isLeft()) return@track
+                    if (memoryService.purge(memory.id)) purged++
                 }
-                // Speaker rows go before the record. Once the record is gone, nothing would find them again.
-                if (speakerService.deleteForMemory(memory.id).isLeft()) continue
-                if (memoryService.purge(memory.id)) purged++
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {

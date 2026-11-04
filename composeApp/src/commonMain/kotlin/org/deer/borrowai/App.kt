@@ -3,11 +3,15 @@ package org.deer.borrowai
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +70,12 @@ fun App(services: AppServices) {
         AppShellStateHolder(mainPagerState, scope)
     }
     val appUiState by appStateHolder.uiState.collectAsState()
+    val backgroundActivities by services.backgroundActivities.collectAsState()
+    val appSettings by services.appSettings.settings.collectAsState()
+    val indicatorState = backgroundActivityIndicatorState(
+        activities = backgroundActivities,
+        showIndicator = appSettings.showBackgroundActivityIndicator,
+    )
     LaunchedEffect(services.modelSetup) {
         services.modelSetup.prepare()
     }
@@ -132,9 +142,21 @@ fun App(services: AppServices) {
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                         )
 
-                        AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen()
+                        AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen(
+                            showBackgroundActivityIndicator = appSettings.showBackgroundActivityIndicator,
+                            onShowBackgroundActivityIndicatorChange = { show ->
+                                scope.launch { services.appSettings.setShowBackgroundActivityIndicator(show) }
+                            },
+                        )
                     }
                 }
+                BackgroundActivityIndicator(
+                    state = indicatorState,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                        .padding(top = 8.dp),
+                )
                 if (appUiState.isMemoryDetailVisible) {
                     MemoryDetailNavBar(
                         onBack = appStateHolder::backFromMemoryDetail,

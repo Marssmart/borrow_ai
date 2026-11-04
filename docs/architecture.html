@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Architecture — BorrowAI docs</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html">BorrowAI</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="architecture.html" aria-current="page">Architecture</a>
+      <a href="models-and-privacy.html">Models and privacy</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="features/index.html">Features</a>
+      <a href="design/index.html">Design guides</a>
+      <a href="developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="architecture">Architecture</h1>
+<p>BorrowAI is one Kotlin Multiplatform codebase. Logic, UI, and interfaces live in <code>commonMain</code>. Platform code lives in <code>androidMain</code> and <code>iosMain</code>. The package root is <code>composeApp/src/*/kotlin/org/deer/borrowai/</code>.</p>
+<h2 id="layers">Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Location</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UI</td>
+<td><code>commonMain/.../</code> (for example <code>App.kt</code>, <code>BorrowCaptureScreen.kt</code>, <code>SavedMemoriesScreen.kt</code>)</td>
+<td>Compose screens and state holders (<code>CaptureUiStateHolder</code>, <code>SavedMemoriesStateHolder</code>, <code>AppShellStateHolder</code>).</td>
+</tr>
+<tr>
+<td>Services</td>
+<td><code>commonMain/.../data/service/</code></td>
+<td>Interfaces and implementations for memories, recording, speech, summaries, categories, models, and speakers.</td>
+</tr>
+<tr>
+<td>Domain</td>
+<td><code>commonMain/.../data/domain/</code></td>
+<td>Pure data types such as <code>Memory</code>, <code>MemoryDraft</code>, and <code>Speaker</code>.</td>
+</tr>
+<tr>
+<td>Composition root</td>
+<td><code>commonMain/.../data/app/AppServices.kt</code></td>
+<td>Builds the object graph and closes it.</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td><code>androidMain/</code>, <code>iosMain/</code></td>
+<td>Recorders, players, microphone permission, device RAM, HTTP clients, and the speech and LLM runtimes on Android.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-memory-model">The memory model</h2>
+<p>A <code>Memory</code> (<code>data/domain/Memory.kt</code>) has an id, creation time, title, summary, transcription, and an optional <code>recordingPath</code>. It also has:</p>
+<ul>
+<li>a <code>deleted</code> flag for soft delete;</li>
+<li>a status and attempt counter for each pipeline: transcription, summary, categorization, and speaker analysis;</li>
+<li>a list of category ids;</li>
+<li>the last speaker error and the speaker analysis version.</li>
+</ul>
+<p><code>recordingPath</code> is always relative (for example <code>recordings/&lt;id&gt;.m4a</code>), never absolute. On iOS the app container path changes between installs, so the platform resolves the path at playback time. <code>MemoryDraft</code> is the form before save.</p>
+<h2 id="persistence">Persistence</h2>
+<ul>
+<li><code>KotbaseMemoryService</code> implements <code>MemoryService</code> on Couchbase Lite through Kotbase. The database is named <code>borrow-ai</code>.</li>
+<li><code>KotbaseSpeakerService</code> keeps speaker data in its own collection.</li>
+<li><code>StatefulMemoryService</code> is the abstract base for memory state.</li>
+<li>Operations return Arrow <code>Either&lt;MemoryError, T&gt;</code>, so callers handle failures as values.</li>
+</ul>
+<h2 id="recording-and-playback">Recording and playback</h2>
+<ul>
+<li><code>RecordingMediaSessionService</code> implements <code>MediaSessionService</code> and drives the session states Idle, Recording, and Playing.</li>
+<li><code>AudioRecorder</code> has Android and iOS implementations and writes M4A files named <code>&lt;id&gt;.m4a</code>. Unfinished captures use a temporary prefix.</li>
+<li><code>LiveTranscriber</code> shows text while recording, on a 16 kHz path.</li>
+<li><code>BatchTranscriber</code> transcribes the finished file.</li>
+</ul>
+<h2 id="background-jobs">Background jobs</h2>
+<p>These jobs live in <code>data/service/</code>. Each one skips its work while a recording is in progress.</p>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>Location</th>
+<th>What it does</th>
+<th>Schedule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RecordingReconciler</code></td>
+<td><code>recording/</code></td>
+<td>Creates memories for orphaned <code>.m4a</code> files that have no saved memory.</td>
+<td>Every 15 minutes.</td>
+</tr>
+<tr>
+<td><code>DeletedMemoryPurger</code></td>
+<td><code>recording/</code></td>
+<td>Removes soft-deleted memories, their audio, and their speaker data.</td>
+<td>Every 15 minutes.</td>
+</tr>
+<tr>
+<td><code>TranscriptionWorkRunner</code></td>
+<td><code>recording/</code></td>
+<td>Runs queued transcriptions. A sweep at launch recovers unfinished ones.</td>
+<td>Event-driven, with a launch sweep.</td>
+</tr>
+<tr>
+<td><code>MemorySummaryRecoveryJob</code></td>
+<td><code>summary/</code></td>
+<td>Retries summaries that failed or were never made.</td>
+<td>Every 15 minutes.</td>
+</tr>
+<tr>
+<td><code>MemoryCategorizationRecoveryJob</code></td>
+<td><code>category/</code></td>
+<td>Retries categorization that failed or was never made.</td>
+<td>Every 15 minutes.</td>
+</tr>
+<tr>
+<td><code>SpeakerAnalysisRunner</code></td>
+<td><code>speaker/</code></td>
+<td>Analyzes speakers after a transcription succeeds. Runs only when the speaker feature is enabled.</td>
+<td>Event-driven. Off by default.</td>
+</tr>
+</tbody>
+</table>
+<p>The reconciler, purger, speaker runner, and the summary and categorization recovery jobs take an <code>isRecording</code> check, so they do not touch files that are being written.</p>
+<p>Each unit of work these jobs do is wrapped in <code>BackgroundActivityTracker.track(...)</code> (<code>data/service/background/</code>). The tracker counts running work per activity, and the top-center pill reads those counts. See <a href="features/background-activity-indicator/background-activity-indicator.html">Background activity indicator</a>.</p>
+<h2 id="composition-root">Composition root</h2>
+<p><code>AppServices</code> (<code>data/app/AppServices.kt</code>) exposes <code>create</code>, which takes the platform dependencies (recorder, player, permission, device, and the speech and LLM runtimes) and wires the memory service, model setup, media session, speaker runner, and the jobs above. The iOS entry point calls it.</p>
+<ul>
+<li>On iOS, <code>iosMain/.../MainViewController.kt</code> calls <code>AppServices.create</code> with the iOS recorder, player, permission, and device.</li>
+<li>On Android, <code>AppServicesViewModel</code> builds the same graph with the Android speech and LLM runtimes.</li>
+</ul>
+<p><code>close()</code> stops the media session, waits for pending saves, cancels the jobs, and then closes the database. This order matters: transcription workers can still use the database until they stop.</p>
+<h2 id="model-setup">Model setup</h2>
+<p><code>ModelCatalog</code> pins each model by URL, revision, SHA-256, and size. <code>DownloadingModelSetupService</code> downloads them through <code>ModelDownloader</code> and <code>PlatformModelHttpClient</code>. See <a href="models-and-privacy.html">Models and privacy</a>.</p>
+<h2 id="tests">Tests</h2>
+<ul>
+<li><code>commonTest</code>: unit tests for shared logic, including the jobs, the model catalog, and speaker clustering and matching.</li>
+<li><code>androidUnitTest</code>: unit tests for the Android speech, LLM, and summarizer code.</li>
+<li><code>androidInstrumentedTest</code>: device tests, including <code>AppServicesTest</code> and <code>KotbaseMemoryServiceTest</code>.</li>
+</ul>
+<h2 id="related-documents">Related documents</h2>
+<ul>
+<li><a href="features/index.html">Features</a>: design documents for upcoming features.</li>
+<li><a href="platforms.html">Platforms</a>: what is wired on each platform today.</li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

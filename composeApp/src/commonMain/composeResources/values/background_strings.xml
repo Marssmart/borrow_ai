@@ -1,0 +1,11 @@
+<resources>
+    <string name="background_activity_model_download">Downloading models</string>
+    <string name="background_activity_transcription">Transcribing</string>
+    <string name="background_activity_speaker_analysis">Analyzing speakers</string>
+    <string name="background_activity_summary">Summarizing</string>
+    <string name="background_activity_categorization">Categorizing</string>
+    <string name="background_activity_cleanup">Cleaning up</string>
+    <string name="background_indicator_more">+%1$d</string>
+    <string name="settings_background_indicator_title">Background activity indicator</string>
+    <string name="settings_background_indicator_description">Show a small indicator at the top of the screen while the app transcribes, summarizes, categorizes, analyzes speakers, downloads models, or cleans up in the background.</string>
+</resources>

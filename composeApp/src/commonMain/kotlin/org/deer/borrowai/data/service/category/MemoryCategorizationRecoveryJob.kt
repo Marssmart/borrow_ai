@@ -10,6 +10,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
  * Categorizes memories that have no categories yet, including memories saved before categorization existed.
@@ -23,6 +25,7 @@ class MemoryCategorizationRecoveryJob(
     private val categorizer: MemoryCategorizer,
     private val isRecording: () -> Boolean,
     private val batchSize: Int = DEFAULT_BATCH_SIZE,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) {
     init {
         require(batchSize > 0) { "Batch size must be positive." }
@@ -44,7 +47,7 @@ class MemoryCategorizationRecoveryJob(
         for (memory in memories.filter(::isEligible).take(batchSize)) {
             if (isRecording()) break
             val outcome = try {
-                process(memory)
+                activityTracker.track(BackgroundActivity.CATEGORIZATION) { process(memory) }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
