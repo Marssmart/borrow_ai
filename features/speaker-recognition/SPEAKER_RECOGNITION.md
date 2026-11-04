@@ -350,7 +350,7 @@ All values are proposals until measured in §11.
 | Analyzer, Android | `androidMain` | sherpa-onnx diarization and embedding wrapper, `UnavailableSpeakerAnalyzer` default |
 | Analyzer, iOS | `iosMain` | `UnavailableSpeakerAnalyzer` only in v1. No iOS transcriber exists, so no input. |
 | UI | `commonMain` | Chips, speaker cards, assign sheet, Settings rows |
-| Playback | `androidMain` / `iosMain` | Seeked playback of a time range from the `.m4a` (reuse existing player) |
+| Playback | `commonMain` / `androidMain` | Sample playback runs through `RecordingMediaSessionService` on the playback API (`play`, `seekTo`, `positionMillis`). It seeks to the start and stops at the end. iOS has no playback controls, so samples are refused there. |
 
 Clustering and matching are pure Kotlin in `commonMain` so they can be unit-tested on the JVM without a device.
 
@@ -395,6 +395,8 @@ These were open before implementation. Q-1 to Q-9 are decided, recorded in the D
 | Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (`SpeakerAnalysisRunner`, empty drafts), and SKIPPED also covers a feature that is off. | **Open.** P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE. |
 | Q-11 | §9.7 says a library speaker keeps a stored colour, but `Speaker` has no colour field. | **Open.** Needed for the list chips (P2, second MR). Add a stored colour in P3, or derive one per memory until then. |
 | Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Open.** The consent screen must ship before any UI path can call `setFeatureEnabled(true)`. |
+| Q-13 | Does a sample play its first few milliseconds from the start of the recording? `play()` starts playback at once, and the seek to the sample start follows it. | **Open (device).** Check on a Pixel that a sample does not start with the first words of the recording. If it does, the playback API needs a start position for `play()`. |
+| Q-14 | Does a sample stop at its end on a device? The ticker wakes at the end, so the stop should land within a few milliseconds of the end. | **Open (device).** Check with recorded two-speaker memories, and listen for the next speaker at the stop. |
 
 ---
 
