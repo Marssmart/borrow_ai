@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BorrowAI — Search and filter visual guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef0f3;
+      color: #17201d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button { font: inherit; }
+
+    .workspace {
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 64px;
+    }
+    .workspace-head { margin-bottom: 24px; }
+    .eyebrow {
+      margin: 0 0 7px;
+      color: #14757b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -.045em;
+      line-height: 1;
+    }
+    h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      letter-spacing: -.02em;
+    }
+    .lede {
+      margin: 9px 0 0;
+      max-width: 820px;
+      color: #53605b;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .section { margin-top: 44px; }
+    .section-note {
+      margin: 0 0 18px;
+      max-width: 820px;
+      color: #53605b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .status-note {
+      margin: 0 0 18px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 12px;
+      line-height: 1.5;
+      max-width: 820px;
+    }
+
+    .mock-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+      gap: 28px 22px;
+    }
+    .screen-preview { min-width: 0; margin: 0; }
+    .device {
+      position: relative;
+      width: min(100%, 300px);
+      aspect-ratio: 320 / 690;
+      margin: 0 auto;
+      padding: 5px;
+      overflow: hidden;
+      border: 1px solid rgb(20 30 26 / 20%);
+      border-radius: 42px;
+      background: #183f46;
+      box-shadow: 0 19px 42px rgb(20 30 26 / 17%), 0 2px 6px rgb(20 30 26 / 12%);
+    }
+    .screen {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      gap: 9px;
+      overflow: hidden;
+      border-radius: 36px;
+      background: linear-gradient(145deg, #eaf5f4, #dcecef 55%, #dde8f6);
+      color: #123b43;
+      padding: 26px 14px 14px;
+    }
+    .screen-caption {
+      margin: 10px 0 0;
+      color: #66716b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .screen-title {
+      margin: 4px 0 2px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .card {
+      padding: 10px 12px;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 85%);
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+    }
+    .card-meta { font-size: 10px; color: #5d7c80; }
+    .card-title { font-size: 12px; font-weight: 750; margin-top: 2px; }
+    .card-body { margin-top: 4px; font-size: 11px; line-height: 1.4; color: #34413d; }
+    .hit { background: #fff1b8; border-radius: 4px; padding: 0 1px; }
+    .count { font-size: 10px; font-weight: 700; color: #47636a; }
+
+    /* search field */
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 38px;
+      padding: 0 10px;
+      border: 1px solid #a9cbd0;
+      border-radius: 14px;
+      background: #fff;
+      color: #5d7c80;
+      font-size: 12px;
+    }
+    .search.focus { border: 2px solid #14757b; padding: 0 9px; }
+    .search-text { color: #17201d; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; }
+    .search-placeholder { color: #8a9a9d; flex: 1; }
+    .search-clear { font-size: 10px; font-weight: 800; color: #14757b; }
+    .search-icon { font-size: 12px; color: #5d7c80; }
+    .caret { display: inline-block; width: 1px; height: 14px; background: #14757b; vertical-align: -2px; margin-left: 1px; }
+
+    /* chips */
+    .chip-row { display: flex; gap: 6px; overflow: hidden; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid #a9cbd0;
+      border-radius: 999px;
+      background: #fff;
+      color: #123b43;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .chip-on { background: #c9e5e7; border-color: #c9e5e7; }
+    .chip-count { font-size: 9px; color: #47636a; }
+    .chip-clear { font-size: 10px; font-weight: 800; color: #14757b; align-self: center; white-space: nowrap; }
+
+    /* buttons and states */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 32px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+      cursor: default;
+    }
+    .btn-tonal { background: #d4e6e8; color: #123b43; }
+    .btn-text { background: transparent; color: #14757b; padding: 0 6px; }
+    .no-results { margin: 14px 4px 0; text-align: left; }
+    .no-results-title { font-size: 14px; font-weight: 800; letter-spacing: -.02em; line-height: 1.3; }
+    .no-results-hint { margin: 8px 0 12px; font-size: 11px; line-height: 1.45; color: #34413d; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .dock {
+      display: flex;
+      justify-content: space-around;
+      margin-top: auto;
+      padding: 8px;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 12%);
+      font-size: 10px;
+      font-weight: 800;
+      color: #5d7c80;
+    }
+    .dock .on { color: #14757b; background: #e4f2f3; border-radius: 999px; padding: 3px 9px; }
+
+    /* keyboard mock */
+    .keyboard {
+      margin-top: auto;
+      padding: 8px 6px 10px;
+      border-radius: 16px 16px 26px 26px;
+      background: #d3dcdf;
+    }
+    .key-row { display: flex; justify-content: center; gap: 4px; margin-bottom: 5px; }
+    .key {
+      flex: 1;
+      height: 26px;
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 1px 0 #9aa8ab;
+      font-size: 9px;
+      color: #34413d;
+      display: grid;
+      place-items: center;
+    }
+    .key-wide { flex: 1.6; background: #aebcbf; }
+    .key-search { flex: 2; background: #14757b; color: #fff; font-weight: 800; }
+
+    /* menu */
+    .menu-note {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 2px 6px rgb(20 40 44 / 8%);
+      font-size: 10px;
+      line-height: 1.4;
+      color: #34413d;
+    }
+
+    .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .tag-mock { background: #fde3c8; color: #8a4b0a; }
+    .tag-android { background: #e3e7e9; color: #4a5558; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+      font-size: 13px;
+    }
+    th, td {
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #edf1f1;
+    }
+    th {
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #eef3f3;
+      padding: 1px 5px;
+      border-radius: 6px;
+    }
+
+    @media (max-width: 1000px) {
+      .mock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .mock-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="workspace-head">
+      <p class="eyebrow">BorrowAI · Feature guide</p>
+      <h1>Search and filter</h1>
+      <p class="lede">
+        Design mockups for finding saved memories on Android: the search field, category chips, the no-results and keyboard behaviour, and the matching rules.
+        Full spec: <a href="search-and-filter.html">Search and filter design</a>.
+      </p>
+    </header>
+
+    <p class="status-note">
+      <span class="tag tag-mock">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
+    </p>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 1 · Search and chips</p>
+      <h2>Search field, category chips, and count <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The search field sits above the list and matches the title, summary, and transcript. Category chips filter by one or more categories. Search and chips combine.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-placeholder">Search memories</span></div>
+            <div class="chip-row">
+              <span class="chip">Travel <span class="chip-count">4</span></span>
+              <span class="chip">Family <span class="chip-count">2</span></span>
+              <span class="chip">Work <span class="chip-count">7</span></span>
+            </div>
+            <div class="count">42 memories</div>
+            <div class="card">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="card-body">Sunday trip: meet at the station at nine, bring the tent.</div>
+            </div>
+            <div class="card">
+              <div class="card-meta">2 Nov 2026 · 17:02</div>
+              <div class="card-body">Dentist on Thursday, ask about the new time.</div>
+            </div>
+            <div class="dock"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
+          </div></div>
+          <p class="screen-caption">Default: all memories</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="search focus"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget<span class="caret"></span></span><span class="search-clear">Clear</span></div>
+            <div class="chip-row">
+              <span class="chip">Travel <span class="chip-count">4</span></span>
+              <span class="chip">Work <span class="chip-count">7</span></span>
+            </div>
+            <div class="count">Showing 3 of 42</div>
+            <div class="card">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="card-body">Trip <span class="hit">budget</span>: keep the tent and the bus fares under 40 euros.</div>
+            </div>
+            <div class="card">
+              <div class="card-meta">21 Oct 2026 · 12:30</div>
+              <div class="card-body">Summary: <span class="hit">budget</span> review moved to Friday.</div>
+            </div>
+            <div class="keyboard" aria-hidden="true">
+              <div class="key-row"><span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span></div>
+              <div class="key-row"><span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span></div>
+              <div class="key-row"><span class="key key-wide">shift</span><span class="key">z</span><span class="key">x</span><span class="key">c</span><span class="key">v</span><span class="key">b</span><span class="key">n</span><span class="key key-wide">del</span></div>
+              <div class="key-row"><span class="key key-search">Search</span></div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Searching, keyboard open</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">budget</span><span class="search-clear">Clear</span></div>
+            <div class="chip-row">
+              <span class="chip chip-on">&#10003; Travel <span class="chip-count">3</span></span>
+              <span class="chip chip-on">&#10003; Family <span class="chip-count">1</span></span>
+              <span class="chip">Work <span class="chip-count">7</span></span>
+            </div>
+            <div class="chip-row" style="justify-content:flex-end"><span class="chip-clear">Clear filters</span></div>
+            <div class="count">Showing 1 of 42</div>
+            <div class="card">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="card-body">Trip <span class="hit">budget</span>: keep the tent and the bus fares under 40 euros.</div>
+            </div>
+            <div class="menu-note">Search and category chips combine with AND. Chips combine with OR: a memory in Travel or Family matches.</div>
+            <div class="dock"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
+          </div></div>
+          <p class="screen-caption">Search and two chips</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 2 · No results</p>
+      <h2>No-results states <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">A no-results state names the query, explains what is searched, and offers the clear actions. A library with no memories at all shows the empty state from the delete design instead.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-text">dentist</span><span class="search-clear">Clear</span></div>
+            <div class="chip-row">
+              <span class="chip chip-on">&#10003; Work <span class="chip-count">7</span></span>
+            </div>
+            <div class="chip-row" style="justify-content:flex-end"><span class="chip-clear">Clear filters</span></div>
+            <div class="no-results" role="status">
+              <div class="no-results-title">No memories match &#8220;dentist&#8221;</div>
+              <p class="no-results-hint">Search covers titles, summaries, and transcripts. Memories still being transcribed are not searched yet.</p>
+              <div class="btn-row">
+                <span class="btn btn-tonal">Clear search</span>
+                <span class="btn btn-tonal">Clear filters</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Query and chip, no match</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="search"><span class="search-icon" aria-hidden="true">&#9906;</span><span class="search-placeholder">Search memories</span></div>
+            <div class="chip-row">
+              <span class="chip chip-on">&#10003; Family <span class="chip-count">2</span></span>
+              <span class="chip chip-on">&#10003; Ideas <span class="chip-count">0</span></span>
+            </div>
+            <div class="chip-row" style="justify-content:flex-end"><span class="chip-clear">Clear filters</span></div>
+            <div class="no-results" role="status">
+              <div class="no-results-title">No memories in these categories</div>
+              <p class="no-results-hint">Choose other categories, or clear the filters to see every memory.</p>
+              <div class="btn-row"><span class="btn btn-tonal">Clear filters</span></div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Chips only, no match</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen" style="justify-content:flex-start">
+            <div class="screen-title">Saved memories</div>
+            <div class="no-results">
+              <div class="no-results-title">No saved memories yet</div>
+              <p class="no-results-hint">Record a voice note and it will appear here. This is the empty state from the delete design, shown only when the library is empty.</p>
+              <div class="btn-row"><span class="btn btn-tonal">Go to Record</span></div>
+            </div>
+            <div class="dock" style="margin-top:auto"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
+          </div></div>
+          <p class="screen-caption">Empty library, not a search result</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Rules</p>
+      <h2>Matching examples <span class="tag tag-mock">Mockup</span></h2>
+      <p class="section-note">These examples describe the in-memory matcher. A term is found as a substring, in any of the three text fields, ignoring case. Every term must be found.</p>
+      <table>
+        <thead>
+          <tr><th>Query</th><th>Memory text</th><th>Result</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>budget</code></td><td>Summary: Budget review moved to Friday.</td><td>Match</td><td>Case-insensitive.</td></tr>
+          <tr><td><code>meet</code></td><td>Transcript: we meeting at nine.</td><td>Match</td><td>Substring, so the partial word matches (AC-1.7).</td></tr>
+          <tr><td><code>tent bus</code></td><td>Title: Trip. Transcript: bring the tent. Summary: check the bus.</td><td>Match</td><td>Each term matches a different field.</td></tr>
+          <tr><td><code>tent bus</code></td><td>Transcript: bring the tent only.</td><td>No match</td><td>Every term must be found.</td></tr>
+          <tr><td><code>dentist</code></td><td>Memory still being transcribed, no text yet.</td><td>No match</td><td>Pending text is never searched (AC-1.6).</td></tr>
+          <tr><td><code>café</code></td><td>Transcript: cafe with the team.</td><td>No match</td><td>Accents are not folded in v1 (Q-1).</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Keyboard and back</p>
+      <h2>Predictable keys and back presses <span class="tag tag-mock">Mockup</span></h2>
+      <table>
+        <thead>
+          <tr><th>Input</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Search key on the keyboard</td><td>Keyboard hides, results stay.</td></tr>
+          <tr><td>Scroll the list</td><td>Keyboard hides.</td></tr>
+          <tr><td>Clear button</td><td>Query is emptied, focus stays in the field.</td></tr>
+          <tr><td>Hardware Enter</td><td>Runs the search.</td></tr>
+          <tr><td>Hardware Escape</td><td>Clears the query.</td></tr>
+          <tr><td>System back, keyboard open</td><td>Hides the keyboard first.</td></tr>
+          <tr><td>System back, query open</td><td>Clears the query.</td></tr>
+          <tr><td>System back, detail view open</td><td>Returns to the list, as it does today.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

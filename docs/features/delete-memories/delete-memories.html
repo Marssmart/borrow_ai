@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete memories — BorrowAI docs</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../index.html">BorrowAI</a>
+    <nav>
+      <a href="../../index.html">Home</a>
+      <a href="../../how-it-works.html">How it works</a>
+      <a href="../../architecture.html">Architecture</a>
+      <a href="../../models-and-privacy.html">Models and privacy</a>
+      <a href="../../platforms.html">Platforms</a>
+      <a href="../../features/index.html" aria-current="page">Features</a>
+      <a href="../../design/index.html">Design guides</a>
+      <a href="../../developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="delete-memories">Delete memories</h1>
+<p>Status: Planning (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<hr />
+<h2 id="1-summary">1. Summary</h2>
+<p>A memory can be deleted in the data layer but not in the app. <code>MemoryService.delete(id)</code> is a soft delete. It sets <code>deleted = true</code>, hides the memory from <code>getState()</code>, and leaves the audio file and the record on disk. No screen calls it today. <code>DeletedMemoryPurger</code> removes the leftovers later.</p>
+<p>This design adds:</p>
+<ol type="1">
+<li>A delete action in the memory detail view, plus a TalkBack action on each list card.</li>
+<li>An Undo snackbar that lasts 10 seconds, instead of a confirmation dialog.</li>
+<li>An empty state for a library with no memories.</li>
+<li>Error handling and TalkBack behaviour for a destructive action.</li>
+</ol>
+<p>The key decision: the memory is hidden at once, but the soft delete is written only when the Undo window ends. The purger never sees the memory during the window, so Undo needs no new service method and no schema change.</p>
+<p>The UI is Android only and uses Material 3. Shared state rules live in <code>commonMain</code>.</p>
+<hr />
+<h2 id="2-goals-and-non-goals">2. Goals and non-goals</h2>
+<h3 id="goals">Goals</h3>
+<ul>
+<li>Delete a memory from its detail view in two taps, with no confirmation dialog.</li>
+<li>Undo a delete for 10 seconds. Undo restores the memory exactly as it was.</li>
+<li>Never remove audio or text while Undo is still possible.</li>
+<li>Show a useful empty state when the last memory is deleted.</li>
+<li>Give TalkBack users a delete action that does not depend on gestures.</li>
+</ul>
+<h3 id="non-goals-v1">Non-goals (v1)</h3>
+<ul>
+<li>30-day trash and restore after the window. Follow-up G27.</li>
+<li>Multi-select delete. Follow-up G28.</li>
+<li>Swipe-to-dismiss on list cards. It conflicts with the page swipe in <code>SavedMemoriesScreen.kt</code> (<code>userScrollEnabled</code>, line 144), and it still needs a non-gesture route.</li>
+<li>Deleting from the Record tab or from a speaker library screen.</li>
+<li>iOS UI and behaviour. Not designed here.</li>
+</ul>
+<hr />
+<h2 id="3-terms">3. Terms</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Soft delete</td>
+<td>Sets <code>deleted = true</code> on the memory document. The memory leaves <code>getState()</code> but stays in the database until it is purged.</td>
+</tr>
+<tr>
+<td>Purge</td>
+<td>Permanent removal of the audio file, the speaker rows, and the memory document. Done by <code>DeletedMemoryPurger</code>.</td>
+</tr>
+<tr>
+<td>Undo window</td>
+<td>The 10 seconds after a delete, while the snackbar offers Undo.</td>
+</tr>
+<tr>
+<td>Pending delete</td>
+<td>A memory hidden in the UI whose soft delete has not been written yet.</td>
+</tr>
+<tr>
+<td>Commit</td>
+<td>Calling <code>MemoryService.delete(id)</code>. Happens when the Undo window ends or when a commit trigger fires (AC-3.2, AC-3.3).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-user-stories-and-acceptance-criteria">4. User stories and acceptance criteria</h2>
+<h3 id="us-1-delete-a-memory-from-its-detail-view">US-1: Delete a memory from its detail view</h3>
+<p>As a user, I want to delete a memory from the screen where I read it.</p>
+<ul>
+<li>AC-1.1: The detail header has a <strong>More actions</strong> button (48 dp, content description "More actions for this memory"). It opens a menu with <strong>Delete memory</strong>.</li>
+<li>AC-1.2: Choosing <strong>Delete memory</strong> returns to the list and removes the memory from the list at once.</li>
+<li>AC-1.3: No confirmation dialog appears. A snackbar says "Memory deleted" with an <strong>Undo</strong> action.</li>
+<li>AC-1.4: The Undo window lasts 10 seconds. The snackbar closes when the window ends.</li>
+</ul>
+<h3 id="us-2-undo-a-delete">US-2: Undo a delete</h3>
+<ul>
+<li>AC-2.1: Tapping <strong>Undo</strong> within the window shows the memory again in its previous position (newest first), with its title, summary, transcript, categories, and recording unchanged.</li>
+<li>AC-2.2: Undo writes nothing to the database.</li>
+<li>AC-2.3: Undo does not restart playback. Playback was stopped when the delete started (AC-4.1).</li>
+</ul>
+<h3 id="us-3-the-delete-becomes-final-after-the-window">US-3: The delete becomes final after the window</h3>
+<ul>
+<li>AC-3.1: When the window ends, <code>MemoryService.delete(id)</code> is called once. The memory stays hidden.</li>
+<li>AC-3.2: Leaving the Memories tab, or sending the app to the background, commits a pending delete at once.</li>
+<li>AC-3.3: A second delete commits the first one at once. At most one memory is pending.</li>
+</ul>
+<h3 id="us-4-playing-recording-and-transcribing">US-4: Playing, recording, and transcribing</h3>
+<ul>
+<li>AC-4.1: Deleting a playing memory stops playback before the memory leaves the screen.</li>
+<li>AC-4.2: Deleting while a different memory is being recorded is allowed. The purge waits until the recording ends (the <code>isRecording</code> gates in <code>DeletedMemoryPurger.kt</code>, lines 32 and 46).</li>
+<li>AC-4.3: A memory whose transcript is still being made can be deleted. The transcription claim skips deleted memories (<code>claimNextPendingTranscription</code> in <code>KotbaseMemoryService.kt</code>), and a transcript that finishes late is refused with <code>MemoryError.NotFound</code>, because <code>completeTranscription</code> reads only active memories.</li>
+<li>AC-4.4: A memory whose save has not finished is not in the list yet, so it cannot be deleted there.</li>
+</ul>
+<h3 id="us-5-empty-library">US-5: Empty library</h3>
+<ul>
+<li>AC-5.1: When no active memories remain, the list shows an empty state. It has the heading "No saved memories yet", the text "Record a voice note and it will appear here.", and a <strong>Go to Record</strong> button.</li>
+<li>AC-5.2: An Undo snackbar can still appear above the empty state. Undo returns to the list.</li>
+<li>AC-5.3: The empty state is not shown while a recording is being saved, so a new memory does not flash it. This needs the save status exposed on <code>MediaSessionService</code> (§8).</li>
+<li>AC-5.4: The same empty state is shown on first launch with no memories.</li>
+</ul>
+<h3 id="us-6-errors">US-6: Errors</h3>
+<ul>
+<li>AC-6.1: If the commit fails with <code>MemoryError.Persistence</code> or <code>MemoryError.Malformed</code>, the memory returns to the list and a snackbar says "Couldn't delete this memory. It is still saved." It has no action.</li>
+<li>AC-6.2: If the commit returns <code>MemoryError.NotFound</code>, the memory is already gone. No error is shown, and the delete counts as done.</li>
+<li>AC-6.3: The list never hides a memory whose commit has not succeeded.</li>
+</ul>
+<h3 id="us-7-talkback-and-accessibility">US-7: TalkBack and accessibility</h3>
+<ul>
+<li>AC-7.1: Each list card exposes a custom accessibility action, "Delete memory". It starts the same flow.</li>
+<li>AC-7.2: After a delete, accessibility focus moves to the "Saved memories" heading, never to a removed node.</li>
+<li>AC-7.3: The snackbar text is announced once, and the <strong>Undo</strong> action can be reached by swipe.</li>
+</ul>
+<hr />
+<h2 id="5-flow">5. Flow</h2>
+<ol type="1">
+<li>The user chooses <strong>More actions</strong>, then <strong>Delete memory</strong>. The memory is hidden, the detail view closes, and the snackbar shows for 10 seconds.</li>
+<li><strong>Undo</strong> within the window: the memory is shown again. Nothing is written.</li>
+<li>The window ends: <code>delete(id)</code> is written once. The memory stays hidden.</li>
+<li>The next purge run removes its audio, speaker rows, and record (§8.1).</li>
+</ol>
+<hr />
+<h2 id="6-ui-android-material-3">6. UI (Android, Material 3)</h2>
+<h3 id="61-entry-points">6.1 Entry points</h3>
+<table>
+<thead>
+<tr>
+<th>Entry point</th>
+<th>Status</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>More actions</strong> menu in the detail header</td>
+<td>Primary, in v1</td>
+<td>The detail view has no bottom action bar. In detail mode the dock is replaced by <code>MemoryDetailNavBar</code> (<code>App.kt</code>, line 165).</td>
+</tr>
+<tr>
+<td>List card long-press</td>
+<td>Secondary, in v1</td>
+<td>Opens the same flow with no sheet. Discoverability is low, so the TalkBack action (AC-7.1) is the accessible route.</td>
+</tr>
+<tr>
+<td>TalkBack custom action on each card</td>
+<td>Accessible route, in v1</td>
+<td>AC-7.1.</td>
+</tr>
+<tr>
+<td>Per-card trash icon</td>
+<td>Rejected</td>
+<td>Adds noise to every card, and the list is already dense.</td>
+</tr>
+<tr>
+<td>Swipe to dismiss</td>
+<td>Rejected</td>
+<td>Conflicts with the page swipe (<code>SavedMemoriesScreen.kt</code>, line 144), and a gesture alone is not accessible.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-menu">6.2 Menu</h3>
+<ul>
+<li>A Material 3 <code>DropdownMenu</code> anchored to the <strong>More actions</strong> button in <code>MemoryDetailScreen</code>.</li>
+<li>v1 has one item, <strong>Delete memory</strong>. It uses the error colour (<code>MaterialTheme.colorScheme.error</code>, <code>#C93458</code> in the <code>BorrowColors</code> scheme in <code>App.kt</code>) and always has its text label. The colour is about 5:1 against white.</li>
+<li>Editing (G5) is a separate button, not a menu item, so destructive and editing actions are not mixed.</li>
+</ul>
+<h3 id="63-undo-snackbar">6.3 Undo snackbar</h3>
+<ul>
+<li>A Material 3 <code>Snackbar</code> with the action <strong>Undo</strong>, hosted in <code>SavedMemoriesScreen</code>. <code>App.kt</code> has no <code>SnackbarHost</code>. The snackbar must sit above <code>BottomNavBar</code>, so it uses the same bottom reserve as the pager (<code>App.kt</code>, line 126).</li>
+<li>Duration: the state holder dismisses the snackbar when its own 10-second timer ends. The timer decides the commit time, not a snackbar preset.</li>
+<li>Text: "Memory deleted". Action: "Undo".</li>
+<li>Only one snackbar at a time. A second delete commits the first (AC-3.3) and shows the new message.</li>
+</ul>
+<h3 id="64-empty-state">6.4 Empty state</h3>
+<ul>
+<li>Shown in the list page, below the heading, when no active memories exist and no save is pending (AC-5.3).</li>
+<li>Heading (<code>headlineSmall</code>, marked as a heading for TalkBack): "No saved memories yet". Body (<code>bodyMedium</code>): "Record a voice note and it will appear here." Button (<code>FilledTonalButton</code>): <strong>Go to Record</strong>, which calls <code>appStateHolder.navigateToPage(CAPTURE_PAGE)</code>.</li>
+<li>The empty state replaces the cards only. The "Saved memories" heading stays.</li>
+</ul>
+<h3 id="65-error-snackbar">6.5 Error snackbar</h3>
+<ul>
+<li>"Couldn't delete this memory. It is still saved." It has no action and can be dismissed.</li>
+<li>The memory reappears by itself, because it was never hidden in the database (AC-6.3).</li>
+</ul>
+<h3 id="66-screen-states">6.6 Screen states</h3>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>What the user sees</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Normal</td>
+<td>List of cards. <strong>More actions</strong> in each detail view.</td>
+</tr>
+<tr>
+<td>Pending delete</td>
+<td>Memory gone from the list. Snackbar "Memory deleted" with <strong>Undo</strong>, for 10 seconds.</td>
+</tr>
+<tr>
+<td>Committed</td>
+<td>Snackbar gone. Memory stays hidden until it is purged.</td>
+</tr>
+<tr>
+<td>Commit failed</td>
+<td>Memory back in the list. Error snackbar, no undo.</td>
+</tr>
+<tr>
+<td>Empty library</td>
+<td>Empty state (AC-5.1).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-accessibility">7. Accessibility</h2>
+<ul>
+<li>Touch targets: <strong>More actions</strong>, menu items, and <strong>Undo</strong> are at least 48 dp.</li>
+<li>Labels: the <strong>More actions</strong> button has the content description "More actions for this memory". The menu item is the text "Delete memory". Neither depends on colour or icon shape.</li>
+<li>Focus after delete: accessibility focus moves to the "Saved memories" heading. The heading must be focusable (<code>Modifier.focusable()</code>) and request focus after the card is removed (AC-7.2).</li>
+<li>Announcements: the snackbar text is announced once. The app already uses <code>LiveRegionMode.Polite</code> for status text (<code>BorrowCaptureScreen.kt</code>, line 261). The error snackbar follows the same pattern.</li>
+<li>Timing: 10 seconds is the minimum. Check it with TalkBack on a device, and lengthen the window if users need more time (Q-1).</li>
+<li>Empty state: the heading is a real heading for TalkBack. The <strong>Go to Record</strong> button has a plain label.</li>
+</ul>
+<hr />
+<h2 id="8-service-and-data-changes">8. Service and data changes</h2>
+<p>No schema change and no new storage. The commit timing lives in the UI state holder. The purger is unchanged.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt</code></td>
+<td>Add the pending-delete state (memory id and deadline), plus request, undo, and commit functions. Filter the pending memory out of <code>uiState.memories</code> (<code>updateMemories</code>, line 144). Call <code>mediaSessionService.stopPlayback()</code> when the playing target is the memory being deleted. Commit on tab leave, on background, and on a second delete.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/PendingMemoryDelete.kt</code> (new)</td>
+<td>A pure class for the window and commit rules, so the rules can be unit tested without Compose.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt</code></td>
+<td><strong>More actions</strong> button and <code>DropdownMenu</code> in <code>MemoryDetailScreen</code> (line 388). Long-press and the TalkBack custom action in <code>MemoryCard</code> (line 272). <code>SnackbarHost</code>. Empty state in <code>MemoryListScreen</code> (line 225).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/App.kt</code></td>
+<td>Pass a "go to Record" callback into <code>SavedMemoriesScreen</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MediaSessionService.kt</code></td>
+<td>Expose whether a save is pending. <code>RecordingMediaSessionService</code> already has <code>isBusy</code> (line 368), but the interface does not. Needed for AC-5.3.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/composeResources/values/memory_strings.xml</code></td>
+<td>New strings for the menu item, snackbar, Undo, error, empty state, and content descriptions.</td>
+</tr>
+</tbody>
+</table>
+<p>Verified and unchanged:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Why it stays as it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MemoryService.kt</code></td>
+<td><code>delete</code> (line 41) and <code>purge</code> (line 44) already exist.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryService.kt</code></td>
+<td><code>delete</code> (line 158) sets the flag, and <code>readActive</code> refuses deleted memories.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/DeletedMemoryPurger.kt</code></td>
+<td>The purge order and gates are already right (§8.1).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/RecordingReconciler.kt</code></td>
+<td><code>findAll</code> includes deleted memories, so their paths are in <code>pairedPaths</code> (line 57). Their audio is not recreated.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="81-what-the-purger-removes-later">8.1 What the purger removes later</h3>
+<p><code>DeletedMemoryPurger</code> handles each deleted memory in this order (<code>DeletedMemoryPurger.kt</code>, lines 49 to 59):</p>
+<ol type="1">
+<li>Audio: the <code>recordingPath</code>, and <code>recordings/&lt;id&gt;.m4a</code>, unless an active memory still uses that path.</li>
+<li>Speaker rows: <code>speakerService.deleteForMemory(id)</code>. If this fails, the record stays.</li>
+<li>The record: <code>memoryService.purge(id)</code>.</li>
+</ol>
+<p>A failed step keeps the record, so the next run retries. The purger is created in <code>AppServices.kt</code> (line 286). It runs at launch and then every 15 minutes (<code>DEFAULT_INTERVAL_MILLIS</code>, line 84). It waits while a recording is in progress. Its work shows as <strong>Cleaning up</strong> in the background activity pill.</p>
+<h3 id="82-why-not-delete-immediately-and-restore">8.2 Why not delete immediately and restore?</h3>
+<p>An immediate soft delete plus a <code>restore(id)</code> method would also work. But the purger would then need a grace period, so it knows when the memory was deleted. That needs a new field (<code>deletedAtEpochMillis</code>) and a schema change. The deferred commit gives the same result for the user without either change. Q-2 records this decision.</p>
+<hr />
+<h2 id="9-platform-split">9. Platform split</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Location</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>State and commit rules</td>
+<td><code>commonMain</code></td>
+<td><code>PendingMemoryDelete</code> and the state holder changes</td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>commonMain</code>, Compose Material 3</td>
+<td>Menu, snackbar, empty state, TalkBack action</td>
+</tr>
+<tr>
+<td>Playback stop</td>
+<td><code>commonMain</code>, through <code>MediaSessionService</code></td>
+<td>The existing <code>stopPlayback()</code></td>
+</tr>
+<tr>
+<td>Purge</td>
+<td><code>commonMain</code> (<code>DeletedMemoryPurger</code>)</td>
+<td>No change</td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>Not designed here</td>
+<td>The shared changes compile on iOS, but iOS screens and behaviour are out of scope</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10-risks">10. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The app is killed during the Undo window</td>
+<td>The delete is lost, and the memory returns on the next launch</td>
+<td>Safe failure: nothing is removed. Documented in this doc.</td>
+</tr>
+<tr>
+<td>Several deletes in a row</td>
+<td>Several commits to track</td>
+<td>At most one pending delete (AC-3.3).</td>
+</tr>
+<tr>
+<td>TalkBack users miss the window</td>
+<td>Undo is not reached in time</td>
+<td>10 seconds minimum, and a device test (Q-1).</td>
+</tr>
+<tr>
+<td>The commit runs for a memory that another path already removed</td>
+<td><code>NotFound</code></td>
+<td>Treated as done (AC-6.2).</td>
+</tr>
+<tr>
+<td>Playback continues for a hidden memory</td>
+<td>Confusion, and audio plays after the delete</td>
+<td>Playback stops when the delete is requested (AC-4.1).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-open-questions">11. Open questions</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q-1</td>
+<td>Is 10 seconds enough with TalkBack on?</td>
+<td><strong>Open.</strong> Test on a device, and lengthen the window if needed.</td>
+</tr>
+<tr>
+<td>Q-2</td>
+<td>Should the design use an immediate soft delete, plus <code>restore(id)</code> and a purge grace period?</td>
+<td><strong>Decided: no</strong> for v1 (§8.2). Revisit when the 30-day trash (G27) is designed.</td>
+</tr>
+<tr>
+<td>Q-3</td>
+<td>Should a long recording (for example, over 5 minutes) need a confirmation dialog?</td>
+<td><strong>Open.</strong> Default: no.</td>
+</tr>
+<tr>
+<td>Q-4</td>
+<td>Keep the long-press shortcut as well as the TalkBack action?</td>
+<td><strong>Open.</strong> Default: keep both.</td>
+</tr>
+<tr>
+<td>Q-5</td>
+<td>Should any memory require a confirmation dialog?</td>
+<td><strong>Decided: no.</strong> Undo is the safety net.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="12-phased-rollout">12. Phased rollout</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Exit criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1 State and commit</td>
+<td><code>PendingMemoryDelete</code>, state holder changes, playback stop, commit on leave, background, and second delete</td>
+<td>commonTest green (§13). No audio file is removed inside the window.</td>
+</tr>
+<tr>
+<td>P2 UI</td>
+<td><strong>More actions</strong> menu, Undo snackbar, empty state, error snackbar, focus after delete</td>
+<td>US-1, US-3, US-5, and US-6 met on Android.</td>
+</tr>
+<tr>
+<td>P3 Accessibility</td>
+<td>TalkBack custom action, long-press, announcements, focus</td>
+<td>US-7 met with TalkBack on a device.</td>
+</tr>
+<tr>
+<td>P4 Follow-ups (not scheduled)</td>
+<td>30-day trash (G27), multi-select (G28)</td>
+<td>Separate design documents.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="13-test-plan">13. Test plan</h2>
+<h3 id="unit-commontest">Unit (commonTest)</h3>
+<ul>
+<li><code>PendingMemoryDelete</code>: undo inside the window writes nothing (the <code>FakeMemoryService</code> test double records no <code>delete</code> call).</li>
+<li>The window end commits once. A second delete commits the first at once.</li>
+<li>Leaving the tab or backgrounding commits the pending delete.</li>
+<li>A playing memory is stopped when its delete is requested.</li>
+<li>A <code>Persistence</code> commit failure makes the memory visible again and sets the error message.</li>
+<li>A <code>NotFound</code> commit result is treated as success.</li>
+<li>The empty state is derived only when no memories are active and no save is pending.</li>
+</ul>
+<p>Source files: <code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/FakeMemoryService.kt</code> (test double), and <code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/recording/DeletedMemoryPurgerTest.kt</code> (existing purge tests, extended to cover the window).</p>
+<h3 id="instrumented-androidinstrumentedtest">Instrumented (androidInstrumentedTest)</h3>
+<ul>
+<li><code>KotbaseMemoryServiceTest</code> (<code>composeApp/src/androidInstrumentedTest/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryServiceTest.kt</code>): a deleted memory is absent from <code>getState()</code>, <code>purge</code> removes its document, and deleting it again returns <code>NotFound</code>.</li>
+<li>Compose UI tests for the menu, snackbar, and empty state need a UI test dependency. <code>composeApp/build.gradle.kts</code> has none today, so this is an open decision.</li>
+</ul>
+<h3 id="manual-device">Manual (device)</h3>
+<ul>
+<li>Delete from the detail view, then tap <strong>Undo</strong> within 10 seconds. The memory returns in place.</li>
+<li>Wait out the window. Confirm the memory stays hidden. After the next launch, confirm its files under <code>recordings/</code> are gone.</li>
+<li>Force-quit inside the window. Confirm the memory returns and nothing was removed.</li>
+<li>Delete a playing memory. Playback stops.</li>
+<li>Delete while another memory is being recorded. The purge waits until the recording ends.</li>
+<li>Full TalkBack walk-through: menu, snackbar, Undo, focus after delete, and the empty state.</li>
+</ul>
+<hr />
+<h2 id="14-definition-of-done">14. Definition of done</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />The window, commit triggers, and failure handling match §4 and §8.</label></li>
+<li><label><input type="checkbox" />No audio file is removed inside the Undo window (test and device).</label></li>
+<li><label><input type="checkbox" />The TalkBack walk-through passes on Android.</label></li>
+<li><label><input type="checkbox" /><code>visual-guide.html</code> matches the built UI, or the differences are noted.</label></li>
+<li><label><input type="checkbox" />Follow-ups G27 and G28 are listed and not started.</label></li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

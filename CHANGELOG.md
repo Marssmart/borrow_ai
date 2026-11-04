@@ -4,6 +4,8 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+- Added design docs and visual guides for four Android features: delete memories (`features/delete-memories/`), edit memories (`features/edit-memories/`), search and filter (`features/search-and-filter/`), and playback and capture controls (`features/playback-and-capture-controls/`). They are listed on the documentation site's Features page.
+
 ## [1.9.7]
 
 - Added GPU acceleration for the on-device summary and category model on Android. It uses the GPU on the MID and LATEST device tiers, and falls back to the CPU once if the GPU fails.

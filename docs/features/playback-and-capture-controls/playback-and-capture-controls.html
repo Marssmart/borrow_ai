@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playback and capture controls — BorrowAI docs</title>
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../index.html">BorrowAI</a>
+    <nav>
+      <a href="../../index.html">Home</a>
+      <a href="../../how-it-works.html">How it works</a>
+      <a href="../../architecture.html">Architecture</a>
+      <a href="../../models-and-privacy.html">Models and privacy</a>
+      <a href="../../platforms.html">Platforms</a>
+      <a href="../../features/index.html" aria-current="page">Features</a>
+      <a href="../../design/index.html">Design guides</a>
+      <a href="../../developing.html">Developing</a>
+    </nav>
+  </header>
+  <main>
+<article>
+<h1 id="playback-and-capture-controls">Playback and capture controls</h1>
+<p>Status: Planning (draft v0.1) Visual guide: <a href="./visual-guide.html">visual-guide.html</a> Owner: BorrowAI native team</p>
+<hr />
+<h2 id="1-summary">1. Summary</h2>
+<p>Playback and recording are minimal today.</p>
+<ul>
+<li>Playback has <strong>play</strong> and <strong>stop</strong> only. <code>AudioPlayer</code> exposes <code>play(path)</code> and <code>stop()</code> (<code>AudioPlayer.kt</code>, lines 9 and 12). The detail view shows no progress.</li>
+<li>Playback stops when another app takes audio focus (<code>AndroidAudioPlayer.kt</code>, lines 17 to 22). It is not paused, so the position is lost.</li>
+<li>Recording has <strong>start</strong> and <strong>stop</strong> only (<code>AudioRecorder.kt</code>, lines 12 and 15). There is no pause.</li>
+<li>Memories store no duration. <code>RecordingResult.elapsedMillis</code> is computed when a recording stops (<code>RecordingMediaSessionService.kt</code>, line 348). It is shown on the capture screen, then dropped. <code>MemoryDraft</code> has no duration field (<code>Memory.kt</code>, line 323).</li>
+</ul>
+<p>This design adds:</p>
+<ol type="1">
+<li>A seek bar with elapsed and total time, skip back and forward 15 seconds, and play and pause, in the detail view.</li>
+<li>Playback speed: 0.75×, 1×, 1.25×, 1.5×, and 2×.</li>
+<li>Pause that keeps the position, and interruptions that pause instead of stopping.</li>
+<li>Pause and resume during tap-to-record.</li>
+<li>A stored duration for each memory, taken from the audio file, so pauses are not counted. Older memories show "Duration unknown" until they are played.</li>
+</ol>
+<p>Background playback with notification and lock-screen controls is out of scope for v1. It needs its own design (§12, P5). The UI is Android only and uses Material 3.</p>
+<hr />
+<h2 id="2-goals-and-non-goals">2. Goals and non-goals</h2>
+<h3 id="goals">Goals</h3>
+<ul>
+<li>Show elapsed and total time for a memory, and let the user seek.</li>
+<li>Skip back and forward 15 seconds.</li>
+<li>Change playback speed without changing pitch.</li>
+<li>Pause and resume playback, keeping the position.</li>
+<li>Pause and resume a recording without losing audio or time.</li>
+<li>Pause, not stop, when another app or a call takes the audio.</li>
+<li>Store a duration for every memory saved after this release, and show an honest "Duration unknown" for older ones.</li>
+</ul>
+<h3 id="non-goals-v1">Non-goals (v1)</h3>
+<ul>
+<li>Background playback, notification, and lock-screen controls (P5).</li>
+<li>Pause during hold-to-record. A press-and-hold recording ends on release.</li>
+<li>Trimming, editing, or re-recording audio.</li>
+<li>Waveforms.</li>
+<li>Saving the speed between launches. It resets to 1× when the app starts (Q-4).</li>
+<li>Playback speed for live transcription. Not applicable.</li>
+<li>iOS UI and behaviour. The shared interfaces change so that iOS still compiles, but no iOS behaviour is designed here.</li>
+</ul>
+<hr />
+<h2 id="3-terms">3. Terms</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Position</td>
+<td>Where the player is in the file, in milliseconds. Read from the player.</td>
+</tr>
+<tr>
+<td>Seek</td>
+<td>Moving the position to a chosen time.</td>
+</tr>
+<tr>
+<td>Skip</td>
+<td>Moving the position by ±15 seconds, clamped to the start and the end.</td>
+</tr>
+<tr>
+<td>Speed</td>
+<td>The playback rate: 0.75×, 1×, 1.25×, 1.5×, or 2×. Pitch stays the same.</td>
+</tr>
+<tr>
+<td>Pause</td>
+<td>Stopping the output and keeping the position. The audio focus is released while paused.</td>
+</tr>
+<tr>
+<td>Interruption</td>
+<td>Another app or a call takes the audio focus while the memory plays.</td>
+</tr>
+<tr>
+<td>Active elapsed</td>
+<td>The recording time that was not paused. This equals the audio length in the file.</td>
+</tr>
+<tr>
+<td>Duration</td>
+<td>The length of the finished audio file, read from the file.</td>
+</tr>
+<tr>
+<td>Duration unknown</td>
+<td>A memory saved before this release that has not been played yet, so no duration is stored.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-user-stories-and-acceptance-criteria">4. User stories and acceptance criteria</h2>
+<h3 id="us-1-seek-and-see-the-time">US-1: Seek and see the time</h3>
+<p>As a user, I want to see how far into a memory I am and move to a point in it.</p>
+<ul>
+<li>AC-1.1: The playback panel in the detail view shows the elapsed time on the left and the total on the right, as m:ss, or h:mm:ss for an hour or more.</li>
+<li>AC-1.2: A seek bar (Material 3 <code>Slider</code>) spans the panel. Dragging it moves the position. If playback was running, it continues from the new position.</li>
+<li>AC-1.3: The position updates at least four times a second while playing (every 250 ms).</li>
+<li>AC-1.4: Seeking while paused keeps the pause.</li>
+<li>AC-1.5: When playback reaches the end, it pauses at the end. The play button then plays again from the start.</li>
+<li>AC-1.6: The seek bar and total time show "Duration unknown" for a legacy memory until it has been played once (US-7). Play still works.</li>
+</ul>
+<h3 id="us-2-skip-15-seconds">US-2: Skip 15 seconds</h3>
+<ul>
+<li>AC-2.1: <strong>Back 15 seconds</strong> and <strong>Forward 15 seconds</strong> buttons sit either side of play and pause.</li>
+<li>AC-2.2: A skip is clamped at 0 and at the total duration.</li>
+<li>AC-2.3: Skip works while playing and while paused.</li>
+<li>AC-2.4: The forward skip is disabled while the duration is unknown. The back skip is still available.</li>
+</ul>
+<h3 id="us-3-change-the-speed">US-3: Change the speed</h3>
+<ul>
+<li>AC-3.1: A speed button shows the current speed, for example "1×". Pressing it opens a menu with 0.75×, 1×, 1.25×, 1.5×, and 2×. The current choice is marked as selected.</li>
+<li>AC-3.2: Changing the speed applies at once. It keeps the position and the playing or paused state.</li>
+<li>AC-3.3: The speed applies to every memory for the rest of the app session, and resets to 1× when the app starts.</li>
+<li>AC-3.4: Pitch stays at its natural value. The speed is set with <code>PlaybackParams</code> (pitch 1.0).</li>
+</ul>
+<h3 id="us-4-pause-and-resume-playback">US-4: Pause and resume playback</h3>
+<ul>
+<li>AC-4.1: While a memory plays, its play button shows <strong>Pause</strong>. Pausing keeps the position.</li>
+<li>AC-4.2: <strong>Play</strong> resumes from the paused position.</li>
+<li>AC-4.3: Only one memory plays at a time. Starting another stops the first, as today.</li>
+<li>AC-4.4: The list card and the detail view show the same playing and paused state for a memory.</li>
+<li>AC-4.5: Pausing releases the audio focus, so other apps can play while the memory is paused. Resuming requests it again.</li>
+</ul>
+<h3 id="us-5-pause-and-resume-a-recording">US-5: Pause and resume a recording</h3>
+<ul>
+<li>AC-5.1: While a tap-to-record recording runs, a <strong>Pause</strong> button appears under the microphone button. While paused, a <strong>Resume</strong> button replaces it.</li>
+<li>AC-5.2: Resume continues the same file. Pausing leaves no gap in the audio file.</li>
+<li>AC-5.3: The microphone button still stops and saves the recording, whether it is paused or running.</li>
+<li>AC-5.4: Hold-to-record shows no pause control.</li>
+<li>AC-5.5: The elapsed time counts only active recording time. It stops while paused.</li>
+<li>AC-5.6: Live transcription pauses with the recording. The live text stops changing while paused, and resumes with the recording.</li>
+<li>AC-5.7: The notification text changes to "Recording paused" while paused, and back to "Borrow AI is recording from the microphone" on resume.</li>
+</ul>
+<h3 id="us-6-interruptions-pause-they-do-not-stop">US-6: Interruptions pause, they do not stop</h3>
+<ul>
+<li>AC-6.1: When another app takes the audio focus during playback, playback pauses at the current position. The state is "paused by another app", and the panel shows the notice "Paused because another app started audio."</li>
+<li>AC-6.2: When a transient loss ends (the focus is regained), playback resumes only if it was playing before the interruption. A permanent loss leaves it paused, and nothing resumes it by itself.</li>
+<li>AC-6.3: A headset unplugged during playback pauses it (<code>ACTION_AUDIO_BECOMING_NOISY</code>). This is in P2 by default (Q-6).</li>
+<li>AC-6.4: A call or another interruption during a recording must not lose the audio already captured. The recording saves what it has (Q-2). The user sees a message that says so.</li>
+</ul>
+<h3 id="us-7-duration">US-7: Duration</h3>
+<ul>
+<li>AC-7.1: Every memory saved after this release stores its duration in milliseconds, read from the finished file.</li>
+<li>AC-7.2: A memory saved before this release shows "Duration unknown" and no estimated total. Its duration is stored the first time it is played.</li>
+<li>AC-7.3: The stored duration is the audio length. It excludes paused time, because the file does.</li>
+<li>AC-7.4: A duration is never overwritten once it is stored.</li>
+</ul>
+<hr />
+<h2 id="5-flow">5. Flow</h2>
+<h3 id="51-playback">5.1 Playback</h3>
+<ol type="1">
+<li>The user taps <strong>Play</strong>. The service asks the player to play the file, and receives the duration from the player.</li>
+<li>If the memory has no stored duration, the duration is saved (AC-7.2).</li>
+<li>The service polls the player's position every 250 ms and publishes it.</li>
+<li><strong>Pause</strong> stops the output, keeps the position, and releases the audio focus.</li>
+<li><strong>Play</strong> requests the audio focus and resumes from the position.</li>
+<li>At the end of the file, playback pauses at the end.</li>
+<li>A platform interruption pauses playback and sets the notice. Regaining focus resumes it only if it was playing.</li>
+</ol>
+<h3 id="52-recording">5.2 Recording</h3>
+<ol type="1">
+<li>Tap to start. The service starts the recorder and the live transcriber (as today).</li>
+<li>Tap <strong>Pause</strong>. The recorder pauses (no audio is written), the live transcriber pauses, the elapsed time stops, and the notification changes.</li>
+<li>Tap <strong>Resume</strong>. The recorder and the live transcriber resume, and the elapsed time continues.</li>
+<li>Tap the microphone button. The recorder finishes the file, and the memory is saved with the active duration (as today, plus the duration).</li>
+</ol>
+<hr />
+<h2 id="6-ui-android-material-3">6. UI (Android, Material 3)</h2>
+<h3 id="61-playback-panel-in-the-detail-view">6.1 Playback panel in the detail view</h3>
+<p>The current <code>AudioPlaybackButtons</code> (<code>SavedMemoriesScreen.kt</code>, line 564) becomes a <code>PlaybackPanel</code>. It has three rows:</p>
+<ol type="1">
+<li>A full-width <code>Slider</code> (<code>valueRange</code> 0 to the duration). It is disabled while the duration is unknown.</li>
+<li>Time labels: elapsed on the left, total on the right (AC-1.1).</li>
+<li>Controls: <strong>Back 15 seconds</strong>, a 56 dp filled <strong>Play</strong> or <strong>Pause</strong> button, <strong>Forward 15 seconds</strong>, and the speed button on the right.</li>
+</ol>
+<p>A notice line appears under the controls when the platform paused playback (AC-6.1). It uses <code>bodySmall</code>.</p>
+<p>Icons are drawn with <code>Canvas</code>, as the app already does for its navigation icons (<code>drawBackArrow</code> in <code>BottomNavBar.kt</code>, line 188). The app has no icon dependency. Adding Material Icons Extended is an option (Q-9), but it is not needed for this set.</p>
+<h3 id="62-list-card">6.2 List card</h3>
+<ul>
+<li><code>PlaybackButton</code> (<code>SavedMemoriesScreen.kt</code>, line 582) shows <strong>Pause</strong> while the memory plays and <strong>Play</strong> otherwise.</li>
+<li>A duration label, such as "1:05", sits next to the date when the duration is known (P3, Q-8).</li>
+</ul>
+<h3 id="63-capture-screen">6.3 Capture screen</h3>
+<ul>
+<li>While recording in tap mode, a secondary <strong>Pause</strong> button (<code>OutlinedButton</code>, 48 dp) sits under the microphone button. The microphone is <code>MicrophoneButton</code> in <code>BorrowCaptureScreen.kt</code> (line 314).</li>
+<li>While paused, the microphone label shows "Paused" and its elapsed time is frozen. A <strong>Resume</strong> button (<code>FilledTonalButton</code>) replaces <strong>Pause</strong>.</li>
+<li>Hold-to-record shows no pause control (AC-5.4). The gesture code (<code>detectTapGestures</code> and <code>onLongPress</code>, lines 448 and 458) is unchanged.</li>
+<li>The state comes from <code>CaptureUiStateHolder</code> (<code>toggleRecording</code>, line 37, and <code>stopRecording</code>, line 69).</li>
+</ul>
+<h3 id="64-speed-menu">6.4 Speed menu</h3>
+<ul>
+<li>A Material 3 <code>DropdownMenu</code> with five <code>DropdownMenuItem</code>s, each with a radio-style selected state.</li>
+<li>The button label is the current speed. The menu closes after a choice.</li>
+</ul>
+<h3 id="65-states">6.5 States</h3>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>What the user sees</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Idle</td>
+<td>Play button, slider at 0, times "0:00" and total (or "Duration unknown").</td>
+</tr>
+<tr>
+<td>Playing</td>
+<td>Pause button, slider moves, elapsed time updates.</td>
+</tr>
+<tr>
+<td>Paused by user</td>
+<td>Play button, position kept.</td>
+</tr>
+<tr>
+<td>Paused by another app</td>
+<td>Play button, position kept, notice "Paused because another app started audio."</td>
+</tr>
+<tr>
+<td>Ended</td>
+<td>Paused at the end. Play button restarts from 0.</td>
+</tr>
+<tr>
+<td>Duration unknown</td>
+<td>Slider disabled, total "Duration unknown", forward skip disabled.</td>
+</tr>
+<tr>
+<td>Recording</td>
+<td>Pause button under the microphone, elapsed running.</td>
+</tr>
+<tr>
+<td>Recording paused</td>
+<td>"Paused" label, elapsed frozen, Resume button.</td>
+</tr>
+<tr>
+<td>Recording interrupted</td>
+<td>Message: "Recording was interrupted. The audio up to here was saved." (Q-2).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-accessibility">7. Accessibility</h2>
+<ul>
+<li>The slider has the content description "Playback position" and the state description "0:24 of 1:05". TalkBack's adjustable actions step it.</li>
+<li>The skip buttons are labelled "Back 15 seconds" and "Forward 15 seconds". Each is a button role.</li>
+<li>Play and Pause have explicit labels: "Play recording" or "Pause recording", not only an icon.</li>
+<li>The speed button is labelled "Playback speed, 1×". Its menu items are radio items, and TalkBack reads the selected one.</li>
+<li>After a skip, the new time is announced once, as a polite live region. The slider itself is not announced on every frame.</li>
+<li>A platform pause is announced once: "Playback paused. Another app started audio."</li>
+<li>A recording pause or resume is announced once: "Recording paused" or "Recording resumed". The microphone button's state description reads "Paused at 0:42" while paused.</li>
+<li>All touch targets are at least 48 dp, including the slider thumb.</li>
+<li>Scrubbing must not change the memory page. Test that a drag starting on the slider does not flip the pager, and that a swipe elsewhere on the page still does (the pager is <code>SavedMemoriesScreen.kt</code>, line 144).</li>
+</ul>
+<hr />
+<h2 id="8-service-and-data-changes">8. Service and data changes</h2>
+<h3 id="81-why-the-position-comes-from-the-player">8.1 Why the position comes from the player</h3>
+<p>Playback elapsed time is calculated from a monotonic clock today (<code>startPlaybackTicker</code>, <code>RecordingMediaSessionService.kt</code>, line 198). That clock keeps running through a pause, a seek, and a speed change, so it drifts from the audio. The player's position is the only correct value, so the service reads it (<code>AudioPlayer.positionMillis()</code>).</p>
+<p>The current playback tick is one second (<code>TICK_INTERVAL_MILLIS</code>, line 401). That is too coarse for a seek bar, so playback polls every 250 ms. The recording tick stays at one second.</p>
+<h3 id="82-why-the-duration-comes-from-the-file">8.2 Why the duration comes from the file</h3>
+<p>The recording timer uses the wall clock (<code>epochClock.nowEpochMillis()</code>, lines 313 and 380). It counts paused time, while the file does not, because <code>MediaRecorder.pause()</code> stops writing. So the stored duration must come from the file.</p>
+<ul>
+<li>New recordings: read <code>METADATA_KEY_DURATION</code> from the finished file with <code>MediaMetadataRetriever</code> (API 10) when the recording is saved.</li>
+<li>Legacy memories: the duration returned by <code>MediaPlayer</code> when the memory is first played (<code>AndroidAudioPlayer.kt</code>, line 35) is stored. No extra file read is needed.</li>
+</ul>
+<h3 id="83-files-that-change">8.3 Files that change</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/AudioPlayer.kt</code></td>
+<td>New members with defaults: <code>pause()</code>, <code>resume()</code>, <code>seekTo(positionMillis)</code>, <code>positionMillis()</code>, <code>setSpeed(speed)</code>, and <code>controlsAvailable</code> (default false). The interruption handler receives <code>PlaybackInterruption</code> (new enum: <code>TRANSIENT</code>, <code>PERMANENT</code>). The existing <code>play(path)</code> and <code>stop()</code> stay as they are.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/androidMain/kotlin/org/deer/borrowai/data/service/recording/AndroidAudioPlayer.kt</code></td>
+<td>Implement the new members with <code>MediaPlayer.pause()</code>, <code>start()</code>, <code>seekTo(Int)</code>, <code>currentPosition</code>, and <code>setPlaybackParams(PlaybackParams().setSpeed(speed).setPitch(1f))</code>. Change the focus listener (lines 17 to 22): transient loss and duck pause with <code>TRANSIENT</code>, and permanent loss pauses with <code>PERMANENT</code>. Abandon focus on pause, and request it on resume (AC-4.5).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/iosMain/kotlin/org/deer/borrowai/data/service/recording/IosAudioPlayer.kt</code></td>
+<td>Compiles with the new interface. Changes are limited to the handler type. No iOS behaviour is designed here.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/AudioRecorder.kt</code></td>
+<td>New members with defaults: <code>pause()</code>, <code>resume()</code>, and <code>pauseAvailable</code> (default false).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/androidMain/kotlin/org/deer/borrowai/data/service/recording/AndroidAudioRecorder.kt</code></td>
+<td>Implement <code>pause()</code> and <code>resume()</code> with <code>MediaRecorder</code> (API 24, equal to minSdk). Add an <code>OnErrorListener</code>. The current code sets none (verified: no <code>setOnErrorListener</code> in <code>androidMain</code>), so a recorder error is not seen until stop.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/LiveTranscriber.kt</code></td>
+<td>New members with defaults: <code>pause()</code> and <code>resume()</code>. The interface today has <code>start</code> (line 14) and <code>stop</code> (line 17) only.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/androidMain/kotlin/org/deer/borrowai/data/service/speech/AndroidLiveTranscriber.kt</code></td>
+<td>Implement pause and resume by stopping and restarting the feed to the engine. It has its own <code>AudioRecord</code> (line 314, started at line 204), so pausing the recorder alone would not pause it.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MediaSessionService.kt</code></td>
+<td><code>Playing</code> (line 52) gets <code>paused: Boolean = false</code> and <code>speed: Float = 1f</code>. <code>Recording</code> (line 44) gets <code>paused: Boolean = false</code>. The interface (line 82) gets <code>pausePlayback()</code>, <code>resumePlayback()</code>, <code>seekPlayback(positionMillis)</code>, <code>skipPlayback(deltaMillis)</code>, <code>setPlaybackSpeed(speed)</code>, <code>pauseRecording()</code>, <code>resumeRecording()</code>, and <code>recordingPauseAvailable</code>, all with defaults.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/recording/RecordingMediaSessionService.kt</code></td>
+<td>Playback: pause, resume, seek, skip, speed, and end-of-file pause. The interruption handler (line 74) pauses instead of calling <code>stopActivePlayback()</code> (line 216). The position ticker replaces the clock-based one (line 198). Recording: pause and resume. Active elapsed time is the monotonic time minus paused time (<code>monotonicMillisSinceStart</code>, line 407). <code>RecordingResult.elapsedMillis</code> (line 348) is the active elapsed time. The memory is saved with its duration (<code>MemoryDraft</code>, built around line 320). On a first play with no stored duration, <code>recordDuration</code> is called.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/Memory.kt</code></td>
+<td>Add <code>durationMillis: Long? = null</code> to <code>Memory</code> (line 34) and to <code>MemoryDraft</code> (line 323). Additive, so older documents read as <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/MemoryService.kt</code></td>
+<td>Add <code>recordDuration(id, durationMillis)</code>. It writes only when no duration is stored (AC-7.4).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryService.kt</code></td>
+<td>Store <code>durationMillis</code> in a new column (<code>create</code>, line 79; <code>applyTo</code>, line 487; <code>toMemory</code>, line 509; <code>queryRows</code>, line 385). Implement <code>recordDuration</code> with <code>updateActive</code> (line 276), guarded by "only when null".</td>
+</tr>
+<tr>
+<td><code>composeApp/src/androidMain/kotlin/org/deer/borrowai/data/service/recording/MicrophoneForegroundService.kt</code></td>
+<td>Update the notification text while paused (the text is <code>CONTENT_TEXT</code>, line 63). The foreground type stays <code>microphone</code> (line 28).</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesStateHolder.kt</code></td>
+<td><code>togglePlayback</code> (line 110) pauses and resumes instead of stopping. Add seek, skip, speed, and the platform-pause notice.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/SavedMemoriesScreen.kt</code></td>
+<td><code>PlaybackPanel</code> replaces <code>AudioPlaybackButtons</code> (line 564) and <code>PlaybackButton</code> (line 582). The card shows Pause while playing.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/BorrowCaptureScreen.kt</code></td>
+<td>Pause and Resume buttons under <code>MicrophoneButton</code> (line 314), and the paused label and state description.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/kotlin/org/deer/borrowai/CaptureUiStateHolder.kt</code></td>
+<td>Pause and resume actions, and the paused flag. The stop path (line 69) is unchanged.</td>
+</tr>
+<tr>
+<td><code>composeApp/src/commonMain/composeResources/values/memory_strings.xml</code> and <code>capture.xml</code></td>
+<td>New strings for the controls, notices, duration labels, and descriptions.</td>
+</tr>
+</tbody>
+</table>
+<p>No manifest change is needed for v1. The microphone permission and the microphone foreground service already exist (<code>AndroidManifest.xml</code>, lines 7 and 24 to 27). P5 adds the media playback service and permission (§12).</p>
+<h3 id="84-pausing-audio-focus-and-the-interruption-rules">8.4 Pausing, audio focus, and the interruption rules</h3>
+<ul>
+<li>Pausing (by the user or the platform) releases the audio focus, so other apps can play (AC-4.5).</li>
+<li>Resuming requests the focus again. If the request fails, the memory stays paused and the notice says so.</li>
+<li>A transient loss (<code>AUDIOFOCUS_LOSS_TRANSIENT</code>, and <code>AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK</code>, which speech should not duck) pauses with <code>TRANSIENT</code>. The service resumes only when the focus returns, and only if playback was running (AC-6.2).</li>
+<li>A permanent loss (<code>AUDIOFOCUS_LOSS</code>) pauses with <code>PERMANENT</code>. Nothing resumes it.</li>
+</ul>
+<h3 id="85-recording-interruptions">8.5 Recording interruptions</h3>
+<ul>
+<li><code>MediaRecorder</code> errors reach the app through an <code>OnErrorListener</code>. The service records the error and keeps the file.</li>
+<li>The service tries to finalise the file. If the finalise call fails, the partial file is kept only if it has a readable duration (<code>MediaMetadataRetriever</code>). Otherwise it is discarded, as it is today (<code>finishRecording</code>, line 307).</li>
+<li>The result is one of these: a saved memory with the message "Recording was interrupted. The audio up to here was saved.", or the existing failure state. Q-2 decides which one applies on each device.</li>
+</ul>
+<hr />
+<h2 id="9-platform-split">9. Platform split</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Location</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interfaces and state</td>
+<td><code>commonMain</code></td>
+<td><code>AudioPlayer</code>, <code>AudioRecorder</code>, <code>LiveTranscriber</code>, <code>MediaSessionService</code>, <code>Memory</code>, <code>MemoryService</code></td>
+</tr>
+<tr>
+<td>Service rules</td>
+<td><code>commonMain</code></td>
+<td><code>RecordingMediaSessionService</code>, interruption rules, duration rules</td>
+</tr>
+<tr>
+<td>Persistence</td>
+<td><code>commonMain</code></td>
+<td><code>KotbaseMemoryService</code> column and <code>recordDuration</code></td>
+</tr>
+<tr>
+<td>Playback</td>
+<td><code>androidMain</code></td>
+<td><code>AndroidAudioPlayer</code>, audio focus, speed</td>
+</tr>
+<tr>
+<td>Recording</td>
+<td><code>androidMain</code></td>
+<td><code>AndroidAudioRecorder</code>, <code>AndroidLiveTranscriber</code>, <code>MicrophoneForegroundService</code></td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>commonMain</code>, Compose Material 3</td>
+<td>Panel, list card, capture controls, speed menu</td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>Not designed here</td>
+<td>Interfaces have defaults. The iOS classes change only to compile.</td>
+</tr>
+</tbody>
+</table>
+<p>API levels (checked against the Android SDK <code>api-versions.xml</code> for platform 36.1):</p>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>Level</th>
+<th>Available at minSdk 24?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MediaRecorder.pause()</code> and <code>resume()</code></td>
+<td>24</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>MediaPlayer.setPlaybackParams</code> and <code>PlaybackParams</code></td>
+<td>23</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>MediaPlayer.seekTo(int)</code>, <code>getCurrentPosition()</code>, <code>getDuration()</code>, <code>pause()</code>, <code>start()</code></td>
+<td>1</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>MediaPlayer.seekTo(long, int)</code></td>
+<td>26</td>
+<td>Not used. The <code>Int</code> overload is enough.</td>
+</tr>
+<tr>
+<td><code>MediaMetadataRetriever</code></td>
+<td>10</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p><code>minSdk</code> is 24 (<code>composeApp/build.gradle.kts</code>, line 106). <code>targetSdk</code> is 36 (line 107).</p>
+<hr />
+<h2 id="10-risks">10. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clock-based position drifts after a seek or speed change</td>
+<td>Wrong elapsed time</td>
+<td>The position comes from the player (§8.1).</td>
+</tr>
+<tr>
+<td>Pause leaves live transcription running</td>
+<td>Text does not match the file</td>
+<td>The live transcriber pauses too (AC-5.6). Tested.</td>
+</tr>
+<tr>
+<td>A recorder error during a call loses audio</td>
+<td>Lost recording</td>
+<td><code>OnErrorListener</code>, and the partial-file rule (§8.5). Q-2 tested on device.</td>
+</tr>
+<tr>
+<td>Setting the speed while paused starts playback on some devices</td>
+<td>Unexpected sound</td>
+<td>Re-pause at once if playback starts. Q-3 tested on device.</td>
+</tr>
+<tr>
+<td>Paused memory keeps other apps silent</td>
+<td>Other apps lose audio</td>
+<td>Pausing releases the audio focus (AC-4.5).</td>
+</tr>
+<tr>
+<td>Seek bar moves the pager</td>
+<td>Page flips while scrubbing</td>
+<td>Slider gesture test (§7).</td>
+</tr>
+<tr>
+<td>Legacy durations are guessed</td>
+<td>Misleading totals</td>
+<td>Never estimated. "Duration unknown" until played (AC-7.2).</td>
+</tr>
+<tr>
+<td>Playback stops in the background</td>
+<td>Playback ends unexpectedly</td>
+<td>Playback is not a foreground service today, so Android can stop it. v1 does not change this. P5 does.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-open-questions">11. Open questions</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q-1</td>
+<td>Can <code>AndroidLiveTranscriber</code> pause without losing its engine state?</td>
+<td><strong>Open.</strong> Default: stop feeding audio and resume feeding it, keeping the engine. Check the engine's API first.</td>
+</tr>
+<tr>
+<td>Q-2</td>
+<td>Does a phone call stop a <code>MediaRecorder</code> recording, and can the file be finalised afterwards?</td>
+<td><strong>Open.</strong> Test on devices. Default: keep the partial file when it has a readable duration (§8.5).</td>
+</tr>
+<tr>
+<td>Q-3</td>
+<td>Does <code>setPlaybackParams</code> start playback when the player is paused?</td>
+<td><strong>Open.</strong> Test on devices. If it does, re-pause at once.</td>
+</tr>
+<tr>
+<td>Q-4</td>
+<td>Should the speed be saved between launches?</td>
+<td><strong>Decided: no</strong> for v1 (AC-3.3).</td>
+</tr>
+<tr>
+<td>Q-5</td>
+<td>Should background playback and notification controls ship in v1?</td>
+<td><strong>Decided: no.</strong> P5, with its own design.</td>
+</tr>
+<tr>
+<td>Q-6</td>
+<td>Should a headset unplugged pause playback in v1?</td>
+<td><strong>Open.</strong> Default: yes, in P2. Needs a <code>BroadcastReceiver</code> for <code>ACTION_AUDIO_BECOMING_NOISY</code>.</td>
+</tr>
+<tr>
+<td>Q-7</td>
+<td>Should legacy durations be filled in by a launch job, not on first play?</td>
+<td><strong>Decided: first play only.</strong> No extra file reads.</td>
+</tr>
+<tr>
+<td>Q-8</td>
+<td>Should list cards show durations?</td>
+<td><strong>Open.</strong> Default: yes, in P3.</td>
+</tr>
+<tr>
+<td>Q-9</td>
+<td>Should icons come from Material Icons Extended, or from <code>Canvas</code> drawings?</td>
+<td><strong>Open.</strong> Default: <code>Canvas</code>, as the app already does.</td>
+</tr>
+<tr>
+<td>Q-10</td>
+<td>For P5, use Media3 or keep <code>MediaPlayer</code> with a <code>MediaSession</code>?</td>
+<td><strong>Open.</strong> Check the Media3 minSdk against 24 first. The name <code>MediaSessionService</code> is already used by the domain interface, so Media3 classes need aliases.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="12-phased-rollout">12. Phased rollout</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Exit criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1 Playback controls</td>
+<td>Pause and resume, seek bar, time labels, skip ±15 seconds, position from the player, 250 ms ticks</td>
+<td>US-1, US-2, US-4 met on Android. commonTest green (§13).</td>
+</tr>
+<tr>
+<td>P2 Speed and interruptions</td>
+<td>Speed menu, focus loss pauses, transient resume, notice, headset unplug (Q-6)</td>
+<td>US-3 and AC-6.1, AC-6.2 met on a device with API 24 and on one with API 34 or later.</td>
+</tr>
+<tr>
+<td>P3 Duration</td>
+<td><code>durationMillis</code> stored on save, stored on first play, "Duration unknown", list durations (Q-8)</td>
+<td>US-7 met. Kotbase round-trip tests green.</td>
+</tr>
+<tr>
+<td>P4 Recording pause and resume</td>
+<td>Recorder pause and resume, active elapsed time, live transcriber pause, notification text, capture controls, recorder error listener</td>
+<td>US-5 and AC-6.4 met on device, including the call test (Q-2).</td>
+</tr>
+<tr>
+<td>P5 Background playback (separate design)</td>
+<td>Media session, media playback foreground service, notification and lock-screen controls, notification permission on Android 13 and later</td>
+<td>A separate design document is approved first.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="13-test-plan">13. Test plan</h2>
+<h3 id="unit-commontest">Unit (commonTest)</h3>
+<ul>
+<li><code>RecordingMediaSessionServiceTest</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/recording/RecordingMediaSessionServiceTest.kt</code>, existing), with a fake player and a fake recorder:
+<ul>
+<li>Pause keeps the position. Resume continues from it.</li>
+<li>Seek and skip are clamped at both ends.</li>
+<li>Reaching the end pauses at the end.</li>
+<li>A transient loss pauses and resumes only if playing. A permanent loss stays paused.</li>
+<li>Speed is set and kept across pause and resume.</li>
+<li>Recording pause excludes paused time from the elapsed time and from <code>RecordingResult.elapsedMillis</code>.</li>
+<li>A save while paused stores the active duration.</li>
+<li><code>recordDuration</code> stores the first value only.</li>
+</ul></li>
+<li><code>CaptureUiStateHolderTest</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/CaptureUiStateHolderTest.kt</code>, existing): Pause and Resume are offered in tap mode only, and not in hold mode.</li>
+<li>Time formatting (new <code>m:ss</code> and <code>h:mm:ss</code> helper in commonMain): boundaries at 59 s, 1 h, and 0 ms.</li>
+<li><code>FakeMemoryService</code> (<code>composeApp/src/commonTest/kotlin/org/deer/borrowai/data/service/FakeMemoryService.kt</code>, line 39): implements <code>recordDuration</code>.</li>
+</ul>
+<h3 id="instrumented-androidinstrumentedtest">Instrumented (androidInstrumentedTest)</h3>
+<ul>
+<li><code>AndroidAudioRecorder</code>: record, pause for 2 seconds, resume, stop. The file's <code>METADATA_KEY_DURATION</code> matches the active time within 300 ms.</li>
+<li><code>AndroidAudioPlayer</code>: seek and position, speed change while paused does not start playback (Q-3), and focus loss pauses (with a second focus holder).</li>
+<li><code>KotbaseMemoryServiceTest</code> (<code>composeApp/src/androidInstrumentedTest/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseMemoryServiceTest.kt</code>): <code>durationMillis</code> round-trips, and a document without it reads as <code>null</code>.</li>
+</ul>
+<h3 id="manual-device">Manual (device)</h3>
+<ul>
+<li>API 24 device: pause and resume a memory, seek, skip, change speed, and check the position and the audio focus with another app.</li>
+<li>API 34 or later device: the same, plus a phone call during playback.</li>
+<li>Phone call during a recording (Q-2). Check the saved memory and its message.</li>
+<li>Unplug headphones during playback (Q-6).</li>
+<li>Record with two pauses. Check that the duration equals the active time, and that the live text stopped during each pause.</li>
+<li>TalkBack walk-through of the panel, the speed menu, and the capture controls.</li>
+<li>Scrub the slider on a memory page and confirm the page does not flip.</li>
+</ul>
+<hr />
+<h2 id="14-definition-of-done">14. Definition of done</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />Position, duration, and elapsed time follow §8.1 and §8.2.</label></li>
+<li><label><input type="checkbox" />No pause or resume leaves a gap, a stale live transcript, or a held audio focus.</label></li>
+<li><label><input type="checkbox" />Legacy memories never show an invented total.</label></li>
+<li><label><input type="checkbox" />Q-2 and Q-3 are answered on real devices and recorded here.</label></li>
+<li><label><input type="checkbox" />TalkBack walk-through passes on Android.</label></li>
+<li><label><input type="checkbox" /><code>visual-guide.html</code> matches the built UI, or the differences are noted.</label></li>
+<li><label><input type="checkbox" />P5 is not started until its own design is approved.</label></li>
+</ul>
+</article>
+  </main>
+  <footer>Generated by <code>scripts/build_docs.py</code> from the repository. Edit the sources, not <code>docs/</code>.</footer>
+</body>
+</html>

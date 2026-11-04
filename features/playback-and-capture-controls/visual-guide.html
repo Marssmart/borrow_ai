@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BorrowAI — Playback and capture controls visual guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef0f3;
+      color: #17201d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button { font: inherit; }
+
+    .workspace {
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 64px;
+    }
+    .workspace-head { margin-bottom: 24px; }
+    .eyebrow {
+      margin: 0 0 7px;
+      color: #14757b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -.045em;
+      line-height: 1;
+    }
+    h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      letter-spacing: -.02em;
+    }
+    .lede {
+      margin: 9px 0 0;
+      max-width: 820px;
+      color: #53605b;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .section { margin-top: 44px; }
+    .section-note {
+      margin: 0 0 18px;
+      max-width: 820px;
+      color: #53605b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .status-note {
+      margin: 0 0 18px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 12px;
+      line-height: 1.5;
+      max-width: 820px;
+    }
+
+    .mock-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+      gap: 28px 22px;
+    }
+    .screen-preview { min-width: 0; margin: 0; }
+    .device {
+      position: relative;
+      width: min(100%, 300px);
+      aspect-ratio: 320 / 690;
+      margin: 0 auto;
+      padding: 5px;
+      overflow: hidden;
+      border: 1px solid rgb(20 30 26 / 20%);
+      border-radius: 42px;
+      background: #183f46;
+      box-shadow: 0 19px 42px rgb(20 30 26 / 17%), 0 2px 6px rgb(20 30 26 / 12%);
+    }
+    .screen {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+      border-radius: 36px;
+      background: linear-gradient(145deg, #eaf5f4, #dcecef 55%, #dde8f6);
+      color: #123b43;
+      padding: 26px 14px 14px;
+    }
+    .screen-caption {
+      margin: 10px 0 0;
+      color: #66716b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .screen-title {
+      margin: 4px 0 2px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .card-meta { font-size: 10px; color: #5d7c80; }
+    .panel {
+      padding: 11px 12px;
+      border-radius: 18px;
+      background: rgb(255 255 255 / 75%);
+      box-shadow: 0 2px 6px rgb(20 40 44 / 7%);
+    }
+    .summary-text { margin-top: 5px; font-size: 11px; line-height: 1.45; color: #17201d; }
+
+    /* playback panel */
+    .slider { position: relative; height: 22px; margin-top: 4px; }
+    .track { position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 999px; background: #c9dfe1; }
+    .fill { position: absolute; left: 0; top: 9px; height: 4px; border-radius: 999px; background: #14757b; }
+    .thumb { position: absolute; top: 3px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: #14757b; box-shadow: 0 1px 4px rgb(20 40 44 / 30%); }
+    .slider.disabled .fill, .slider.disabled .thumb { background: #9aa9ab; }
+    .slider.disabled .track { background: #dfe6e7; }
+    .times { display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: #47636a; }
+    .controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; }
+    .round {
+      display: grid;
+      width: 56px;
+      height: 56px;
+      place-items: center;
+      border-radius: 50%;
+      background: #14757b;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 4px 12px rgb(20 117 123 / 30%);
+    }
+    .skip {
+      display: grid;
+      width: 46px;
+      height: 46px;
+      place-items: center;
+      border: 1px solid #a9cbd0;
+      border-radius: 50%;
+      background: #fff;
+      color: #123b43;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1.1;
+      text-align: center;
+    }
+    .skip.disabled { color: #9aa9ab; background: #eef2f2; border-color: #d7e0e1; }
+    .speed {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #d4e6e8;
+      color: #123b43;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+    .controls-row .controls { margin-top: 0; flex: 1; }
+    .notice {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: #fff4d6;
+      color: #5c4400;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .unknown { font-size: 10px; font-weight: 800; color: #5d7c80; }
+
+    /* speed menu */
+    .menu {
+      position: absolute;
+      right: 16px;
+      bottom: 130px;
+      width: 170px;
+      padding: 6px;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 10px 26px rgb(20 40 44 / 22%);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: 10px; }
+    .menu-item.selected { background: #e4f2f3; color: #123b43; }
+    .radio {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #14757b;
+    }
+    .radio.on { background: radial-gradient(circle, #14757b 40%, transparent 45%); }
+
+    /* recording */
+    .mic {
+      display: grid;
+      width: 110px;
+      height: 110px;
+      margin: 14px auto 0;
+      place-items: center;
+      border-radius: 50%;
+      background: #c93458;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      text-align: center;
+      box-shadow: 0 0 0 7px #f3c6d1, 0 0 30px rgb(201 52 88 / 30%);
+      line-height: 1.3;
+    }
+    .mic.paused { background: #47636a; box-shadow: 0 0 0 7px #d7e2e4; }
+    .mic.idle { background: #fff; color: #14757b; box-shadow: 0 0 0 7px #d7ecee; }
+    .mic-caption { margin-top: 8px; text-align: center; font-size: 11px; font-weight: 700; color: #47636a; }
+    .big-time { margin-top: 2px; text-align: center; font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+    .pause-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .btn-outline { background: #fff; color: #123b43; border: 1px solid #a9cbd0; }
+    .btn-tonal { background: #d4e6e8; color: #123b43; }
+    .notification {
+      padding: 11px 12px;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 6px 16px rgb(20 40 44 / 16%);
+    }
+    .notification-head { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #5d7c80; font-weight: 700; }
+    .notification-dot { width: 8px; height: 8px; border-radius: 50%; background: #14757b; }
+    .notification-title { margin-top: 5px; font-size: 12px; font-weight: 800; }
+    .notification-text { margin-top: 2px; font-size: 11px; color: #34413d; }
+
+    /* list cards */
+    .list-card {
+      padding: 11px 12px;
+      border-radius: 23px;
+      background: rgb(255 255 255 / 92%);
+      box-shadow: 0 12px 30px rgb(23 75 83 / 13%);
+    }
+    .list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .list-date { font-size: 10px; color: #47636a; }
+    .duration-label { font-size: 10px; font-weight: 800; color: #14757b; }
+    .list-summary { margin-top: 5px; font-size: 11px; line-height: 1.4; color: #17201d; }
+    .list-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 11px;
+      border: 1px solid rgb(20 117 123 / 24%);
+      border-radius: 999px;
+      background: #d4e6e8;
+      color: #123b43;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .tag-mock { background: #fde3c8; color: #8a4b0a; }
+    .tag-android { background: #e3e7e9; color: #4a5558; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgb(20 40 44 / 8%);
+      font-size: 13px;
+    }
+    th, td {
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #edf1f1;
+    }
+    th {
+      background: #e4f2f3;
+      color: #123b43;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #eef3f3;
+      padding: 1px 5px;
+      border-radius: 6px;
+    }
+
+    @media (max-width: 1000px) {
+      .mock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .mock-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="workspace-head">
+      <p class="eyebrow">BorrowAI · Feature guide</p>
+      <h1>Playback and capture controls</h1>
+      <p class="lede">
+        Design mockups for playback (seek, skip, speed, pause, and interruptions), recording pause and resume, duration labels, and the notification text, on Android.
+        Full spec: <a href="playback-and-capture-controls.html">Playback and capture controls design</a>.
+      </p>
+    </header>
+
+    <p class="status-note">
+      <span class="tag tag-mock">Mockup</span> Every screen below is a design mockup. Nothing here is built yet.
+      <span class="tag tag-android">Android only</span> Background playback with notification controls is a later phase (P5), not shown here.
+    </p>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 1 · Playback panel</p>
+      <h2>Seek, skip, pause, and speed <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The panel in the detail view shows elapsed and total time, a seek bar, skips of 15 seconds, one play or pause button, and the speed. Speed is chosen from a short menu.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="panel">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="screen-title">Sunday trip plan</div>
+            </div>
+            <div class="panel">
+              <div class="slider"><div class="track"></div><div class="fill" style="width:37%"></div><div class="thumb" style="left:37%"></div></div>
+              <div class="times"><span>0:24</span><span>1:05</span></div>
+              <div class="controls-row">
+                <div class="controls">
+                  <span class="skip" aria-hidden="true">back<br>15 s</span>
+                  <span class="round" aria-hidden="true">Pause</span>
+                  <span class="skip" aria-hidden="true">fwd<br>15 s</span>
+                </div>
+                <span class="speed">1×</span>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="card-meta">Summary</div>
+              <div class="summary-text">Meet at the station at nine. Bring the tent, check the bus times the night before.</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Playing, detail view</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="panel">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="screen-title">Sunday trip plan</div>
+            </div>
+            <div class="panel">
+              <div class="slider"><div class="track"></div><div class="fill" style="width:37%"></div><div class="thumb" style="left:37%"></div></div>
+              <div class="times"><span>0:24</span><span>1:05</span></div>
+              <div class="controls-row">
+                <div class="controls">
+                  <span class="skip" aria-hidden="true">back<br>15 s</span>
+                  <span class="round" aria-hidden="true">Play</span>
+                  <span class="skip" aria-hidden="true">fwd<br>15 s</span>
+                </div>
+                <span class="speed">1×</span>
+              </div>
+            </div>
+            <div class="menu" role="menu" aria-label="Playback speed">
+              <div class="menu-item">0.75×</div>
+              <div class="menu-item selected">1× <span class="radio on" aria-hidden="true"></span></div>
+              <div class="menu-item">1.25×</div>
+              <div class="menu-item">1.5×</div>
+              <div class="menu-item">2×</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Speed menu, paused at 0:24</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="panel">
+              <div class="card-meta">3 Nov 2026 · 08:14</div>
+              <div class="screen-title">Sunday trip plan</div>
+            </div>
+            <div class="notice" role="status">Paused because another app started audio.</div>
+            <div class="panel">
+              <div class="slider"><div class="track"></div><div class="fill" style="width:37%"></div><div class="thumb" style="left:37%"></div></div>
+              <div class="times"><span>0:24</span><span>1:05</span></div>
+              <div class="controls-row">
+                <div class="controls">
+                  <span class="skip" aria-hidden="true">back<br>15 s</span>
+                  <span class="round" aria-hidden="true">Play</span>
+                  <span class="skip" aria-hidden="true">fwd<br>15 s</span>
+                </div>
+                <span class="speed">1×</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Paused by another app</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 2 · Legacy memories</p>
+      <h2>Duration unknown, never an estimate <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">A memory saved before this release has no stored duration. It shows "Duration unknown" until it is played once. Play works from the start, and forward skip waits for the duration.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="panel">
+              <div class="card-meta">18 Sep 2026 · 19:20</div>
+              <div class="screen-title">Untitled memory</div>
+            </div>
+            <div class="panel">
+              <div class="slider disabled"><div class="track"></div><div class="fill" style="width:0%"></div><div class="thumb" style="left:0%"></div></div>
+              <div class="times"><span>0:00</span><span class="unknown">Duration unknown</span></div>
+              <div class="controls-row">
+                <div class="controls">
+                  <span class="skip" aria-hidden="true">back<br>15 s</span>
+                  <span class="round" aria-hidden="true">Play</span>
+                  <span class="skip disabled" aria-hidden="true">fwd<br>15 s</span>
+                </div>
+                <span class="speed">1×</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Legacy memory, not yet played</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 3 · Recording</p>
+      <h2>Pause, resume, and the notification <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">Pause appears only in tap-to-record. The elapsed time counts active recording only, and the live transcript and the notification both show the paused state. Hold-to-record has no pause control.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Record</div>
+            <div class="mic" aria-hidden="true">Recording</div>
+            <div class="big-time">0:42</div>
+            <div class="mic-caption">Tap the button to stop and save</div>
+            <div class="pause-row"><span class="btn btn-outline">Pause</span></div>
+            <div class="panel">
+              <div class="card-meta">Live text</div>
+              <div class="summary-text">so on Sunday we meet at the station around nine and</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Recording, tap mode</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Record</div>
+            <div class="mic paused" aria-hidden="true">Paused</div>
+            <div class="big-time">0:42</div>
+            <div class="mic-caption">Paused at 0:42. Tap the button to save.</div>
+            <div class="pause-row"><span class="btn btn-tonal">Resume</span></div>
+            <div class="panel">
+              <div class="card-meta">Live text, frozen while paused</div>
+              <div class="summary-text">so on Sunday we meet at the station around nine and</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Recording paused</p>
+        </figure>
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Record</div>
+            <div class="mic" aria-hidden="true">Release to stop</div>
+            <div class="big-time">0:07</div>
+            <div class="mic-caption">Hold-to-record ends when you let go. No pause control.</div>
+            <div class="panel">
+              <div class="card-meta">Live text</div>
+              <div class="summary-text">remember to call the bus company</div>
+            </div>
+            <div class="notification" role="status">
+              <div class="notification-head"><span class="notification-dot" aria-hidden="true"></span>Borrow AI</div>
+              <div class="notification-title">Recording audio</div>
+              <div class="notification-text">Borrow AI is recording from the microphone</div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Hold-to-record, notification</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Mockup · 4 · List cards</p>
+      <h2>Play or pause, and the duration label <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The list card shows Pause while its memory plays. A duration label appears only when the duration is known. A legacy memory shows no label, so there is no invented total.</p>
+      <div class="mock-grid">
+        <figure class="screen-preview">
+          <div class="device"><div class="screen">
+            <div class="screen-title">Saved memories</div>
+            <div class="list-card">
+              <div class="list-head"><span class="list-date">3 Nov 2026 · 08:14</span><span class="duration-label">1:05</span></div>
+              <div class="list-summary">Meet at the station at nine. Bring the tent, check the bus times.</div>
+              <div class="list-actions"><span class="pill-btn">Pause</span></div>
+            </div>
+            <div class="list-card">
+              <div class="list-head"><span class="list-date">18 Sep 2026 · 19:20</span></div>
+              <div class="list-summary">Grocery list for the weekend.</div>
+              <div class="list-actions"><span class="pill-btn">Play</span></div>
+            </div>
+          </div></div>
+          <p class="screen-caption">Playing card and legacy card</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">States</p>
+      <h2>What the user sees <span class="tag tag-mock">Mockup</span></h2>
+      <table>
+        <thead>
+          <tr><th>State</th><th>What the user sees</th><th>Source of the time shown</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Playing</td><td>Pause button, slider and times move every 250 ms.</td><td>The player's position.</td></tr>
+          <tr><td>Paused by user</td><td>Play button. Position kept. Audio focus released.</td><td>The player's position, frozen.</td></tr>
+          <tr><td>Paused by another app</td><td>Play button and the notice.</td><td>The player's position, frozen.</td></tr>
+          <tr><td>Ended</td><td>Paused at the end. Play starts again from 0.</td><td>The stored duration, or the player.</td></tr>
+          <tr><td>Duration unknown</td><td>"Duration unknown", slider disabled.</td><td>No duration yet. Stored on first play.</td></tr>
+          <tr><td>Recording</td><td>Pause button under the microphone.</td><td>Active time: the clock minus paused time.</td></tr>
+          <tr><td>Recording paused</td><td>"Paused" label, Resume button, notification says paused.</td><td>Frozen at the pause point.</td></tr>
+          <tr><td>Recording interrupted</td><td>"Recording was interrupted. The audio up to here was saved." (Q-2).</td><td>The file's readable length.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
