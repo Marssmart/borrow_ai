@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.15.0]
+
+- Added a no-results message on Android when a search or category filter matches no memories. It names the search, says what is searched, and offers Clear search and Clear filters where they apply.
+- On Android, scrolling Saved memories hides the keyboard. On a hardware keyboard, Enter runs the search and Escape clears the search text.
+- On Android, system back on Saved memories hides the keyboard first, then clears the search text. Back from a memory's detail view is unchanged.
+- Updated Android and iOS versioning to 1.15.0 (build 73).
+
 ## [1.14.0]
 
 - Added a More actions button to the memory detail view on Android. Its menu has a Delete memory item. The memory leaves the list at once, and an Undo snackbar keeps it for 10 seconds. Undo brings it back. When the window ends, the memory is deleted, and its recording is removed later by a background job.
