@@ -1242,6 +1242,32 @@ class RecordingMediaSessionServiceTest {
     }
 
     @Test
+    fun resumeFailureAfterTheEndKeepsPlaybackPausedAtTheEnd() = runTest {
+        val player = FakeAudioPlayer(durationMillis = 2_000L, clockMillis = { testScheduler.currentTime })
+        val fs = FakeFileSystem()
+        val memories = memories()
+        val memory = savedRecording(memories, fs)
+        val service = service(FakeRecorder(), FakePermission(CompletableDeferred(true)), memories, fs, backgroundScope, player)
+
+        service.requestPlayback(PlaybackTarget(memory.id, PlaybackContent.RECORDING))
+        advanceTimeBy(2_000L)
+        runCurrent()
+        player.failOnResume = true
+
+        assertEquals(PlaybackError.ResumeFailed.left(), service.resumePlayback())
+        val ended = assertIs<MediaSessionState.Playing>(service.state.value)
+        assertTrue(ended.paused)
+        assertEquals(2_000L, ended.elapsedMillis)
+        assertEquals(2_000L, player.positionMillis())
+        assertEquals(0, player.resumeCount)
+
+        player.failOnResume = false
+        assertEquals(Unit.right(), service.resumePlayback())
+        assertEquals(0L, assertIs<MediaSessionState.Playing>(service.state.value).elapsedMillis)
+        assertEquals(listOf(0L, 2_000L, 0L), player.seeks)
+    }
+
+    @Test
     fun pauseSeekAndSkipAreIgnoredWhenThePlayerHasNoControls() = runTest {
         val player = FakeAudioPlayer(durationMillis = 10_000L, controlsAvailable = false)
         val fs = FakeFileSystem()

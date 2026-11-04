@@ -162,14 +162,12 @@ class RecordingMediaSessionService(
         // Playback paused at its end plays again from the beginning.
         val atEnd = playing.elapsedMillis >= playing.durationMillis
         val startMillis = if (atEnd) 0L else playing.elapsedMillis
-        if (atEnd) {
-            audioPlayer.seekTo(startMillis)
-            mutableState.value = playing.copy(elapsedMillis = startMillis)
-        }
+        if (atEnd) audioPlayer.seekTo(startMillis)
         try {
             audioPlayer.resume()
         } catch (exception: PlaybackUnavailableException) {
-            // The memory stays paused at the same position, so the next Play press can try again.
+            // A failed resume leaves the memory paused where it was, so the player goes back to the end.
+            if (atEnd) audioPlayer.seekTo(playing.durationMillis)
             return PlaybackError.ResumeFailed.left()
         }
         mutableState.value = playing.copy(paused = false, elapsedMillis = startMillis)
