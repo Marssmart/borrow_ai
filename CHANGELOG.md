@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.9.8]
+
+- Added a Retry missing data button in Settings. It resets the attempt counters on memories missing a transcript, summary, categories, or speaker data (including ones that gave up) and restarts background recovery.
+- Updated the visual guide and the documentation site.
+- Updated Android and iOS versioning to 1.9.8 (build 64).
+
 ## [1.9.7]
 
 - Added GPU acceleration for the on-device summary and category model on Android. It uses the GPU on the MID and LATEST device tiers, and falls back to the CPU once if the GPU fails.

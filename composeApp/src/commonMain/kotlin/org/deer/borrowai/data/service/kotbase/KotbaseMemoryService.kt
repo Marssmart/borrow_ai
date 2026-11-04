@@ -55,6 +55,7 @@ import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.speakerStatusFor
 import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
+import org.deer.borrowai.data.domain.withAttemptsReset
 import org.deer.borrowai.data.domain.withSpeakerSkipped
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.StatefulMemoryService
@@ -259,6 +260,17 @@ class KotbaseMemoryService private constructor(
                 writeAndPublish { unfinished.forEach { saveMemory(it.requeuedForSpeakerAnalysis()) } }.bind()
             }
             unfinished.size
+        }
+    }
+
+    override suspend fun resetAttempts(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val changed = withContext(Dispatchers.Default) { readAll() }.bind()
+                .mapNotNull { memory -> memory.withAttemptsReset().takeIf { it != memory } }
+            if (changed.isNotEmpty()) {
+                writeAndPublish { changed.forEach { saveMemory(it) } }.bind()
+            }
+            changed.size
         }
     }
 

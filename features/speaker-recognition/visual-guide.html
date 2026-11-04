@@ -396,7 +396,7 @@
       </p>
     </header>
 
-    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the code in 1.9.7 wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
+    <p class="status-note"><span class="tag tag-live">Shipped</span> sections show what the code in 1.9.8 wires up. <span class="tag tag-mock">Mockup</span> sections are designs that are not built yet. <span class="tag tag-ios">Android only</span> marks features whose runtime exists only on Android (iOS has the recorder, player and microphone permission, but no transcriber, summarizer or category model yet).</p>
 
     <section class="section">
       <p class="eyebrow">Shipped · 1 · Navigation</p>
@@ -590,13 +590,14 @@
     <section class="section">
       <p class="eyebrow">Shipped · 7 · Settings</p>
       <h2>Settings screen <span class="tag tag-live">Shipped</span></h2>
-      <p class="section-note">No longer a placeholder. It holds two switches, both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). The speaker recognition settings below are mockups.</p>
+      <p class="section-note">No longer a placeholder. It holds two switches and a Retry missing data button. The switches are both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). The speaker recognition settings below are mockups.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
             <div class="screen-title">Settings</div>
             <div class="setting"><div class="setting-row"><span>Background activity indicator</span><span class="toggle"></span></div><div class="setting-note">Show a small indicator at the top of the screen while the app transcribes, summarizes, categorizes, analyzes speakers, downloads models, or cleans up in the background.</div></div>
             <div class="setting"><div class="setting-row"><span>GPU acceleration</span><span class="toggle"></span></div><div class="setting-note">Let the on-device summary and category model run on the GPU when the device supports it. If the GPU fails, the app falls back to the CPU. Turn this off to always use the CPU.</div></div>
+            <div class="setting"><div class="setting-row"><span>Retry missing data</span><span>Button</span></div><div class="setting-note">Reset the attempt counters so memories missing a transcript, summary, categories, or speaker data are picked up again in the background.</div></div>
             <div class="dock"><span class="">Record</span><span class="">Memories</span><span class="on">Settings</span></div>
           </div></div>
           <p class="screen-caption">Settings</p>

@@ -90,6 +90,8 @@ class AppServices internal constructor(
     val appSettings: AppSettingsService,
     /** The background work running now, including model downloads. Empty when the app is idle. */
     val backgroundActivities: StateFlow<Set<BackgroundActivity>> = MutableStateFlow(emptySet<BackgroundActivity>()).asStateFlow(),
+    /** Resets the attempt counters of memories that are missing data and restarts recovery. Returns how many changed. */
+    val retryMissingData: suspend () -> Int = { 0 },
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -342,6 +344,18 @@ class AppServices internal constructor(
                     backgroundActivities = combine(activityTracker.activities, modelSetup.state) { tracked, model ->
                         activeBackgroundActivities(tracked, model)
                     }.stateIn(graphScope, SharingStarted.Eagerly, emptySet()),
+                    retryMissingData = {
+                        memories.resetAttempts().fold(
+                            ifLeft = { error -> throw IllegalStateException("Could not reset attempts: $error") },
+                            ifRight = { changed ->
+                                transcriptionScheduler.enqueueSweep()
+                                runSummaryRecovery()
+                                runCategorizationRecovery()
+                                speakerRunner.requestDrain()
+                                changed
+                            },
+                        )
+                    },
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

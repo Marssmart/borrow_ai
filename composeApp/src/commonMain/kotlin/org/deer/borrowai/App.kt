@@ -151,6 +151,7 @@ fun App(services: AppServices) {
                             onUseGpuAccelerationChange = { use ->
                                 scope.launch { services.appSettings.setUseGpuAcceleration(use) }
                             },
+                            onRetryMissingData = services.retryMissingData,
                         )
                     }
                 }

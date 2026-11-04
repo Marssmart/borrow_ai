@@ -109,6 +109,12 @@ interface MemoryService {
      */
     suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int>
 
+    /**
+     * Sets the attempt counters back to zero on every active memory that is missing transcription, summary,
+     * categories or speaker data, so recovery picks it up again. Returns how many memories changed.
+     */
+    suspend fun resetAttempts(): Either<MemoryError, Int>
+
     /** Marks every PENDING speaker analysis SKIPPED. Used while speaker analysis cannot run. Returns how many changed. */
     suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int>
 

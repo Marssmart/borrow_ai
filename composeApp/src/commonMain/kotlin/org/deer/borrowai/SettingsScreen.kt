@@ -13,9 +13,15 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -25,6 +31,15 @@ import borrowai.composeapp.generated.resources.settings_background_indicator_des
 import borrowai.composeapp.generated.resources.settings_background_indicator_title
 import borrowai.composeapp.generated.resources.settings_gpu_acceleration_description
 import borrowai.composeapp.generated.resources.settings_gpu_acceleration_title
+import borrowai.composeapp.generated.resources.settings_retry_missing_button
+import borrowai.composeapp.generated.resources.settings_retry_missing_description
+import borrowai.composeapp.generated.resources.settings_retry_missing_done
+import borrowai.composeapp.generated.resources.settings_retry_missing_failed
+import borrowai.composeapp.generated.resources.settings_retry_missing_none
+import borrowai.composeapp.generated.resources.settings_retry_missing_title
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -33,8 +48,11 @@ internal fun SettingsScreen(
     onShowBackgroundActivityIndicatorChange: (Boolean) -> Unit,
     useGpuAcceleration: Boolean,
     onUseGpuAccelerationChange: (Boolean) -> Unit,
+    onRetryMissingData: suspend () -> Int,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
+    var retryState by remember { mutableStateOf<RetryState>(RetryState.Idle) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -96,5 +114,61 @@ internal fun SettingsScreen(
                 onCheckedChange = null,
             )
         }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(Res.string.settings_retry_missing_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(Res.string.settings_retry_missing_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                enabled = retryState != RetryState.Running,
+                onClick = {
+                    retryState = RetryState.Running
+                    scope.launch {
+                        retryState = try {
+                            RetryState.Done(onRetryMissingData())
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            RetryState.Failed
+                        }
+                    }
+                },
+            ) {
+                Text(stringResource(Res.string.settings_retry_missing_button))
+            }
+            when (val state = retryState) {
+                is RetryState.Done -> Text(
+                    text = if (state.count == 0) {
+                        stringResource(Res.string.settings_retry_missing_none)
+                    } else {
+                        pluralStringResource(Res.plurals.settings_retry_missing_done, state.count, state.count)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                RetryState.Failed -> Text(
+                    text = stringResource(Res.string.settings_retry_missing_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                else -> Unit
+            }
+        }
     }
+}
+
+private sealed interface RetryState {
+    data object Idle : RetryState
+
+    data object Running : RetryState
+
+    data class Done(val count: Int) : RetryState
+
+    data object Failed : RetryState
 }

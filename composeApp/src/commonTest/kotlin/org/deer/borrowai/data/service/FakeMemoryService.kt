@@ -34,6 +34,7 @@ import org.deer.borrowai.data.domain.withFailedTranscription
 import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
+import org.deer.borrowai.data.domain.withAttemptsReset
 import org.deer.borrowai.data.domain.withUserCategories
 
 class FakeMemoryService(
@@ -221,6 +222,17 @@ class FakeMemoryService(
         }
         publishMemories()
         requeued.right()
+    }
+
+    override suspend fun resetAttempts(): Either<MemoryError, Int> = mutex.withLock {
+        var changed = 0
+        records.replaceAll { _, memory ->
+            val reset = memory.withAttemptsReset()
+            if (reset != memory) changed++
+            reset
+        }
+        publishMemories()
+        changed.right()
     }
 
     override suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {

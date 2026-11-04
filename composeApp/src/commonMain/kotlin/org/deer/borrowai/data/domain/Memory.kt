@@ -320,6 +320,31 @@ fun Memory.withSpeakerSkipped(): Memory =
 private fun speakerStatusAfterFailure(attempts: Int): SpeakerStatus =
     if (attempts >= MAX_SPEAKER_ATTEMPTS) SpeakerStatus.FAILED else SpeakerStatus.PENDING
 
+/**
+ * The memory with the attempt counters of every stage that is missing data set back to zero, so the recovery jobs pick
+ * it up again. Transcription is reset when it FAILED, summary when it is not summarized and there is a transcript or
+ * recording to work from, categorization when it is not categorized, and speaker analysis when it FAILED or was
+ * SKIPPED and there is a recording. Finished stages and the stored text are kept. Returns this instance when nothing
+ * needs a reset.
+ */
+fun Memory.withAttemptsReset(): Memory {
+    if (deleted) return this
+    var result = this
+    if (transcriptionStatus == TranscriptionStatus.FAILED) {
+        result = result.copy(transcriptionStatus = TranscriptionStatus.PENDING, transcriptionAttempts = 0)
+    }
+    if (summaryStatus != SummaryStatus.SUMMARIZED && (transcription.isNotBlank() || recordingPath != null)) {
+        result = result.copy(summaryStatus = SummaryStatus.PENDING, summaryAttempts = 0)
+    }
+    if (categorizationStatus != CategorizationStatus.CATEGORIZED) {
+        result = result.copy(categorizationStatus = CategorizationStatus.PENDING, categorizationAttempts = 0)
+    }
+    if (recordingPath != null && (speakerStatus == SpeakerStatus.FAILED || speakerStatus == SpeakerStatus.SKIPPED)) {
+        result = result.copy(speakerStatus = SpeakerStatus.PENDING, speakerAttempts = 0, lastSpeakerError = null)
+    }
+    return result
+}
+
 data class MemoryDraft(
     val title: String,
     val summary: String,

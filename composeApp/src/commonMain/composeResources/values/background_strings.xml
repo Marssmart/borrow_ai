@@ -10,4 +10,13 @@
     <string name="settings_background_indicator_description">Show a small indicator at the top of the screen while the app transcribes, summarizes, categorizes, analyzes speakers, downloads models, or cleans up in the background.</string>
     <string name="settings_gpu_acceleration_title">GPU acceleration</string>
     <string name="settings_gpu_acceleration_description">Let the on-device summary and category model run on the GPU when the device supports it. If the GPU fails, the app falls back to the CPU. Turn this off to always use the CPU.</string>
+    <string name="settings_retry_missing_title">Retry missing data</string>
+    <string name="settings_retry_missing_description">Reset the attempt counters so memories that are missing a transcript, summary, categories, or speaker data are picked up again in the background.</string>
+    <string name="settings_retry_missing_button">Retry missing data</string>
+    <string name="settings_retry_missing_none">Nothing is missing. No memories were changed.</string>
+    <string name="settings_retry_missing_failed">Could not reset the counters. Try again.</string>
+    <plurals name="settings_retry_missing_done">
+        <item quantity="one">%1$d memory will be retried in the background.</item>
+        <item quantity="other">%1$d memories will be retried in the background.</item>
+    </plurals>
 </resources>
