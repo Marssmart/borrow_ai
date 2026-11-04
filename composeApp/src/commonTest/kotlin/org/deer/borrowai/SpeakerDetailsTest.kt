@@ -15,6 +15,9 @@ import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.service.FakeSpeakerService
+import org.deer.borrowai.data.service.PlaybackContent
+import org.deer.borrowai.data.service.PlaybackSample
+import org.deer.borrowai.data.service.PlaybackTarget
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
 
@@ -48,7 +51,8 @@ class SpeakerDetailsTest {
         embeddingId = "e$ordinal",
     )
 
-    private fun sample(startMs: Long, endMs: Long) = SpeakerSample(memoryId = "m1", startMs = startMs, endMs = endMs)
+    private fun sample(startMs: Long, endMs: Long) =
+        PlaybackTarget("m1", PlaybackContent.SPEAKER_SAMPLE, PlaybackSample(startMs, endMs))
 
     @Test
     fun unknownSpeakersAreLabelledByOrdinalInOrder() {

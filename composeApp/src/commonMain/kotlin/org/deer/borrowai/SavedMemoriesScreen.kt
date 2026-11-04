@@ -197,6 +197,11 @@ internal fun SavedMemoriesScreen(
                     },
                     onSeekPlayback = stateHolder::seekPlayback,
                     onSkipPlayback = stateHolder::skipPlayback,
+                    services = services,
+                    playingSample = (uiState.mediaSessionState as? MediaSessionState.Playing)
+                        ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
+                        ?.target,
+                    onPlaySample = { stateHolder.toggleSamplePlayback(it) },
                 )
             }
 
@@ -466,12 +471,15 @@ private fun MemoryCard(
 @Composable
 private fun MemoryDetailScreen(
     memory: Memory,
+    services: AppServices,
     scrollState: ScrollState,
     playback: MediaSessionState.Playing?,
     playbackControlsAvailable: Boolean,
     onPlayRecording: () -> Unit,
     onSeekPlayback: (Long) -> Unit,
     onSkipPlayback: (Long) -> Unit,
+    playingSample: PlaybackTarget?,
+    onPlaySample: (PlaybackTarget) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
@@ -550,6 +558,15 @@ private fun MemoryDetailScreen(
                         isOriginal = true,
                     )
                 }
+            }
+            if (speakerRecognitionSupported) {
+                SpeakersSection(
+                    memory = memory,
+                    speakers = services.speakers,
+                    hasRecordingFile = services.mediaSession::hasRecordingFile,
+                    playingTarget = playingSample,
+                    onPlaySample = onPlaySample,
+                )
             }
         }
     }

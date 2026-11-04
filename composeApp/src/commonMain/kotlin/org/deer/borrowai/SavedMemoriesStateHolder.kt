@@ -215,6 +215,17 @@ internal class SavedMemoriesStateHolder(
         mediaSessionService.requestPlayback(target).fold({ setPlaybackError(it) }, {})
     }
 
+    /** A speaker sample has no pause, so its button stops the sample instead of toggling pause like a recording. */
+    fun toggleSamplePlayback(target: PlaybackTarget) {
+        if (!playbackAvailable) return
+        val currentPlayback = uiState.value.mediaSessionState as? MediaSessionState.Playing
+        if (currentPlayback != null && currentPlayback.target == target) {
+            mediaSessionService.stopPlayback()
+            return
+        }
+        mediaSessionService.requestPlayback(target).fold({ setPlaybackError(it) }, {})
+    }
+
     fun seekPlayback(positionMillis: Long) {
         mediaSessionService.seekPlayback(positionMillis)
     }
