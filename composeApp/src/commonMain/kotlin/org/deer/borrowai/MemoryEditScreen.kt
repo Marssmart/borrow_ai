@@ -118,8 +118,11 @@ internal fun MemoryEditScreen(
     val summaryTooLong = summary.length > MEMORY_SUMMARY_MAX_LENGTH
     val transcriptEditable = memory.transcriptionStatus.isTranscriptEditable()
     val transcriptBeingCreated = !transcriptEditable
-    val transcriptBlank = transcriptEditable && transcript.isBlank()
-    val transcriptTooLong = transcript.length > MEMORY_TRANSCRIPTION_MAX_LENGTH
+    // Until the user types in the field, it follows the live transcript, so a transcript that completes while the
+    // editor is open shows up in the field.
+    val shownTranscript = if (transcriptEdited) transcript else memory.transcription
+    val transcriptBlank = transcriptEditable && shownTranscript.isBlank()
+    val transcriptTooLong = transcriptEditable && shownTranscript.length > MEMORY_TRANSCRIPTION_MAX_LENGTH
     // The service still checks the categories and reports a refusal the editor shows.
     val valid = !titleTooLong && !summaryTooLong && !transcriptBlank && !transcriptTooLong
 
@@ -249,7 +252,7 @@ internal fun MemoryEditScreen(
             )
 
             OutlinedTextField(
-                value = transcript,
+                value = shownTranscript,
                 onValueChange = {
                     transcript = it
                     transcriptEdited = true

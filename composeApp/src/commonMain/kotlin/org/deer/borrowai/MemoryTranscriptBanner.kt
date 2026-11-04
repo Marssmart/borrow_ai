@@ -2,7 +2,8 @@ package org.deer.borrowai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -39,6 +40,7 @@ private enum class BannerReplacement { SUMMARY, CATEGORIES }
  * Shown after a saved transcript change. The summary and categories were made from the earlier transcript, so the user
  * can ask for new ones. Each action asks first when it would replace text or choices the user made.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MemoryTranscriptBanner(
     summaryWrittenByUser: Boolean,
@@ -63,7 +65,7 @@ internal fun MemoryTranscriptBanner(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
                     onClick = {
                         if (summaryWrittenByUser) confirming = BannerReplacement.SUMMARY else onWriteSummary()
