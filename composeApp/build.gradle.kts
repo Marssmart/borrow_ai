@@ -62,6 +62,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.components.resources)
             implementation(compose.ui)
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.arrow.core)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)

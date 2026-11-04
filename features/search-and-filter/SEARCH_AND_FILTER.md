@@ -1,6 +1,6 @@
 # Search and filter
 
-Status: Phases 1 and 2 built on Android. Phase 1's exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phase 3 is next (draft v0.1)
+Status: Phases 1 to 3 built on Android. Phase 1's exit criteria in section 12 are not yet met: the benchmark (Q-7) and the device checks are open. Phase 3's device checks are open (Q-8). Phase 4 is not built (draft v0.1)
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 
@@ -82,7 +82,7 @@ As a user, I want to find a memory by a word I remember from it.
 
 ### US-3: Empty and no-result states
 
-- AC-3.1: When a search or filter leaves no results, the list shows "No memories match "<query>"" (or "No memories in these categories" when only chips are selected). Below it: a hint, "Search covers titles, summaries, and transcripts. Memories still being transcribed are not searched yet."
+- AC-3.1: When a search or filter leaves no results, the list shows "No memories match “<query>”" (or "No memories in these categories" when only chips are selected). Below it: a hint, "Search covers titles, summaries, and transcripts. Memories still being transcribed are not searched yet." The same hint is used for both messages. §7.4 limits chips to categories in use, so a chip selection always matches a memory today, and the chips-only message is not reached.
 - AC-3.2: The no-results state has **Clear search** (when a query exists) and **Clear filters** (when chips are selected) buttons.
 - AC-3.3: When the library has no memories at all, the empty state from the delete design is shown ([Delete memories](../delete-memories/delete-memories.html), US-5), not the no-results state.
 
@@ -262,6 +262,7 @@ The filter row hides when the library has no categories in use.
 | Q-5 | Should results be ordered by relevance? | **Decided: no** for v1. Newest first. |
 | Q-6 | Should the list become a `LazyColumn` before or with search? | **Decided: with search** (§6.5). |
 | Q-7 | Has the 1,000-memory benchmark (§6.3, §11) been run on a mid-range device? | **Open.** Not run in the build session, so the phase 4 decision is still open. Record the 95th percentile here before deciding on phase 4. |
+| Q-8 | Do the phase 3 keyboard and back rules work on a device? | **Open.** Built, and the rules are unit-tested, but not run on a device. Check on Android, with TalkBack and a hardware keyboard: the Search key, scrolling, Enter, Escape, back with the keyboard open and with a query, the IME inset (`WindowInsets.ime`) reporting the keyboard, and the no-results layout. The walk-through is in §13 (Manual). |
 
 Test and measurement:
 

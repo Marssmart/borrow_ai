@@ -288,8 +288,8 @@
     </header>
 
     <p class="status-note">
-      <span class="tag tag-shipped">Shipped</span> Built on Android in phase 2: the category chips, OR across the selected chips, Clear filters, and chips combined with the search. Phase 1 built the search field, the clear control, the count line, the 100-character limit, and the matching rules.
-      <span class="tag tag-mock">Mockup</span> Still design only: the no-results and keyboard states (phase 3).
+      <span class="tag tag-shipped">Shipped</span> Built on Android in phase 2: the category chips, OR across the selected chips, Clear filters, and chips combined with the search. Phase 1 built the search field, the clear control, the count line, the 100-character limit, and the matching rules. Phase 3 built the no-results state, the keyboard and back rules, and a count line that stays frozen while a memory is open.
+      <span class="tag tag-mock">Mockup</span> Still design only: the empty library state, which belongs to the delete design.
       <span class="tag tag-android">Android only</span> The layout uses Material 3 components. iOS is not designed here.
     </p>
 
@@ -309,8 +309,8 @@
           <tr><td>Empty library</td><td><span class="tag tag-shipped">Shipped</span></td><td>The search field and count line are hidden. The empty state belongs to the delete design.</td></tr>
           <tr><td>Matching rules</td><td><span class="tag tag-shipped">Shipped</span></td><td>See Matching examples below.</td></tr>
           <tr><td>Category chips and Clear filters</td><td><span class="tag tag-shipped">Shipped</span></td><td>Phase 2. Chip counts use the memories the list shows. Several chips combine with OR, and the search combines with them as AND.</td></tr>
-          <tr><td>No-results state and its buttons</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3.</td></tr>
-          <tr><td>Scrolling, Enter, Escape, and system back</td><td><span class="tag tag-mock">Mockup</span></td><td>Phase 3. See Predictable keys and back presses below.</td></tr>
+          <tr><td>No-results state and its buttons</td><td><span class="tag tag-shipped">Shipped</span></td><td>Phase 3. The same hint shows for a query and for chips only.</td></tr>
+          <tr><td>Scrolling, Enter, Escape, and system back</td><td><span class="tag tag-shipped">Shipped</span></td><td>Phase 3. See Predictable keys and back presses below.</td></tr>
         </tbody>
       </table>
     </section>
@@ -383,9 +383,9 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · No results</p>
-      <h2>No-results states <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">A no-results state names the query, explains what is searched, and offers the clear actions. A library with no memories at all shows the empty state from the delete design instead. This is a mockup until phase 3.</p>
+      <p class="eyebrow">Shipped · 2 · No results</p>
+      <h2>No-results states <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">A no-results state names the query, explains what is searched, and offers the clear actions. A library with no memories at all shows the empty state from the delete design instead. The first preview is built in phase 3. The second is built too, but the chip rules in section 7.4 only offer categories that a memory uses, so a chips-only search always has a match and this state is a fallback. The third is a mockup of the delete design's empty state, which is not built here.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -417,7 +417,7 @@
             <div class="chip-row" style="justify-content:flex-end"><span class="chip-clear">Clear filters</span></div>
             <div class="no-results" role="status">
               <div class="no-results-title">No memories in these categories</div>
-              <p class="no-results-hint">Choose other categories, or clear the filters to see every memory.</p>
+              <p class="no-results-hint">Search covers titles, summaries, and transcripts. Memories still being transcribed are not searched yet.</p>
               <div class="btn-row"><span class="btn btn-tonal">Clear filters</span></div>
             </div>
           </div></div>
@@ -433,7 +433,7 @@
             </div>
             <div class="dock" style="margin-top:auto"><span class="on">Memories</span><span>Record</span><span>Settings</span></div>
           </div></div>
-          <p class="screen-caption">Empty library, not a search result</p>
+          <p class="screen-caption">Empty library, not a search result <span class="tag tag-mock">Mockup</span></p>
         </figure>
       </div>
     </section>
@@ -459,20 +459,20 @@
 
     <section class="section">
       <p class="eyebrow">Keyboard and back</p>
-      <h2>Predictable keys and back presses <span class="tag tag-mock">Mockup</span> <span class="tag tag-android">Android only</span></h2>
-      <p class="section-note">The Search key and the Clear button are built in phase 1. Scrolling, Enter, Escape, and system back are phase 3, so they stay mockups here.</p>
+      <h2>Predictable keys and back presses <span class="tag tag-shipped">Shipped</span> <span class="tag tag-android">Android only</span></h2>
+      <p class="section-note">The Search key and the Clear button were built in phase 1. Scrolling, Enter, Escape, and system back were built in phase 3.</p>
       <table>
         <thead>
           <tr><th>Input</th><th>Result</th><th>Status</th></tr>
         </thead>
         <tbody>
           <tr><td>Search key on the keyboard</td><td>Keyboard hides, results stay.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
-          <tr><td>Scroll the list</td><td>Keyboard hides.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>Scroll the list</td><td>Keyboard hides.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
           <tr><td>Clear button</td><td>Query is emptied, focus stays in the field.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
-          <tr><td>Hardware Enter</td><td>Runs the search.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
-          <tr><td>Hardware Escape</td><td>Clears the query.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
-          <tr><td>System back, keyboard open</td><td>Hides the keyboard first.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
-          <tr><td>System back, query open</td><td>Clears the query.</td><td><span class="tag tag-mock">Mockup</span></td></tr>
+          <tr><td>Hardware Enter</td><td>Runs the search.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
+          <tr><td>Hardware Escape</td><td>Clears the query.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
+          <tr><td>System back, keyboard open</td><td>Hides the keyboard first.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
+          <tr><td>System back, query open</td><td>Clears the query.</td><td><span class="tag tag-shipped">Shipped</span></td></tr>
           <tr><td>System back, detail view open</td><td>Returns to the list, as it does today.</td><td><span class="tag tag-android">Unchanged</span></td></tr>
         </tbody>
       </table>

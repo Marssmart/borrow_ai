@@ -18,6 +18,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -56,10 +60,28 @@ internal fun MemorySearchField(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     val clearLabel = stringResource(Res.string.memory_search_clear)
+    val runSearch = {
+        keyboardController?.hide()
+        onSearch()
+    }
     OutlinedTextField(
         value = text,
         onValueChange = onTextChange,
-        modifier = modifier.fillMaxWidth().focusRequester(focusRequester),
+        modifier = modifier.fillMaxWidth().focusRequester(focusRequester).onPreviewKeyEvent { event ->
+            val action = memorySearchKeyAction(event.key, text)
+            when {
+                action == null || event.type != KeyEventType.KeyDown -> false
+                action == MemorySearchKeyAction.RUN_SEARCH -> {
+                    runSearch()
+                    true
+                }
+
+                else -> {
+                    onClear()
+                    true
+                }
+            }
+        },
         label = { Text(stringResource(Res.string.memory_search_label)) },
         singleLine = true,
         leadingIcon = { SearchGlyph() },
@@ -105,12 +127,7 @@ internal fun MemorySearchField(
             else -> null
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(
-            onSearch = {
-                keyboardController?.hide()
-                onSearch()
-            },
-        ),
+        keyboardActions = KeyboardActions(onSearch = { runSearch() }),
     )
 }
 
