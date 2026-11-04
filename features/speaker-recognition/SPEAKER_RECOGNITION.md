@@ -1,6 +1,6 @@
 # Speaker Recognition
 
-Status: Planning (draft v0.1)
+Status: In progress (draft v0.1). P1 (data and pipeline) and P2 (read-only UI, Android only) are built. P3 to P5 are planned.
 Visual guide: [visual-guide.html](./visual-guide.html)
 Owner: BorrowAI native team
 
