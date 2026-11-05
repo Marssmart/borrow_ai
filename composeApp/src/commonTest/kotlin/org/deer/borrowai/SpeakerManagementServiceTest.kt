@@ -58,6 +58,28 @@ class SpeakerManagementServiceTest {
     }
 
     @Test
+    fun summaryCountsOnlyMemoriesInTheActiveMemoryMap() = runTest {
+        val service = FakeSpeakerService(enabled = true)
+        val speaker = service.createSpeaker("Speaker").getOrNull()!!
+        service.replaceOccurrences(
+            memoryId = "active-memory",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(draft(1, speaker.id)),
+        )
+        service.replaceOccurrences(
+            memoryId = "deleted-memory",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(draft(1, speaker.id)),
+        )
+
+        val summary = service.findSpeakerSummaries(mapOf("active-memory" to 123L))
+            .getOrNull()!![speaker.id]!!
+
+        assertEquals(1, summary.linkedMemoryCount)
+        assertEquals(123L, summary.lastHeardAtEpochMillis)
+    }
+
+    @Test
     fun rejectedAutomaticMatchStaysUnknownAndDoesNotKeepALinkedEmbedding() = runTest {
         val service = FakeSpeakerService(enabled = true)
         val source = service.createSpeaker("Source").getOrNull()!!

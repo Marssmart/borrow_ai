@@ -87,8 +87,11 @@ import borrowai.composeapp.generated.resources.speaker_management_no_memories
 import borrowai.composeapp.generated.resources.speaker_management_no_recent
 import borrowai.composeapp.generated.resources.speaker_management_no_results
 import borrowai.composeapp.generated.resources.speaker_management_not_this_person
+import borrowai.composeapp.generated.resources.speaker_management_occurrence_label
 import borrowai.composeapp.generated.resources.speaker_management_open_memory
 import borrowai.composeapp.generated.resources.speaker_management_play_sample
+import borrowai.composeapp.generated.resources.speaker_management_play_occurrence_sample_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_play_speaker_sample_accessibility
 import borrowai.composeapp.generated.resources.speaker_management_recent
 import borrowai.composeapp.generated.resources.speaker_management_rename
 import borrowai.composeapp.generated.resources.speaker_management_retry
@@ -96,9 +99,16 @@ import borrowai.composeapp.generated.resources.speaker_management_save
 import borrowai.composeapp.generated.resources.speaker_management_search
 import borrowai.composeapp.generated.resources.speaker_management_select_target
 import borrowai.composeapp.generated.resources.speaker_management_settings
+import borrowai.composeapp.generated.resources.speaker_management_speaker_color
+import borrowai.composeapp.generated.resources.speaker_management_speaker_unavailable
+import borrowai.composeapp.generated.resources.speaker_management_speakers_unavailable
 import borrowai.composeapp.generated.resources.speaker_management_stop_sample
+import borrowai.composeapp.generated.resources.speaker_management_stop_occurrence_sample_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_stop_speaker_sample_accessibility
 import borrowai.composeapp.generated.resources.speaker_management_title
 import borrowai.composeapp.generated.resources.speaker_management_untitled
+import borrowai.composeapp.generated.resources.speaker_management_create_failed
+import borrowai.composeapp.generated.resources.speaker_management_created_assignment_failed
 import org.deer.borrowai.data.domain.MAX_SPEAKER_NAME_LENGTH
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.Speaker
@@ -141,6 +151,10 @@ internal fun SpeakerManagementScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val actionFailedMessage = stringResource(Res.string.speaker_management_action_failed)
+    val speakerUnavailableMessage = stringResource(Res.string.speaker_management_speaker_unavailable)
+    val speakersUnavailableMessage = stringResource(Res.string.speaker_management_speakers_unavailable)
+    val createFailedMessage = stringResource(Res.string.speaker_management_create_failed)
     var library by remember { mutableStateOf<List<Speaker>>(emptyList()) }
     var summaries by remember { mutableStateOf<Map<String, SpeakerSummary>>(emptyMap()) }
     var memoryList by remember { mutableStateOf<List<Memory>>(emptyList()) }
@@ -159,6 +173,7 @@ internal fun SpeakerManagementScreen(
     var mergeSearch by remember { mutableStateOf("") }
     var mergeTarget by remember { mutableStateOf<Speaker?>(null) }
     var deleteTarget by remember { mutableStateOf<Speaker?>(null) }
+    val duplicateNameMessage = stringResource(Res.string.speaker_management_duplicate, name.trim())
 
     suspend fun reload() {
         loading = true
@@ -214,6 +229,11 @@ internal fun SpeakerManagementScreen(
         var operationError by remember { mutableStateOf<String?>(null) }
         var retrySpeakerId by remember { mutableStateOf<String?>(null) }
         var rejectChoiceVisible by remember(rejectChoice) { mutableStateOf(rejectChoice) }
+        val actionFailedMessage = stringResource(Res.string.speaker_management_action_failed)
+        val occurrenceUnavailableMessage = stringResource(Res.string.speaker_management_missing_occurrence)
+        val speakerUnavailableMessage = stringResource(Res.string.speaker_management_speaker_unavailable)
+        val duplicateNameMessage = stringResource(Res.string.speaker_management_duplicate, name.trim())
+        val createdAssignmentFailedMessage = stringResource(Res.string.speaker_management_created_assignment_failed)
 
         suspend fun reload() {
             loading = true
@@ -258,17 +278,25 @@ internal fun SpeakerManagementScreen(
                 rejectedSpeakerIds = occurrence.rejectedSpeakerIds.filterNot { it == speakerId },
             )
 
-        fun completeAssignment(speakerId: String) {
+        fun completeAssignment(speakerId: String, createdSpeaker: Boolean = false) {
             scope.launch {
                 speakers.assignOccurrence(occurrence.id, speakerId).fold(
                     ifLeft = {
                         operationError = when (it) {
                             is SpeakerError.NotFound -> if (it.id == occurrence.id) {
-                                "This speaker occurrence is no longer available."
+                                occurrenceUnavailableMessage
                             } else {
-                                "This speaker is no longer available."
+                                speakerUnavailableMessage
                             }
-                            else -> it.toUiMessage()
+                            else -> if (createdSpeaker) {
+                                createdAssignmentFailedMessage
+                            } else {
+                                it.toUiMessage(
+                                    notFoundMessage = speakerUnavailableMessage,
+                                    duplicateNameMessage = duplicateNameMessage,
+                                    fallbackMessage = actionFailedMessage,
+                                )
+                            }
                         }
                         retrySpeakerId = speakerId
                     },
@@ -296,14 +324,21 @@ internal fun SpeakerManagementScreen(
                 sourceMemory?.let { memory ->
                     if (hasRecordingFile(memory)) {
                         val target = sampleTarget(occurrence)
+                        val isPlaying = playingTarget == target
+                        val sampleDescription = stringResource(
+                            if (isPlaying) {
+                                Res.string.speaker_management_stop_occurrence_sample_accessibility
+                            } else {
+                                Res.string.speaker_management_play_occurrence_sample_accessibility
+                            },
+                            occurrence.ordinal,
+                            sourceMemoryTitle,
+                        )
                         TextButton(onClick = { onPlaySample(target) }) {
                             Text(
-                                stringResource(
-                                    if (playingTarget == target) Res.string.speaker_management_stop_sample
-                                    else Res.string.speaker_management_play_sample,
-                                ),
+                                stringResource(if (isPlaying) Res.string.speaker_management_stop_sample else Res.string.speaker_management_play_sample),
                                 modifier = Modifier.semantics {
-                                    contentDescription = "${if (playingTarget == target) "Stop" else "Play"} sample for Speaker ${occurrence.ordinal} in ${memory.title}"
+                                    contentDescription = sampleDescription
                                 },
                             )
                         }
@@ -324,7 +359,9 @@ internal fun SpeakerManagementScreen(
                                     speakers.rejectAutomaticMatch(occurrence.id).fold(
                                         ifLeft = {
                                             operationError = it.toUiMessage(
-                                                notFoundMessage = "This speaker occurrence is no longer available.",
+                                                notFoundMessage = occurrenceUnavailableMessage,
+                                                duplicateNameMessage = duplicateNameMessage,
+                                                fallbackMessage = actionFailedMessage,
                                             )
                                         },
                                         ifRight = {
@@ -419,11 +456,17 @@ internal fun SpeakerManagementScreen(
                         onClick = {
                             scope.launch {
                                 speakers.createSpeaker(name).fold(
-                                    ifLeft = { operationError = it.toUiMessage() },
+                                    ifLeft = {
+                                        operationError = it.toUiMessage(
+                                            notFoundMessage = speakerUnavailableMessage,
+                                            duplicateNameMessage = duplicateNameMessage,
+                                            fallbackMessage = actionFailedMessage,
+                                        )
+                                    },
                                     ifRight = { created ->
                                         createVisible = false
                                         reload()
-                                        completeAssignment(created.id)
+                                        completeAssignment(created.id, createdSpeaker = true)
                                     },
                                 )
                             }
@@ -718,11 +761,9 @@ internal fun SpeakerManagementScreen(
                                 ifLeft = { error ->
                                     operationFailed = true
                                     message = error.toUiMessage(
-                                        notFoundMessage = if (editing == null) {
-                                            "Speaker could not be created."
-                                        } else {
-                                            "This speaker is no longer available."
-                                        },
+                                        notFoundMessage = if (editing == null) createFailedMessage else speakerUnavailableMessage,
+                                        duplicateNameMessage = duplicateNameMessage,
+                                        fallbackMessage = actionFailedMessage,
                                     )
                                 },
                                 ifRight = { createdOrRenamed ->
@@ -762,7 +803,11 @@ internal fun SpeakerManagementScreen(
                             speakers.deleteSpeaker(deleting.id).fold(
                                 ifLeft = {
                                     operationFailed = true
-                                    message = it.toUiMessage(notFoundMessage = "This speaker is no longer available.")
+                                    message = it.toUiMessage(
+                                        notFoundMessage = speakerUnavailableMessage,
+                                        duplicateNameMessage = duplicateNameMessage,
+                                        fallbackMessage = actionFailedMessage,
+                                    )
                                 },
                                 ifRight = { selectedId = null; deleteTarget = null },
                             )
@@ -794,7 +839,9 @@ internal fun SpeakerManagementScreen(
                                     ifLeft = {
                                         operationFailed = true
                                         message = it.toUiMessage(
-                                            notFoundMessage = "One of these speakers is no longer available.",
+                                            notFoundMessage = speakersUnavailableMessage,
+                                            duplicateNameMessage = duplicateNameMessage,
+                                            fallbackMessage = actionFailedMessage,
                                         )
                                     },
                                     ifRight = {
@@ -863,11 +910,12 @@ private fun SpeakerRow(
 
 @Composable
 private fun SpeakerColorDot(colorIndex: Int) {
+    val colorDescription = stringResource(Res.string.speaker_management_speaker_color)
     Box(
         modifier = Modifier
             .background(Color(speakerPalette[colorIndex].toULong()), CircleShape)
             .padding(12.dp)
-            .semantics { contentDescription = "Speaker color" },
+            .semantics { contentDescription = colorDescription },
     )
 }
 
@@ -891,7 +939,10 @@ private fun RecentOccurrenceRow(
                 formatMemoryTimestamp(memory.createdAtEpochMillis),
                 style = MaterialTheme.typography.bodySmall,
             )
-            Text("Speaker ${occurrence.ordinal} · $speakerName", style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(Res.string.speaker_management_occurrence_label, occurrence.ordinal, speakerName),
+                style = MaterialTheme.typography.bodySmall,
+            )
             Text(
                 stringResource(
                     if (occurrence.link == SpeakerLink.AUTO) {
@@ -904,14 +955,21 @@ private fun RecentOccurrenceRow(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (hasAudio) {
+                    val isPlaying = playingTarget == target
+                    val sampleDescription = stringResource(
+                        if (isPlaying) {
+                            Res.string.speaker_management_stop_speaker_sample_accessibility
+                        } else {
+                            Res.string.speaker_management_play_speaker_sample_accessibility
+                        },
+                        speakerName,
+                        memoryTitle,
+                    )
                     TextButton(onClick = { onPlaySample(target) }) {
                         Text(
-                            stringResource(
-                                if (playingTarget == target) Res.string.speaker_management_stop_sample
-                                else Res.string.speaker_management_play_sample,
-                            ),
+                            stringResource(if (isPlaying) Res.string.speaker_management_stop_sample else Res.string.speaker_management_play_sample),
                             modifier = Modifier.semantics {
-                                contentDescription = "${if (playingTarget == target) "Stop" else "Play"} sample for $speakerName in ${memory.title}"
+                                contentDescription = sampleDescription
                             },
                         )
                     }
@@ -984,10 +1042,12 @@ private fun SpeakerOccurrence.toLinkSnapshot() = SpeakerOccurrenceLink(
 )
 
 private fun SpeakerError.toUiMessage(
-    notFoundMessage: String = "The requested speaker data is no longer available.",
+    notFoundMessage: String,
+    duplicateNameMessage: String,
+    fallbackMessage: String,
 ): String = when (this) {
-    is SpeakerError.NameTaken -> "A speaker named “$name” already exists."
+    is SpeakerError.NameTaken -> duplicateNameMessage
     is SpeakerError.InvalidInput -> reason
     is SpeakerError.NotFound -> notFoundMessage
-    else -> "Couldn’t update speaker. Try again."
+    else -> fallbackMessage
 }

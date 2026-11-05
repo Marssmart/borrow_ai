@@ -130,6 +130,7 @@ class KotbaseSpeakerService private constructor(
                 val linkedOccurrences = readOccurrences().filter { it.speakerId != null }.groupBy { it.speakerId!! }
                 speakers.associate { speaker ->
                     val occurrences = linkedOccurrences[speaker.id].orEmpty()
+                        .filter { it.memoryId in memoryCreatedAtEpochMillis }
                     speaker.id to SpeakerSummary(
                         speakerId = speaker.id,
                         linkedMemoryCount = occurrences.map { it.memoryId }.distinct().size,
@@ -144,7 +145,7 @@ class KotbaseSpeakerService private constructor(
     override suspend fun findOccurrencesForSpeaker(
         speakerId: String,
     ): Either<SpeakerError, List<SpeakerOccurrence>> = withContext(Dispatchers.Default) {
-        persisting { readOccurrenceRows(speakerIdIs(speakerId)).sortedByDescending { it.memoryId } }
+        persisting { readOccurrenceRows(speakerIdIs(speakerId)) }
     }
 
     override suspend fun assignOccurrence(

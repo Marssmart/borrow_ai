@@ -290,6 +290,20 @@ class KotbaseSpeakerServiceTest {
     }
 
     @Test
+    fun speakerSummaryCountsOnlyActiveMemories() = runTest {
+        val service = openService()
+        val speaker = service.createSpeaker("Speaker").getOrNull()!!
+        assertTrue(service.replaceOccurrences("active-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(speaker.id))).isRight())
+        assertTrue(service.replaceOccurrences("deleted-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(speaker.id))).isRight())
+
+        val summary = service.findSpeakerSummaries(mapOf("active-memory" to 123L))
+            .getOrNull()!![speaker.id]!!
+
+        assertEquals(1, summary.linkedMemoryCount)
+        assertEquals(123L, summary.lastHeardAtEpochMillis)
+    }
+
+    @Test
     fun failedMutationRollsBackPartialWrites() = runTest {
         val service = openService()
         val collection = requireNotNull(requireNotNull(database).getCollection("speakers"))

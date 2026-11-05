@@ -115,7 +115,11 @@ import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_model_missing
+import borrowai.composeapp.generated.resources.speaker_management_missing_occurrence
 import borrowai.composeapp.generated.resources.speaker_management_title
+import borrowai.composeapp.generated.resources.speaker_management_undo
+import borrowai.composeapp.generated.resources.speaker_management_undo_failed
+import borrowai.composeapp.generated.resources.speaker_management_updated
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -326,6 +330,10 @@ internal fun SavedMemoriesScreen(
             onUndo = stateHolder::undoDelete,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
+        val speakerUpdatedMessage = stringResource(Res.string.speaker_management_updated)
+        val speakerUndoLabel = stringResource(Res.string.speaker_management_undo)
+        val speakerUndoFailedMessage = stringResource(Res.string.speaker_management_undo_failed)
+        val speakerOccurrenceUnavailableMessage = stringResource(Res.string.speaker_management_missing_occurrence)
         speakerManagementRequest?.let { request ->
             SpeakerManagementScreen(
                 speakers = services.speakers,
@@ -335,14 +343,14 @@ internal fun SavedMemoriesScreen(
                 onOccurrenceChanged = { expected, previous ->
                     scope.launch {
                         val undo = snackbarHostState.showSnackbar(
-                            message = "Speaker updated",
-                            actionLabel = "Undo",
+                            message = speakerUpdatedMessage,
+                            actionLabel = speakerUndoLabel,
                             withDismissAction = true,
                         )
                         if (undo == SnackbarResult.ActionPerformed) {
                             services.speakers.restoreOccurrenceLink(expected, previous).fold(
                                 ifLeft = {
-                                    snackbarHostState.showSnackbar("Couldn’t undo the speaker update.")
+                                    snackbarHostState.showSnackbar(speakerUndoFailedMessage)
                                 },
                                 ifRight = {},
                             )
@@ -351,7 +359,7 @@ internal fun SavedMemoriesScreen(
                 },
                 onOccurrenceUnavailable = {
                     scope.launch {
-                        snackbarHostState.showSnackbar("This speaker occurrence is no longer available.")
+                        snackbarHostState.showSnackbar(speakerOccurrenceUnavailableMessage)
                     }
                 },
                 onOpenMemoryAtSpeaker = { navigation ->

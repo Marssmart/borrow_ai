@@ -34,6 +34,12 @@
     <string name="speaker_management_open_memory">Open memory</string>
     <string name="speaker_management_play_sample">Play sample</string>
     <string name="speaker_management_stop_sample">Stop sample</string>
+    <string name="speaker_management_play_occurrence_sample_accessibility">Play sample for Speaker %1$d in %2$s</string>
+    <string name="speaker_management_stop_occurrence_sample_accessibility">Stop sample for Speaker %1$d in %2$s</string>
+    <string name="speaker_management_play_speaker_sample_accessibility">Play sample for %1$s in %2$s</string>
+    <string name="speaker_management_stop_speaker_sample_accessibility">Stop sample for %1$s in %2$s</string>
+    <string name="speaker_management_speaker_color">Speaker color</string>
+    <string name="speaker_management_occurrence_label">Speaker %1$d · %2$s</string>
     <string name="speaker_management_audio_unavailable">Audio unavailable</string>
     <string name="speaker_management_assign">Assign</string>
     <string name="speaker_management_change">Change</string>
@@ -47,6 +53,13 @@
     <string name="speaker_management_choose_another">Choose another speaker</string>
     <string name="speaker_management_missing_occurrence">This speaker occurrence is no longer available.</string>
     <string name="speaker_management_action_failed">Couldn’t update speaker. Try again.</string>
+    <string name="speaker_management_speaker_unavailable">This speaker is no longer available.</string>
+    <string name="speaker_management_speakers_unavailable">One of these speakers is no longer available.</string>
+    <string name="speaker_management_create_failed">Speaker could not be created.</string>
+    <string name="speaker_management_created_assignment_failed">Speaker created, but assignment did not finish. Retry assignment.</string>
+    <string name="speaker_management_updated">Speaker updated</string>
+    <string name="speaker_management_undo">Undo</string>
+    <string name="speaker_management_undo_failed">Couldn’t undo the speaker update.</string>
     <string name="speaker_management_duplicate">A speaker named “%1$s” already exists.</string>
     <string name="speaker_management_delete_title">Delete %1$s?</string>
     <string name="speaker_management_delete_impact">%1$s will become unknown in %2$d memories. Memories and recordings stay; stored voiceprints are deleted.</string>

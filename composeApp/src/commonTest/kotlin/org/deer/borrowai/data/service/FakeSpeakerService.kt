@@ -125,7 +125,9 @@ class FakeSpeakerService(
     ): Either<SpeakerError, Map<String, SpeakerSummary>> =
         mutex.withLock {
             speakers.values.associate { speaker ->
-                val linked = occurrences.values.filter { it.speakerId == speaker.id }
+                val linked = occurrences.values.filter {
+                    it.speakerId == speaker.id && it.memoryId in memoryCreatedAtEpochMillis
+                }
                 speaker.id to SpeakerSummary(
                     speakerId = speaker.id,
                     linkedMemoryCount = linked.map { it.memoryId }.distinct().size,
@@ -139,7 +141,7 @@ class FakeSpeakerService(
     override suspend fun findOccurrencesForSpeaker(
         speakerId: String,
     ): Either<SpeakerError, List<SpeakerOccurrence>> = mutex.withLock {
-        occurrences.values.filter { it.speakerId == speakerId }.sortedByDescending { it.memoryId }.right()
+        occurrences.values.filter { it.speakerId == speakerId }.right()
     }
 
     override suspend fun assignOccurrence(

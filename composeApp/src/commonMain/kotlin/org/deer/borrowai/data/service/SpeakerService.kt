@@ -53,7 +53,7 @@ interface SpeakerService {
         memoryCreatedAtEpochMillis: Map<String, Long>,
     ): Either<SpeakerError, Map<String, SpeakerSummary>>
 
-    /** The occurrences linked to [speakerId], newest memory ids first when their store order is available. */
+    /** The occurrences linked to [speakerId]; callers with memory timestamps should order them by those timestamps. */
     suspend fun findOccurrencesForSpeaker(speakerId: String): Either<SpeakerError, List<SpeakerOccurrence>>
 
     /**
