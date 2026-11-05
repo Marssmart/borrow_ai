@@ -31,11 +31,14 @@ import kotlin.uuid.Uuid
 import okio.Buffer
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_EMBEDDINGS_PER_SPEAKER
+import org.deer.borrowai.data.domain.MAX_SPEAKER_NAME_LENGTH
 import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerOccurrenceLink
+import org.deer.borrowai.data.domain.SpeakerSummary
 import org.deer.borrowai.data.domain.newSpeakerColorIndex
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
@@ -118,10 +121,258 @@ class KotbaseSpeakerService private constructor(
         }
     }
 
+    override suspend fun findSpeakerSummaries(
+        memoryCreatedAtEpochMillis: Map<String, Long>,
+    ): Either<SpeakerError, Map<String, SpeakerSummary>> =
+        withContext(Dispatchers.Default) {
+            persisting {
+                val speakers = readSpeakers()
+                val linkedOccurrences = readOccurrences().filter { it.speakerId != null }.groupBy { it.speakerId!! }
+                speakers.associate { speaker ->
+                    val occurrences = linkedOccurrences[speaker.id].orEmpty()
+                        .filter { it.memoryId in memoryCreatedAtEpochMillis }
+                    speaker.id to SpeakerSummary(
+                        speakerId = speaker.id,
+                        linkedMemoryCount = occurrences.map { it.memoryId }.distinct().size,
+                        lastHeardAtEpochMillis = occurrences.mapNotNull {
+                            memoryCreatedAtEpochMillis[it.memoryId]
+                        }.maxOrNull(),
+                    )
+                }
+            }
+        }
+
+    override suspend fun findOccurrencesForSpeaker(
+        speakerId: String,
+    ): Either<SpeakerError, List<SpeakerOccurrence>> = withContext(Dispatchers.Default) {
+        persisting { readOccurrenceRows(speakerIdIs(speakerId)) }
+    }
+
+    override suspend fun assignOccurrence(
+        occurrenceId: String,
+        speakerId: String?,
+    ): Either<SpeakerError, Unit> = mutex.withLock {
+        either {
+            val occurrence = withContext(Dispatchers.Default) {
+                persisting { readOccurrenceRows(Meta.id.equalTo(Expression.string(occurrenceId))).firstOrNull() }
+            }.bind() ?: raise(SpeakerError.NotFound(occurrenceId))
+            val embedding = withContext(Dispatchers.Default) {
+                persisting {
+                    readEmbeddings { it.getString(COLUMN_ID) == occurrence.embeddingId }.firstOrNull()
+                }
+            }.bind()
+            val target = speakerId?.let { findSpeaker(it).bind() }
+            val previousSpeaker = occurrence.speakerId?.takeIf { it != speakerId }
+            val now = epochClock.nowEpochMillis()
+            val nextOccurrence = occurrence.copy(
+                speakerId = speakerId,
+                link = if (speakerId == null) SpeakerLink.NONE else SpeakerLink.MANUAL,
+                rejectedSpeakerIds = when {
+                    speakerId != null -> occurrence.rejectedSpeakerIds.filterNot { it == speakerId }
+                    previousSpeaker != null -> (occurrence.rejectedSpeakerIds + previousSpeaker).distinct()
+                    else -> occurrence.rejectedSpeakerIds
+                },
+            )
+            val nextEmbedding = embedding?.copy(speakerId = speakerId)
+            val affectedIds = setOfNotNull(embedding?.speakerId, speakerId)
+            val plan = if (nextEmbedding != null) {
+                withContext(Dispatchers.Default) {
+                    persisting { planEmbeddingChanges(affectedIds, nextEmbedding, now) }
+                }.bind()
+            } else {
+                val speakerRows = withContext(Dispatchers.Default) {
+                    persisting { readSpeakers().filter { it.id in affectedIds }.associateBy { it.id } }
+                }.bind()
+                EmbeddingChangePlan(speakerRows, emptyList(), emptyList())
+            }
+            applyMutation(
+                writeChanges = {
+                    saveOccurrence(nextOccurrence)
+                    nextEmbedding?.let(::saveEmbedding)
+                    if (nextEmbedding != null) {
+                        applyEmbeddingChanges(plan)
+                    } else {
+                        target?.let { updateDocument(it.id) { setLong(KEY_LAST_USED_AT, now) } }
+                    }
+                },
+            ).bind()
+        }
+    }
+
+    override suspend fun rejectAutomaticMatch(occurrenceId: String): Either<SpeakerError, Unit> = mutex.withLock {
+        either {
+            val occurrence = withContext(Dispatchers.Default) {
+                persisting { readOccurrenceRows(Meta.id.equalTo(Expression.string(occurrenceId))).firstOrNull() }
+            }.bind() ?: raise(SpeakerError.NotFound(occurrenceId))
+            val rejectedSpeakerId = occurrence.speakerId
+            ensure(occurrence.link == SpeakerLink.AUTO && rejectedSpeakerId != null) {
+                SpeakerError.InvalidInput("Only an automatic speaker match can be rejected.")
+            }
+            val embedding = withContext(Dispatchers.Default) {
+                persisting {
+                    readEmbeddings { it.getString(COLUMN_ID) == occurrence.embeddingId }.firstOrNull()
+                }
+            }.bind() ?: raise(SpeakerError.NotFound(occurrence.embeddingId))
+            val nextOccurrence = occurrence.copy(
+                speakerId = null,
+                link = SpeakerLink.NONE,
+                rejectedSpeakerIds = (occurrence.rejectedSpeakerIds + requireNotNull(rejectedSpeakerId)).distinct(),
+            )
+            val nextEmbedding = embedding.copy(speakerId = null)
+            val plan = withContext(Dispatchers.Default) {
+                persisting { planEmbeddingChanges(setOfNotNull(rejectedSpeakerId), nextEmbedding, null) }
+            }.bind()
+            applyMutation(
+                writeChanges = {
+                    saveOccurrence(nextOccurrence)
+                    saveEmbedding(nextEmbedding)
+                    applyEmbeddingChanges(plan)
+                },
+            ).bind()
+        }
+    }
+
+    override suspend fun restoreOccurrenceLink(
+        expected: SpeakerOccurrenceLink,
+        previous: SpeakerOccurrenceLink,
+    ): Either<SpeakerError, Unit> = mutex.withLock {
+        either {
+            ensure(expected.occurrenceId == previous.occurrenceId) {
+                SpeakerError.InvalidInput("The undo snapshot refers to a different occurrence.")
+            }
+            val occurrence = withContext(Dispatchers.Default) {
+                persisting {
+                    readOccurrenceRows(Meta.id.equalTo(Expression.string(expected.occurrenceId))).firstOrNull()
+                }
+            }.bind() ?: raise(SpeakerError.NotFound(expected.occurrenceId))
+            val current = SpeakerOccurrenceLink(
+                occurrenceId = occurrence.id,
+                speakerId = occurrence.speakerId,
+                link = occurrence.link,
+                rejectedSpeakerIds = occurrence.rejectedSpeakerIds,
+            )
+            ensure(current == expected) {
+                SpeakerError.InvalidInput("This speaker occurrence has changed, so Undo is no longer available.")
+            }
+            val target = previous.speakerId?.let { findSpeaker(it).bind() }
+            val embedding = withContext(Dispatchers.Default) {
+                persisting {
+                    readEmbeddings { it.getString(COLUMN_ID) == occurrence.embeddingId }.firstOrNull()
+                }
+            }.bind()
+            val nextOccurrence = occurrence.copy(
+                speakerId = previous.speakerId,
+                link = previous.link,
+                rejectedSpeakerIds = previous.rejectedSpeakerIds,
+            )
+            val nextEmbedding = embedding?.copy(speakerId = previous.speakerId)
+            val now = epochClock.nowEpochMillis()
+            val plan = if (nextEmbedding != null) {
+                withContext(Dispatchers.Default) {
+                    persisting {
+                        planEmbeddingChanges(
+                            setOfNotNull(embedding.speakerId, previous.speakerId),
+                            nextEmbedding,
+                            now,
+                        )
+                    }
+                }.bind()
+            } else {
+                null
+            }
+            applyMutation(
+                writeChanges = {
+                    saveOccurrence(nextOccurrence)
+                    nextEmbedding?.let(::saveEmbedding)
+                    if (plan != null) {
+                        applyEmbeddingChanges(plan)
+                    } else {
+                        target?.let { updateDocument(it.id) { setLong(KEY_LAST_USED_AT, now) } }
+                    }
+                },
+            ).bind()
+        }
+    }
+
+    override suspend fun mergeSpeakers(sourceId: String, targetId: String): Either<SpeakerError, Unit> =
+        mutex.withLock {
+            either {
+                ensure(sourceId != targetId) {
+                    SpeakerError.InvalidInput("Choose a different speaker to merge into.")
+                }
+                val source = findSpeaker(sourceId).bind()
+                val target = findSpeaker(targetId).bind()
+                val rows = withContext(Dispatchers.Default) {
+                    persisting {
+                        val occurrences = readOccurrences()
+                        val changedOccurrences = occurrences.filter {
+                            it.speakerId == sourceId || sourceId in it.rejectedSpeakerIds
+                        }
+                        val embeddings = readEmbeddings {
+                            it.getString(KEY_SPEAKER_ID) == sourceId || it.getString(KEY_SPEAKER_ID) == targetId
+                        }
+                        MergeRows(changedOccurrences, embeddings)
+                    }
+                }.bind()
+                val mergedEmbeddings = rows.embeddings.map { embedding ->
+                    if (embedding.speakerId == sourceId) embedding.copy(speakerId = targetId) else embedding
+                }
+                val kept = mergedEmbeddings
+                    .sortedWith(compareByDescending<SpeakerEmbedding> { it.createdAtEpochMillis }.thenBy { it.id })
+                    .take(MAX_EMBEDDINGS_PER_SPEAKER)
+                val keptIds = kept.mapTo(mutableSetOf()) { it.id }
+                val dropped = mergedEmbeddings.filterNot { it.id in keptIds }
+                val latestUse = maxOf(source.lastUsedAtEpochMillis, target.lastUsedAtEpochMillis)
+                val updatedTarget = target.copy(
+                    embeddingCount = kept.size,
+                    lastUsedAtEpochMillis = latestUse,
+                )
+                val changedOccurrences = rows.changedOccurrences.map { occurrence ->
+                    val nextSpeakerId = if (occurrence.speakerId == sourceId) targetId else occurrence.speakerId
+                    val rejected = occurrence.rejectedSpeakerIds.map { id ->
+                        if (id == sourceId) targetId else id
+                    }.distinct().filterNot { it == nextSpeakerId }
+                    occurrence.copy(speakerId = nextSpeakerId, rejectedSpeakerIds = rejected)
+                }
+                applyMutation(
+                    writeChanges = {
+                        kept.forEach(::saveEmbedding)
+                        changedOccurrences.forEach(::saveOccurrence)
+                        dropped.forEach { deleteDocument(it.id) }
+                        saveSpeaker(updatedTarget)
+                        deleteDocument(sourceId)
+                    },
+                ).bind()
+            }
+        }
+
     override suspend fun deleteSpeaker(id: String): Either<SpeakerError, Unit> = mutex.withLock {
         either {
-            findSpeaker(id).bind()
-            write { unlinkAndDeleteSpeaker(id) }.bind()
+            val speaker = findSpeaker(id).bind()
+            val rows = withContext(Dispatchers.Default) {
+                persisting {
+                    DeletionRows(
+                        embeddings = readEmbeddings { it.getString(KEY_SPEAKER_ID) == id },
+                        occurrences = readOccurrences().filter {
+                            it.speakerId == id || id in it.rejectedSpeakerIds
+                        },
+                    )
+                }
+            }.bind()
+            val updatedOccurrences = rows.occurrences.map { occurrence ->
+                occurrence.copy(
+                    speakerId = if (occurrence.speakerId == id) null else occurrence.speakerId,
+                    link = if (occurrence.speakerId == id) SpeakerLink.NONE else occurrence.link,
+                    rejectedSpeakerIds = occurrence.rejectedSpeakerIds.filterNot { it == id },
+                )
+            }
+            applyMutation(
+                writeChanges = {
+                    rows.embeddings.forEach { deleteDocument(it.id) }
+                    updatedOccurrences.forEach(::saveOccurrence)
+                    deleteDocument(id)
+                },
+            ).bind()
         }
     }
 
@@ -157,26 +408,7 @@ class KotbaseSpeakerService private constructor(
             val plan = withContext(Dispatchers.Default) {
                 persisting { planMemory(memoryId, rows, linkedSpeakerIds, usedAtEpochMillis = now) }
             }.bind()
-            // Exceptions are caught inside the batch and returned, so none crosses Couchbase's native batch boundary.
-            // A partial write is harmless: the next analysis rebuilds these rows from scratch.
-            var batchFailure: Exception? = null
-            write {
-                database.inBatch {
-                    try {
-                        applyPlan(plan)
-                    } catch (exception: Exception) {
-                        batchFailure = exception
-                    }
-                    Unit
-                }
-            }.bind()
-            batchFailure?.let { failure ->
-                // The batch can commit rows written before the failure. Remove them so a failed attempt leaves no partial result.
-                write {
-                    applyPlan(planMemory(memoryId, rows = emptyList(), linkedSpeakerIds = emptySet(), usedAtEpochMillis = null))
-                }.bind()
-                raise(SpeakerError.Persistence(failure))
-            }
+            write { database.inBatch { applyPlan(plan) } }.bind()
         }
     }
 
@@ -223,6 +455,9 @@ class KotbaseSpeakerService private constructor(
     private suspend fun checkName(name: String, exceptId: String?): Either<SpeakerError, String> = either {
         val trimmed = name.trim()
         ensure(trimmed.isNotEmpty()) { SpeakerError.InvalidInput("A speaker name cannot be blank.") }
+        ensure(trimmed.length <= MAX_SPEAKER_NAME_LENGTH) {
+            SpeakerError.InvalidInput("A speaker name can be at most $MAX_SPEAKER_NAME_LENGTH characters.")
+        }
         val taken = withContext(Dispatchers.Default) { persisting { readSpeakers() } }.bind()
             .any { it.id != exceptId && it.name.equals(trimmed, ignoreCase = true) }
         ensure(!taken) { SpeakerError.NameTaken(trimmed) }
@@ -298,6 +533,57 @@ class KotbaseSpeakerService private constructor(
         }
     }
 
+    private fun applyEmbeddingChanges(plan: EmbeddingChangePlan) {
+        plan.changes.forEach { change ->
+            change.dropEmbeddingIds.forEach(::deleteDocument)
+            val speaker = plan.speakersById[change.speakerId] ?: return@forEach
+            saveSpeaker(
+                speaker.copy(
+                    embeddingCount = change.embeddingCount,
+                    lastUsedAtEpochMillis = change.usedAtEpochMillis ?: speaker.lastUsedAtEpochMillis,
+                ),
+            )
+        }
+    }
+
+    /** Commits a prevalidated mutation in one batch; failures abort it before [write] maps the error. */
+    internal suspend fun applyMutation(writeChanges: () -> Unit): Either<SpeakerError, Unit> =
+        write { database.inBatch { writeChanges() } }.map { Unit }
+
+    private fun planEmbeddingChanges(
+        speakerIds: Set<String>,
+        replacement: SpeakerEmbedding,
+        usedAtEpochMillis: Long?,
+    ): EmbeddingChangePlan {
+        if (speakerIds.isEmpty()) return EmbeddingChangePlan(emptyMap(), emptyList(), emptyList())
+        val speakersById = readSpeakers().filter { it.id in speakerIds }.associateBy { it.id }
+        val existing = readEmbeddings { it.getString(KEY_SPEAKER_ID) in speakerIds }
+        val changes = speakerIds.mapNotNull { speakerId ->
+            val speaker = speakersById[speakerId] ?: return@mapNotNull null
+            val rows = existing
+                .filterNot { it.id == replacement.id }
+                .filter { it.speakerId == speakerId }
+                .toMutableList()
+            if (replacement.speakerId == speakerId) rows += replacement
+            val newest = rows.sortedWith(
+                compareByDescending<SpeakerEmbedding> { it.createdAtEpochMillis }.thenBy { it.id },
+            )
+            val dropped = newest.drop(MAX_EMBEDDINGS_PER_SPEAKER)
+            SpeakerChange(
+                speakerId = speakerId,
+                dropEmbeddingIds = dropped.map { it.id },
+                embeddingCount = minOf(newest.size, MAX_EMBEDDINGS_PER_SPEAKER),
+                usedAtEpochMillis = usedAtEpochMillis?.takeIf { replacement.speakerId == speakerId },
+            )
+        }
+        val droppedIds = changes.flatMapTo(mutableSetOf()) { it.dropEmbeddingIds }
+        return EmbeddingChangePlan(
+            speakersById = speakersById,
+            changes = changes,
+            droppedEmbeddings = existing.filter { it.id in droppedIds },
+        )
+    }
+
     /** Applies [change] to the stored document [id] and saves it. A missing document is left alone. */
     private fun updateDocument(id: String, change: MutableDocument.() -> Unit) {
         val document = collection.getDocument(id)?.toMutable() ?: return
@@ -333,21 +619,6 @@ class KotbaseSpeakerService private constructor(
             )
         }
         return MemoryPlan(deleteIds = oldRows.map { it.id }, rows = rows, changes = changes)
-    }
-
-    /**
-     * Removes a speaker. Its voiceprints go with it, as the privacy rules require. Its occurrences become unknown, and
-     * memories are not touched.
-     */
-    private fun unlinkAndDeleteSpeaker(speakerId: String) {
-        for (ref in rowRefs(TYPE_EMBEDDING, speakerIdIs(speakerId))) deleteDocument(ref.id)
-        for (ref in rowRefs(TYPE_OCCURRENCE, speakerIdIs(speakerId))) {
-            updateDocument(ref.id) {
-                setString(KEY_SPEAKER_ID, null)
-                setString(KEY_LINK, SpeakerLink.NONE.name)
-            }
-        }
-        deleteDocument(speakerId)
     }
 
     private fun memoryIdIs(memoryId: String): Expression =
@@ -488,9 +759,25 @@ class KotbaseSpeakerService private constructor(
         SelectResult.property(KEY_CREATED_AT),
     ).filter(keep).map { it.toEmbedding() }
 
-    private fun readOccurrences(keep: (Result) -> Boolean = { true }): List<SpeakerOccurrence> = queryRows(
+    private fun readOccurrences(keep: (Result) -> Boolean = { true }): List<SpeakerOccurrence> =
+        queryRows(
+            TYPE_OCCURRENCE,
+            null,
+            idColumn(),
+            SelectResult.property(KEY_MEMORY_ID),
+            SelectResult.property(KEY_ORDINAL),
+            SelectResult.property(KEY_SPEAKER_ID),
+            SelectResult.property(KEY_LINK),
+            SelectResult.property(KEY_REJECTED_SPEAKER_IDS),
+            SelectResult.property(KEY_TOTAL_SPEECH_MS),
+            SelectResult.property(KEY_SAMPLE_START_MS),
+            SelectResult.property(KEY_SAMPLE_END_MS),
+            SelectResult.property(KEY_EMBEDDING_ID),
+        ).filter(keep).map { it.toOccurrence() }
+
+    private fun readOccurrenceRows(condition: Expression?): List<SpeakerOccurrence> = queryRows(
         TYPE_OCCURRENCE,
-        null,
+        condition,
         idColumn(),
         SelectResult.property(KEY_MEMORY_ID),
         SelectResult.property(KEY_ORDINAL),
@@ -501,7 +788,7 @@ class KotbaseSpeakerService private constructor(
         SelectResult.property(KEY_SAMPLE_START_MS),
         SelectResult.property(KEY_SAMPLE_END_MS),
         SelectResult.property(KEY_EMBEDDING_ID),
-    ).filter(keep).map { it.toOccurrence() }
+    ).map { it.toOccurrence() }
 
     /** Runs a query over the documents of [type], narrowed by [condition] when one is given. */
     private fun queryRows(type: String, condition: Expression?, vararg columns: SelectResult): List<Result> {
@@ -592,6 +879,22 @@ class KotbaseSpeakerService private constructor(
         val dropEmbeddingIds: List<String>,
         val embeddingCount: Int,
         val usedAtEpochMillis: Long?,
+    )
+
+    private class EmbeddingChangePlan(
+        val speakersById: Map<String, Speaker>,
+        val changes: List<SpeakerChange>,
+        val droppedEmbeddings: List<SpeakerEmbedding>,
+    )
+
+    private class MergeRows(
+        val changedOccurrences: List<SpeakerOccurrence>,
+        val embeddings: List<SpeakerEmbedding>,
+    )
+
+    private class DeletionRows(
+        val embeddings: List<SpeakerEmbedding>,
+        val occurrences: List<SpeakerOccurrence>,
     )
 
     /** Everything one memory's write needs, read before any change is applied. */

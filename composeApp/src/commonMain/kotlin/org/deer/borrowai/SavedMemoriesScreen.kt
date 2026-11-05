@@ -42,6 +42,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -81,6 +82,8 @@ import kotlinx.coroutines.launch
 import org.deer.borrowai.data.app.AppServices
 import org.deer.borrowai.data.domain.CategoryFilterChip
 import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerOccurrenceLink
 import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.PlaybackContent
@@ -112,6 +115,11 @@ import borrowai.composeapp.generated.resources.memory_transcription_failed
 import borrowai.composeapp.generated.resources.memory_waiting_transcription
 import borrowai.composeapp.generated.resources.memory_summary
 import borrowai.composeapp.generated.resources.memory_summary_model_missing
+import borrowai.composeapp.generated.resources.speaker_management_missing_occurrence
+import borrowai.composeapp.generated.resources.speaker_management_title
+import borrowai.composeapp.generated.resources.speaker_management_undo
+import borrowai.composeapp.generated.resources.speaker_management_undo_failed
+import borrowai.composeapp.generated.resources.speaker_management_updated
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -122,6 +130,10 @@ internal fun SavedMemoriesScreen(
     onDetailVisibilityChanged: (Boolean) -> Unit,
     onGoToRecord: () -> Unit,
     onEditingChanged: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
+    speakerManagementRequest: SpeakerManagementRequest?,
+    onOpenSpeakerManagement: (SpeakerManagementRequest) -> Unit,
+    onCloseSpeakerManagement: () -> Unit,
 ) {
     val memoryPagerState = rememberPagerState(
         pageCount = { SavedMemoriesStateHolder.MEMORY_PAGE_COUNT },
@@ -237,6 +249,7 @@ internal fun SavedMemoriesScreen(
                     playbackControlsAvailable = stateHolder.playbackControlsAvailable,
                     onOpenMemory = stateHolder::openMemory,
                     onOpenMemoryAtSpeaker = stateHolder::openMemoryAtSpeaker,
+                    onOpenSpeakerManagement = { onOpenSpeakerManagement(SpeakerManagementRequest()) },
                     onDeleteMemory = stateHolder::requestDelete,
                     onPlayRecording = { stateHolder.togglePlayback(it, PlaybackContent.RECORDING) },
                     onSearchTextChanged = stateHolder::onSearchTextChanged,
@@ -270,6 +283,9 @@ internal fun SavedMemoriesScreen(
                             ?.takeIf { it.target.memoryId == memory.id && it.target.sample != null }
                             ?.target,
                         onPlaySample = { stateHolder.toggleSamplePlayback(it) },
+                        onManageOccurrence = { occurrence, reject ->
+                            onOpenSpeakerManagement(SpeakerManagementRequest(occurrence, reject))
+                        },
                         focusedSpeakerOrdinal = uiState.focusedSpeakerOrdinal,
                         onSpeakerFocusHandled = stateHolder::clearFocusedSpeaker,
                         onDelete = { stateHolder.deleteFromDetail(memory.id) },
@@ -314,6 +330,51 @@ internal fun SavedMemoriesScreen(
             onUndo = stateHolder::undoDelete,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
+        val speakerUpdatedMessage = stringResource(Res.string.speaker_management_updated)
+        val speakerUndoLabel = stringResource(Res.string.speaker_management_undo)
+        val speakerUndoFailedMessage = stringResource(Res.string.speaker_management_undo_failed)
+        val speakerOccurrenceUnavailableMessage = stringResource(Res.string.speaker_management_missing_occurrence)
+        speakerManagementRequest?.let { request ->
+            SpeakerManagementScreen(
+                speakers = services.speakers,
+                memories = services.memories,
+                request = request,
+                onClose = onCloseSpeakerManagement,
+                onOccurrenceChanged = { expected, previous ->
+                    scope.launch {
+                        val undo = snackbarHostState.showSnackbar(
+                            message = speakerUpdatedMessage,
+                            actionLabel = speakerUndoLabel,
+                            withDismissAction = true,
+                        )
+                        if (undo == SnackbarResult.ActionPerformed) {
+                            services.speakers.restoreOccurrenceLink(expected, previous).fold(
+                                ifLeft = {
+                                    snackbarHostState.showSnackbar(speakerUndoFailedMessage)
+                                },
+                                ifRight = {},
+                            )
+                        }
+                    }
+                },
+                onOccurrenceUnavailable = {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(speakerOccurrenceUnavailableMessage)
+                    }
+                },
+                onOpenMemoryAtSpeaker = { navigation ->
+                    onCloseSpeakerManagement()
+                    stateHolder.openMemoryAtSpeaker(navigation.memoryId, navigation.ordinal)
+                },
+                onOpenSettings = {
+                    onCloseSpeakerManagement()
+                    onOpenSettings()
+                },
+                onPlaySample = stateHolder::toggleSamplePlayback,
+                playingTarget = (uiState.mediaSessionState as? MediaSessionState.Playing)?.target,
+                hasRecordingFile = services.mediaSession::hasRecordingFile,
+            )
+        }
     }
 
     val pendingPlayback = (uiState.mediaSessionState as? MediaSessionState.Recording)
@@ -383,6 +444,7 @@ private fun MemoryListScreen(
     playbackControlsAvailable: Boolean,
     onOpenMemory: (String) -> Unit,
     onOpenMemoryAtSpeaker: (String, Int?) -> Unit,
+    onOpenSpeakerManagement: () -> Unit,
     onDeleteMemory: (String) -> Unit,
     onPlayRecording: (String) -> Unit,
     onSearchTextChanged: (String) -> Unit,
@@ -402,15 +464,23 @@ private fun MemoryListScreen(
         modifier = Modifier.fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
     ) {
-        Text(
-            stringResource(Res.string.memory_saved_memories_title),
-            modifier = Modifier
-                .padding(SavedMemoriesStateHolder.MEMORY_LIST_TITLE_PADDING)
-                .focusRequester(headingFocus)
-                .focusable(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(SavedMemoriesStateHolder.MEMORY_LIST_TITLE_PADDING),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(Res.string.memory_saved_memories_title),
+                modifier = Modifier.focusRequester(headingFocus).focusable(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            if (speakerRecognitionSupported) {
+                TextButton(onClick = onOpenSpeakerManagement) {
+                    Text(stringResource(Res.string.speaker_management_title))
+                }
+            }
+        }
 
         if (libraryCount > 0) {
             MemorySearchField(
@@ -636,6 +706,7 @@ private fun MemoryDetailScreen(
     onSetPlaybackSpeed: (Float) -> Unit,
     playingSample: PlaybackTarget?,
     onPlaySample: (PlaybackTarget) -> Unit,
+    onManageOccurrence: (SpeakerOccurrence, Boolean) -> Unit,
     focusedSpeakerOrdinal: Int?,
     onSpeakerFocusHandled: () -> Unit,
     onDelete: () -> Unit,
@@ -757,6 +828,7 @@ private fun MemoryDetailScreen(
                     hasRecordingFile = services.mediaSession::hasRecordingFile,
                     playingTarget = playingSample,
                     onPlaySample = onPlaySample,
+                    onManageOccurrence = onManageOccurrence,
                     focusedSpeakerOrdinal = focusedSpeakerOrdinal,
                     onSpeakerFocusHandled = onSpeakerFocusHandled,
                 )

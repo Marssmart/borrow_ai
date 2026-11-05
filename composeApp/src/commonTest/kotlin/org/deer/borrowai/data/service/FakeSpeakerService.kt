@@ -11,11 +11,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_EMBEDDINGS_PER_SPEAKER
+import org.deer.borrowai.data.domain.MAX_SPEAKER_NAME_LENGTH
 import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerOccurrenceLink
+import org.deer.borrowai.data.domain.SpeakerSummary
 import org.deer.borrowai.data.domain.newSpeakerColorIndex
 import org.deer.borrowai.data.service.SPEAKER_CONSENT_TEXT_VERSION
 
@@ -85,6 +88,8 @@ class FakeSpeakerService(
             val trimmed = name.trim()
             when {
                 trimmed.isEmpty() -> SpeakerError.InvalidInput("A speaker name cannot be blank.").left()
+                trimmed.length > MAX_SPEAKER_NAME_LENGTH ->
+                    SpeakerError.InvalidInput("A speaker name can be at most $MAX_SPEAKER_NAME_LENGTH characters.").left()
                 speakers.values.any { it.name.equals(trimmed, ignoreCase = true) } ->
                     SpeakerError.NameTaken(trimmed).left()
                 else -> {
@@ -103,6 +108,8 @@ class FakeSpeakerService(
             val trimmed = name.trim()
             when {
                 trimmed.isEmpty() -> SpeakerError.InvalidInput("A speaker name cannot be blank.").left()
+                trimmed.length > MAX_SPEAKER_NAME_LENGTH ->
+                    SpeakerError.InvalidInput("A speaker name can be at most $MAX_SPEAKER_NAME_LENGTH characters.").left()
                 speakers.values.any { it.id != id && it.name.equals(trimmed, ignoreCase = true) } ->
                     SpeakerError.NameTaken(trimmed).left()
                 else -> {
@@ -112,6 +119,149 @@ class FakeSpeakerService(
                 }
             }
         }
+
+    override suspend fun findSpeakerSummaries(
+        memoryCreatedAtEpochMillis: Map<String, Long>,
+    ): Either<SpeakerError, Map<String, SpeakerSummary>> =
+        mutex.withLock {
+            speakers.values.associate { speaker ->
+                val linked = occurrences.values.filter {
+                    it.speakerId == speaker.id && it.memoryId in memoryCreatedAtEpochMillis
+                }
+                speaker.id to SpeakerSummary(
+                    speakerId = speaker.id,
+                    linkedMemoryCount = linked.map { it.memoryId }.distinct().size,
+                    lastHeardAtEpochMillis = linked.mapNotNull {
+                        memoryCreatedAtEpochMillis[it.memoryId]
+                    }.maxOrNull(),
+                )
+            }.right()
+        }
+
+    override suspend fun findOccurrencesForSpeaker(
+        speakerId: String,
+    ): Either<SpeakerError, List<SpeakerOccurrence>> = mutex.withLock {
+        occurrences.values.filter { it.speakerId == speakerId }.right()
+    }
+
+    override suspend fun assignOccurrence(
+        occurrenceId: String,
+        speakerId: String?,
+    ): Either<SpeakerError, Unit> = mutex.withLock<Either<SpeakerError, Unit>> {
+        if (failWrites) return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+        val occurrence = occurrences[occurrenceId] ?: return@withLock SpeakerError.NotFound(occurrenceId).left()
+        if (speakerId != null && speakerId !in speakers) return@withLock SpeakerError.NotFound(speakerId).left()
+        val embedding = embeddings[occurrence.embeddingId]
+        val previousSpeakerId = occurrence.speakerId
+        val now = epochClock.nowEpochMillis()
+        occurrences[occurrenceId] = occurrence.copy(
+            speakerId = speakerId,
+            link = if (speakerId == null) SpeakerLink.NONE else SpeakerLink.MANUAL,
+            rejectedSpeakerIds = when {
+                speakerId != null -> occurrence.rejectedSpeakerIds.filterNot { it == speakerId }
+                previousSpeakerId != null -> (occurrence.rejectedSpeakerIds + previousSpeakerId).distinct()
+                else -> occurrence.rejectedSpeakerIds
+            },
+        )
+        embedding?.let { embeddings[it.id] = it.copy(speakerId = speakerId) }
+        setOfNotNull(embedding?.speakerId, speakerId).forEach { id ->
+            speakers[id]?.let { speakers[id] = it.copy(lastUsedAtEpochMillis = if (id == speakerId) now else it.lastUsedAtEpochMillis) }
+            keepNewest(id)
+        }
+        published()
+        Unit.right()
+    }
+
+    override suspend fun rejectAutomaticMatch(occurrenceId: String): Either<SpeakerError, Unit> =
+        mutex.withLock<Either<SpeakerError, Unit>> {
+            if (failWrites) {
+                return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+            }
+            val occurrence = occurrences[occurrenceId] ?: return@withLock SpeakerError.NotFound(occurrenceId).left()
+            val speakerId = occurrence.speakerId
+            if (occurrence.link != SpeakerLink.AUTO || speakerId == null) {
+                return@withLock SpeakerError.InvalidInput("Only an automatic speaker match can be rejected.").left()
+            }
+            val embedding = embeddings[occurrence.embeddingId]
+                ?: return@withLock SpeakerError.NotFound(occurrence.embeddingId).left()
+            occurrences[occurrenceId] = occurrence.copy(
+                speakerId = null,
+                link = SpeakerLink.NONE,
+                rejectedSpeakerIds = (occurrence.rejectedSpeakerIds + speakerId).distinct(),
+            )
+            embeddings[embedding.id] = embedding.copy(speakerId = null)
+            keepNewest(speakerId)
+            published()
+            Unit.right()
+        }
+
+    override suspend fun restoreOccurrenceLink(
+        expected: SpeakerOccurrenceLink,
+        previous: SpeakerOccurrenceLink,
+    ): Either<SpeakerError, Unit> = mutex.withLock<Either<SpeakerError, Unit>> {
+        if (failWrites) return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+        if (expected.occurrenceId != previous.occurrenceId) {
+            return@withLock SpeakerError.InvalidInput("The undo snapshot refers to a different occurrence.").left()
+        }
+        val occurrence = occurrences[expected.occurrenceId]
+            ?: return@withLock SpeakerError.NotFound(expected.occurrenceId).left()
+        val current = SpeakerOccurrenceLink(
+            occurrenceId = occurrence.id,
+            speakerId = occurrence.speakerId,
+            link = occurrence.link,
+            rejectedSpeakerIds = occurrence.rejectedSpeakerIds,
+        )
+        if (current != expected) {
+            return@withLock SpeakerError.InvalidInput("This speaker occurrence has changed, so Undo is no longer available.").left()
+        }
+        if (previous.speakerId != null && previous.speakerId !in speakers) {
+            return@withLock SpeakerError.NotFound(previous.speakerId).left()
+        }
+        val embedding = embeddings[occurrence.embeddingId]
+        occurrences[occurrence.id] = occurrence.copy(
+            speakerId = previous.speakerId,
+            link = previous.link,
+            rejectedSpeakerIds = previous.rejectedSpeakerIds,
+        )
+        embedding?.let { embeddings[it.id] = it.copy(speakerId = previous.speakerId) }
+        val now = epochClock.nowEpochMillis()
+        previous.speakerId?.let { id ->
+            speakers[id]?.let { speakers[id] = it.copy(lastUsedAtEpochMillis = now) }
+        }
+        setOfNotNull(occurrence.speakerId, previous.speakerId).forEach(::keepNewest)
+        published()
+        Unit.right()
+    }
+
+    override suspend fun mergeSpeakers(
+        sourceId: String,
+        targetId: String,
+    ): Either<SpeakerError, Unit> = mutex.withLock<Either<SpeakerError, Unit>> {
+        if (failWrites) return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+        if (sourceId == targetId) {
+            return@withLock SpeakerError.InvalidInput("Choose a different speaker to merge into.").left()
+        }
+        val source = speakers[sourceId] ?: return@withLock SpeakerError.NotFound(sourceId).left()
+        val target = speakers[targetId] ?: return@withLock SpeakerError.NotFound(targetId).left()
+        occurrences.values.toList().forEach { occurrence ->
+            if (occurrence.speakerId == sourceId || sourceId in occurrence.rejectedSpeakerIds) {
+                val nextSpeakerId = if (occurrence.speakerId == sourceId) targetId else occurrence.speakerId
+                val rejected = occurrence.rejectedSpeakerIds.map { if (it == sourceId) targetId else it }
+                    .distinct().filterNot { it == nextSpeakerId }
+                occurrences[occurrence.id] = occurrence.copy(speakerId = nextSpeakerId, rejectedSpeakerIds = rejected)
+            }
+        }
+        embeddings.values.filter { it.speakerId == sourceId }.forEach { embedding ->
+            embeddings[embedding.id] = embedding.copy(speakerId = targetId)
+        }
+        speakers[targetId] = target.copy(
+            lastUsedAtEpochMillis = maxOf(source.lastUsedAtEpochMillis, target.lastUsedAtEpochMillis),
+        )
+        speakers.remove(sourceId)
+        keepNewest(targetId)
+        published()
+        Unit.right()
+    }
 
     override suspend fun deleteSpeaker(id: String): Either<SpeakerError, Unit> =
         mutex.withLock<Either<SpeakerError, Unit>> {

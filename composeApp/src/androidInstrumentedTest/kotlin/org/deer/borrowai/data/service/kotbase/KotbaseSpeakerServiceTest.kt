@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_EMBEDDINGS_PER_SPEAKER
@@ -133,6 +134,24 @@ class KotbaseSpeakerServiceTest {
     }
 
     @Test
+    fun assignmentWorksWhenDeletingTheOriginalSpeakerRemovedItsEmbedding() = runTest {
+        val service = openService()
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        service.replaceOccurrences("memory-1", SPEAKER_ANALYSIS_VERSION, listOf(draft(source.id)))
+        val occurrence = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertTrue(service.deleteSpeaker(source.id).isRight())
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+
+        assertTrue(service.assignOccurrence(occurrence.id, target.id).isRight())
+
+        val assigned = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertEquals(target.id, assigned.speakerId)
+        assertEquals(SpeakerLink.MANUAL, assigned.link)
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
+
+    @Test
     fun replaceOccurrencesStoresTheLinkAndTheVector() = runTest {
         val service = openService()
         val ana = service.createSpeaker("Ana").getOrNull()!!
@@ -249,6 +268,124 @@ class KotbaseSpeakerServiceTest {
         assertIs<SpeakerError.Disabled>(result.leftOrNull())
         assertTrue(service.findOccurrences("memory-1").getOrNull()!!.isEmpty())
         assertEquals(false, service.hasCurrentConsent().getOrNull())
+    }
+
+    @Test
+    fun assignmentAndRejectCommitOccurrenceAndEmbeddingLinksTogether() = runTest {
+        val service = openService()
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        assertTrue(service.replaceOccurrences("memory-1", SPEAKER_ANALYSIS_VERSION, listOf(draft(source.id))).isRight())
+        val occurrence = service.findOccurrences("memory-1").getOrNull()!!.single()
+
+        assertTrue(service.assignOccurrence(occurrence.id, target.id).isRight())
+
+        val assigned = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertEquals(target.id, assigned.speakerId)
+        assertEquals(SpeakerLink.MANUAL, assigned.link)
+        assertEquals(target.id, service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.single().speakerId)
+        val memoryCreatedAt = now - 86_400_000L
+        now += 10_000L
+        val targetSummary = service.findSpeakerSummaries(mapOf("memory-1" to memoryCreatedAt))
+            .getOrNull()!![target.id]!!
+        assertEquals(
+            1,
+            targetSummary.linkedMemoryCount,
+        )
+        assertEquals(memoryCreatedAt, targetSummary.lastHeardAtEpochMillis)
+
+        assertTrue(service.rejectAutomaticMatch(assigned.id).leftOrNull() is SpeakerError.InvalidInput)
+        assertTrue(service.assignOccurrence(assigned.id, source.id).isRight())
+        assertTrue(service.replaceOccurrences("memory-2", SPEAKER_ANALYSIS_VERSION, listOf(draft(target.id))).isRight())
+        val automatic = service.findOccurrences("memory-2").getOrNull()!!.single()
+        assertTrue(service.rejectAutomaticMatch(automatic.id).isRight())
+
+        val rejected = service.findOccurrences("memory-2").getOrNull()!!.single()
+        assertEquals(null, rejected.speakerId)
+        assertTrue(target.id in rejected.rejectedSpeakerIds)
+        assertFalse(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!
+            .any { it.sourceOccurrenceId == automatic.id && it.speakerId == target.id })
+    }
+
+    @Test
+    fun speakerSummaryCountsOnlyActiveMemories() = runTest {
+        val service = openService()
+        val speaker = service.createSpeaker("Speaker").getOrNull()!!
+        assertTrue(service.replaceOccurrences("active-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(speaker.id))).isRight())
+        assertTrue(service.replaceOccurrences("deleted-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(speaker.id))).isRight())
+
+        val summary = service.findSpeakerSummaries(mapOf("active-memory" to 123L))
+            .getOrNull()!![speaker.id]!!
+
+        assertEquals(1, summary.linkedMemoryCount)
+        assertEquals(123L, summary.lastHeardAtEpochMillis)
+    }
+
+    @Test
+    fun failedMutationRollsBackPartialWrites() = runTest {
+        val service = openService()
+        val collection = requireNotNull(requireNotNull(database).getCollection("speakers"))
+        val documentId = "partially-written"
+
+        val result = service.applyMutation {
+            collection.save(MutableDocument(documentId).apply { setString("type", "speaker") })
+            error("injected write failure")
+        }
+
+        assertIs<SpeakerError.Persistence>(result.leftOrNull())
+        assertNull(collection.getDocument(documentId))
+    }
+
+    @Test
+    fun deletedSpeakerOccurrenceCanBeManuallyAssignedWithoutRestoringItsVoiceprint() = runTest {
+        val service = openService()
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        service.replaceOccurrences("memory-1", SPEAKER_ANALYSIS_VERSION, listOf(draft(source.id)))
+        val occurrence = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertTrue(service.deleteSpeaker(source.id).isRight())
+
+        assertTrue(service.assignOccurrence(occurrence.id, target.id).isRight())
+
+        val assigned = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertEquals(target.id, assigned.speakerId)
+        assertEquals(SpeakerLink.MANUAL, assigned.link)
+        assertEquals(0, service.findSpeaker(target.id).getOrNull()!!.embeddingCount)
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
+
+    @Test
+    fun speakerNameLimitIsEnforcedByThePersistentService() = runTest {
+        val service = openService()
+        val accepted = "a".repeat(org.deer.borrowai.data.domain.MAX_SPEAKER_NAME_LENGTH)
+        val speaker = service.createSpeaker(accepted).getOrNull()!!
+
+        assertEquals(accepted, speaker.name)
+        assertIs<SpeakerError.InvalidInput>(
+            service.renameSpeaker(speaker.id, "$accepted!").leftOrNull(),
+        )
+    }
+
+    @Test
+    fun mergePreservesTargetAndMovesSpeakerOccurrenceLinks() = runTest {
+        val service = openService()
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        service.replaceOccurrences("memory-source", SPEAKER_ANALYSIS_VERSION, listOf(draft(source.id)))
+        service.replaceOccurrences("memory-target", SPEAKER_ANALYSIS_VERSION, listOf(draft(target.id)))
+
+        assertTrue(service.mergeSpeakers(source.id, target.id).isRight())
+
+        assertIs<SpeakerError.NotFound>(service.findSpeaker(source.id).leftOrNull())
+        assertEquals(target.name, service.findSpeaker(target.id).getOrNull()!!.name)
+        assertEquals(target.colorIndex, service.findSpeaker(target.id).getOrNull()!!.colorIndex)
+        assertEquals(target.id, service.findOccurrences("memory-source").getOrNull()!!.single().speakerId)
+        assertEquals(2, service.findSpeaker(target.id).getOrNull()!!.embeddingCount)
+        assertEquals(
+            2,
+            service.findSpeakerSummaries(mapOf("memory-source" to 1L, "memory-target" to 2L))
+                .getOrNull()!![target.id]?.linkedMemoryCount,
+        )
     }
 
     @Test

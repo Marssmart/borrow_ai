@@ -89,6 +89,7 @@
     .plus { display: grid; width: 27px; height: 27px; place-items: center; border: 1px dashed #7ba9a6; border-radius: 50%; }
     .field-label { display: block; margin: 6px 0 5px; color: #355d5c; font-size: 9px; font-weight: 900; }
     .field { width: 100%; min-height: 38px; padding: 0 11px; border: 1px solid #a9c5c2; border-radius: 11px; background: white; color: #233c39; font-size: 11px; }
+    .counter { margin-top: 4px; color: #6b7e7a; font-size: 8px; text-align: right; }
     .helper { margin: 6px 0 0; color: #6b7e7a; font-size: 8px; line-height: 1.45; }
     .dialog { padding: 16px; border: 1px solid #e1e6e4; border-radius: 19px; background: white; box-shadow: 0 14px 30px rgb(18 47 45 / 12%); }
     .dialog-title { color: #203b38; font-size: 14px; font-weight: 900; }
@@ -138,10 +139,11 @@
     <header>
       <p class="eyebrow">Product design · Android</p>
       <h1>Speaker management<br>and assignment</h1>
-      <p class="lede">A local voice address book connected to the memories where each speaker was heard. These screens are proposed UX for the library and assignment work; they are not shipped management controls.</p>
+      <p class="lede">A local voice address book connected to the memories where each speaker was heard. This guide reflects the implementation in the current worktree; release is pending review and merge.</p>
       <div class="status-strip">
-        <span class="tag">Existing: local analysis + consent + sample ranges</span>
-        <span class="tag proposed">Proposed: library, assignment, correction, merge</span>
+        <span class="tag">Local analysis, consent, and sample ranges</span>
+        <span class="tag">Implemented: library, assignment, correction, merge</span>
+        <span class="tag">Name limit: 64 characters</span>
       </div>
     </header>
 
@@ -151,7 +153,7 @@
           <h2 id="library-title">The library is the identity home</h2>
           <p class="section-note">Reach it from Saved Memories or Settings. Search is local, names are user-provided, and each row leads to recent appearances.</p>
         </div>
-        <span class="tag proposed">Proposed screen</span>
+        <span class="tag">Implemented screen</span>
       </div>
       <div class="layout-grid">
         <article class="panel">
@@ -253,6 +255,7 @@
                 <p class="dialog-copy">The new name updates this speaker everywhere in your memories. Voice samples and links stay the same.</p>
                 <label class="field-label" for="rename-sample">Name</label>
                 <input class="field" id="rename-sample" value="Jordan Lee" readonly>
+                <div class="counter">10 / 64 characters</div>
                 <p class="helper">Names must be unique. Leading and trailing spaces are removed.</p>
                 <div class="card-actions" style="justify-content:flex-end;margin-top:14px"><span class="button ghost">Cancel</span><span class="button">Save name</span></div>
               </div>
@@ -269,7 +272,7 @@
           <h2 id="assign-title">Assign in context, create without losing context</h2>
           <p class="section-note">The occurrence stays visible behind a focused sheet. Search the local library or create-and-assign a new label in one flow.</p>
         </div>
-        <span class="tag proposed">Proposed flow</span>
+        <span class="tag">Implemented flow</span>
       </div>
       <div class="layout-grid">
         <article class="panel">
@@ -299,6 +302,7 @@
               <p class="screen-subtitle">Create a name and assign it to Speaker 2 in “Planning the weekend”.</p>
               <label class="field-label" for="name-sample">Name</label>
               <input class="field" id="name-sample" value="Taylor Reed" readonly>
+              <div class="counter">11 / 64 characters</div>
               <p class="helper">This name labels a voice in your memories. It is not verified identity.</p>
               <div style="flex:1"></div>
               <div class="card-actions"><span class="button ghost" style="flex:1">Cancel</span><span class="button" style="flex:1">Create &amp; assign</span></div>
@@ -391,7 +395,17 @@
           <div class="dialog" style="margin-top:10px">
             <div class="dialog-title">Delete Alex?</div>
             <p class="dialog-copy">Alex will become unknown in 6 memories. Memories and recordings stay; stored voiceprints are deleted.</p>
+            <p class="helper" style="color:var(--red)">Couldn't update speaker. Try again.</p>
             <div class="card-actions" style="justify-content:flex-end"><span class="button ghost">Keep speaker</span><span class="button danger">Delete speaker</span></div>
+          </div>
+        </article>
+        <article class="state-card">
+          <div class="state-label">Deletion in progress</div>
+          <div class="dialog" style="margin-top:10px">
+            <div class="dialog-title">Delete Alex?</div>
+            <p class="dialog-copy">Alex will become unknown in 6 memories. Memories and recordings stay; stored voiceprints are deleted.</p>
+            <div class="card-actions" style="justify-content:flex-end"><span class="button ghost" aria-disabled="true">Keep speaker</span><span class="button danger" aria-disabled="true">◌ Deleting…</span></div>
+            <p class="helper">The dialog remains open until the operation succeeds or reports an error.</p>
           </div>
         </article>
       </div>
@@ -415,7 +429,7 @@
     </section>
 
     <footer class="footnote">
-      Visual proposal for the unshipped speaker library, assignment, correction, and merge flows. Existing foundations include consent-gated Android analysis, local speaker records, list chips, detail sample ranges, and playback. See <a href="../speaker-recognition/speaker-recognition.html">the speaker recognition specification</a> and <a href="speaker-management.html">the management design document</a>. Sample names and memories are illustrative.
+      Implementation guide for the Android speaker library, assignment, correction, and merge flows. The name field visibly counts up to 64 characters, matching service validation. Release remains pending review and merge. See <a href="../speaker-recognition/speaker-recognition.html">the speaker recognition specification</a> and <a href="speaker-management.html">the management design document</a>. Sample names and memories are illustrative.
     </footer>
   </main>
 </body>

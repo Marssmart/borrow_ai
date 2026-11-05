@@ -30,6 +30,7 @@ NAV = [
     ("how-it-works.html", "How it works"),
     ("architecture.html", "Architecture"),
     ("models-and-privacy.html", "Models and privacy"),
+    ("speaker-management.html", "Speaker management"),
     ("platforms.html", "Platforms"),
     ("features/index.html", "Features"),
     ("design/index.html", "Design guides"),

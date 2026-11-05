@@ -4,6 +4,16 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.25.0]
+
+- Added the Android speaker library with recent appearances, search, create, rename, merge, and delete.
+- Added contextual occurrence assignment and correction, including create-and-assign, automatic-match rejection, and sample playback.
+- Added local transactional speaker operations and a 64-character speaker-name limit with a visible counter.
+- Kept speaker mutations atomic on persistence failures and preserved manual assignment when a speaker's voiceprint is removed.
+- Displayed speaker deletion failures in the confirmation dialog.
+- Kept speaker deletion pending until its result is visible, preventing dismissals or duplicate requests.
+- Updated Android and iOS versioning to 1.25.0 (build 88).
+
 ## [1.24.2]
 
 - Added the speaker management and assignment design document with a standalone visual guide, separating current behavior from proposed flows.

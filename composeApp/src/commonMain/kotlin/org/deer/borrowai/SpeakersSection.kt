@@ -3,10 +3,12 @@ package org.deer.borrowai
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.speaker_audio_unavailable
 import borrowai.composeapp.generated.resources.speaker_no_speakers_detected
@@ -29,6 +32,12 @@ import borrowai.composeapp.generated.resources.speaker_section_title
 import borrowai.composeapp.generated.resources.speaker_speech_duration
 import borrowai.composeapp.generated.resources.speaker_stop_sample
 import borrowai.composeapp.generated.resources.speaker_unknown_label
+import borrowai.composeapp.generated.resources.speaker_management_assign
+import borrowai.composeapp.generated.resources.speaker_management_change
+import borrowai.composeapp.generated.resources.speaker_management_matched
+import borrowai.composeapp.generated.resources.speaker_management_not_this_person
+import borrowai.composeapp.generated.resources.speaker_management_assigned
+import borrowai.composeapp.generated.resources.speaker_management_not_assigned
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onStart
 import org.deer.borrowai.data.domain.Memory
@@ -47,6 +56,7 @@ internal fun SpeakersSection(
     hasRecordingFile: (Memory) -> Boolean,
     playingTarget: PlaybackTarget?,
     onPlaySample: (PlaybackTarget) -> Unit,
+    onManageOccurrence: (org.deer.borrowai.data.domain.SpeakerOccurrence, Boolean) -> Unit,
     focusedSpeakerOrdinal: Int?,
     onSpeakerFocusHandled: () -> Unit,
 ) {
@@ -95,7 +105,12 @@ internal fun SpeakersSection(
                     Modifier
                 }
                 Box(focusModifier) {
-                    SpeakerCardPanel(card = card, playingTarget = playingTarget, onPlaySample = onPlaySample)
+                    SpeakerCardPanel(
+                        card = card,
+                        playingTarget = playingTarget,
+                        onPlaySample = onPlaySample,
+                        onManageOccurrence = onManageOccurrence,
+                    )
                 }
             }
 
@@ -117,6 +132,7 @@ private fun SpeakerCardPanel(
     card: SpeakerCard,
     playingTarget: PlaybackTarget?,
     onPlaySample: (PlaybackTarget) -> Unit,
+    onManageOccurrence: (org.deer.borrowai.data.domain.SpeakerOccurrence, Boolean) -> Unit,
 ) {
     AuroraPanel(
         containerColor = Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SURFACE_ALPHA),
@@ -132,6 +148,19 @@ private fun SpeakerCardPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
         )
+        card.occurrence?.let { occurrence ->
+            Text(
+                stringResource(
+                    when (occurrence.link) {
+                        org.deer.borrowai.data.domain.SpeakerLink.NONE -> Res.string.speaker_management_not_assigned
+                        org.deer.borrowai.data.domain.SpeakerLink.AUTO -> Res.string.speaker_management_matched
+                        org.deer.borrowai.data.domain.SpeakerLink.MANUAL -> Res.string.speaker_management_assigned
+                    },
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
         when (val audio = card.audio) {
             is SpeakerAudio.Playable -> PlaybackButton(
                 playing = playingTarget == audio.target,
@@ -146,6 +175,23 @@ private fun SpeakerCardPanel(
                 style = MaterialTheme.typography.bodyMedium,
                 fontStyle = FontStyle.Italic,
             )
+        }
+        card.occurrence?.let { occurrence ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onManageOccurrence(occurrence, false) }) {
+                    Text(
+                        stringResource(
+                            if (occurrence.speakerId == null) Res.string.speaker_management_assign
+                            else Res.string.speaker_management_change,
+                        ),
+                    )
+                }
+                if (occurrence.link == org.deer.borrowai.data.domain.SpeakerLink.AUTO) {
+                    TextButton(onClick = { onManageOccurrence(occurrence, true) }) {
+                        Text(stringResource(Res.string.speaker_management_not_this_person))
+                    }
+                }
+            }
         }
     }
 }
