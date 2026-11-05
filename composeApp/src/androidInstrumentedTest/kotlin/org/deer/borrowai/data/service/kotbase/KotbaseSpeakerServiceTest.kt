@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.EpochClock
 import org.deer.borrowai.data.domain.MAX_EMBEDDINGS_PER_SPEAKER
@@ -286,6 +287,21 @@ class KotbaseSpeakerServiceTest {
         assertTrue(target.id in rejected.rejectedSpeakerIds)
         assertFalse(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!
             .any { it.sourceOccurrenceId == automatic.id && it.speakerId == target.id })
+    }
+
+    @Test
+    fun failedMutationRollsBackPartialWrites() = runTest {
+        val service = openService()
+        val collection = requireNotNull(requireNotNull(database).getCollection("speakers"))
+        val documentId = "partially-written"
+
+        val result = service.applyMutation {
+            collection.save(MutableDocument(documentId).apply { setString("type", "speaker") })
+            error("injected write failure")
+        }
+
+        assertIs<SpeakerError.Persistence>(result.leftOrNull())
+        assertNull(collection.getDocument(documentId))
     }
 
     @Test

@@ -150,7 +150,6 @@ internal fun SpeakerManagementScreen(
     var selectedOccurrences by remember { mutableStateOf<List<SpeakerOccurrence>>(emptyList()) }
     var detailFailed by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var assignmentSearch by remember { mutableStateOf("") }
     var operationFailed by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var createVisible by remember { mutableStateOf(false) }
@@ -160,8 +159,6 @@ internal fun SpeakerManagementScreen(
     var mergeSearch by remember { mutableStateOf("") }
     var mergeTarget by remember { mutableStateOf<Speaker?>(null) }
     var deleteTarget by remember { mutableStateOf<Speaker?>(null) }
-    var retryAssignSpeakerId by remember { mutableStateOf<String?>(null) }
-    var rejectChoiceVisible by remember(request) { mutableStateOf(request.showRejectChoice) }
 
     suspend fun reload() {
         loading = true
@@ -265,10 +262,13 @@ internal fun SpeakerManagementScreen(
             scope.launch {
                 speakers.assignOccurrence(occurrence.id, speakerId).fold(
                     ifLeft = {
-                        if (it is SpeakerError.NotFound) {
-                            operationError = "This speaker occurrence is no longer available."
-                        } else {
-                            operationError = it.toUiMessage()
+                        operationError = when (it) {
+                            is SpeakerError.NotFound -> if (it.id == occurrence.id) {
+                                "This speaker occurrence is no longer available."
+                            } else {
+                                "This speaker is no longer available."
+                            }
+                            else -> it.toUiMessage()
                         }
                         retrySpeakerId = speakerId
                     },
@@ -280,6 +280,8 @@ internal fun SpeakerManagementScreen(
             }
         }
 
+        val sourceMemoryTitle = sourceMemory?.title?.takeIf { it.isNotBlank() }
+            ?: stringResource(Res.string.speaker_management_untitled)
         ModalBottomSheet(onDismissRequest = onClose) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(max = 620.dp),
@@ -290,10 +292,7 @@ internal fun SpeakerManagementScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
-                Text(
-                    sourceMemory?.title?.ifBlank { stringResource(Res.string.speaker_management_untitled) }.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text(sourceMemoryTitle, style = MaterialTheme.typography.bodyMedium)
                 sourceMemory?.let { memory ->
                     if (hasRecordingFile(memory)) {
                         val target = sampleTarget(occurrence)
@@ -323,7 +322,11 @@ internal fun SpeakerManagementScreen(
                             onClick = {
                                 scope.launch {
                                     speakers.rejectAutomaticMatch(occurrence.id).fold(
-                                        ifLeft = { operationError = it.toUiMessage() },
+                                        ifLeft = {
+                                            operationError = it.toUiMessage(
+                                                notFoundMessage = "This speaker occurrence is no longer available.",
+                                            )
+                                        },
                                         ifRight = {
                                             val after = SpeakerOccurrenceLink(
                                                 occurrenceId = occurrence.id,
@@ -469,10 +472,6 @@ internal fun SpeakerManagementScreen(
     }
 
     val selectedSpeaker = library.firstOrNull { it.id == selectedId }
-    val sourceOccurrence = request.occurrence
-    val sourceMemory = sourceOccurrence?.let { occurrence ->
-        memoryList.firstOrNull { it.id == occurrence.memoryId }
-    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -491,11 +490,7 @@ internal fun SpeakerManagementScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (sourceOccurrence != null) {
-                        stringResource(Res.string.speaker_management_assign_title, sourceOccurrence.ordinal)
-                    } else {
-                        stringResource(Res.string.speaker_management_title)
-                    },
+                    text = stringResource(Res.string.speaker_management_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                 )
@@ -507,108 +502,6 @@ internal fun SpeakerManagementScreen(
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
             when {
-                sourceOccurrence != null -> {
-                    Text(
-                        sourceMemory?.title?.ifBlank { "Untitled memory" } ?: "Memory",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    sourceMemory?.let { memory ->
-                        if (hasRecordingFile(memory)) {
-                            val target = sampleTarget(sourceOccurrence)
-                            TextButton(onClick = { onPlaySample(target) }) {
-                                Text(
-                                    stringResource(
-                                        if (playingTarget == target) Res.string.speaker_management_stop_sample
-                                        else Res.string.speaker_management_play_sample,
-                                    ),
-                                    modifier = Modifier.semantics {
-                                        contentDescription = "${if (playingTarget == target) "Stop" else "Play"} sample for Speaker ${sourceOccurrence.ordinal}, ${memory.title}"
-                                    },
-                                )
-                            }
-                        } else {
-                            Text(stringResource(Res.string.speaker_management_audio_unavailable))
-                        }
-                    }
-                    if (loading) {
-                        LoadingSpeakerRows(Modifier.weight(1f))
-                    } else if (loadFailed) {
-                        ErrorPanel(onRetry = { scope.launch { reload() } })
-                    } else {
-                        OutlinedTextField(
-                            value = assignmentSearch,
-                            onValueChange = { assignmentSearch = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(stringResource(Res.string.speaker_management_search)) },
-                            singleLine = true,
-                        )
-                        val assignable = library.filter { it.name.contains(assignmentSearch, ignoreCase = true) }
-                        if (library.isEmpty()) {
-                            Column {
-                                Text(stringResource(Res.string.speaker_management_no_assignable))
-                                TextButton(onClick = onOpenSettings) {
-                                    Text(stringResource(Res.string.speaker_management_settings))
-                                }
-                            }
-                        }
-                        LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(assignable, key = Speaker::id) { speaker ->
-                                SpeakerRow(
-                                    speaker = speaker,
-                                    summary = summaries[speaker.id],
-                                    onClick = {
-                                        scope.launch {
-                                            val result = speakers.assignOccurrence(sourceOccurrence.id, speaker.id)
-                                            if (result.isRight()) {
-                                                val previous = sourceOccurrence.toLinkSnapshot()
-                                                val expected = SpeakerOccurrenceLink(
-                                                    occurrenceId = sourceOccurrence.id,
-                                                    speakerId = speaker.id,
-                                                    link = SpeakerLink.MANUAL,
-                                                    rejectedSpeakerIds = sourceOccurrence.rejectedSpeakerIds
-                                                        .filterNot { it == speaker.id },
-                                                )
-                                                onOccurrenceChanged(expected, previous)
-                                                onClose()
-                                            } else {
-                                                operationFailed = true
-                                                retryAssignSpeakerId = speaker.id
-                                                if (result.leftOrNull() is SpeakerError.NotFound) {
-                                                    message = "This speaker occurrence is no longer available."
-                                                }
-                                            }
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                        Button(
-                            onClick = {
-                                name = ""
-                                createVisible = true
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(Res.string.speaker_management_create_assign))
-                        }
-                        retryAssignSpeakerId?.let { speakerId ->
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        speakers.assignOccurrence(sourceOccurrence.id, speakerId).fold(
-                                            ifLeft = { operationFailed = true },
-                                            ifRight = { onClose() },
-                                        )
-                                    }
-                                },
-                            ) { Text(stringResource(Res.string.speaker_management_retry)) }
-                        }
-                    }
-                }
-
                 selectedSpeaker != null -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { selectedId = null; mergeMode = false }) {
@@ -824,36 +717,20 @@ internal fun SpeakerManagementScreen(
                             result.fold(
                                 ifLeft = { error ->
                                     operationFailed = true
-                                    message = error.toUiMessage()
+                                    message = error.toUiMessage(
+                                        notFoundMessage = if (editing == null) {
+                                            "Speaker could not be created."
+                                        } else {
+                                            "This speaker is no longer available."
+                                        },
+                                    )
                                 },
                                 ifRight = { createdOrRenamed ->
                                     operationFailed = false
                                     message = null
                                     createVisible = false
                                     editTarget = null
-                                    if (sourceOccurrence != null && editing == null) {
-                                        val assignment = speakers.assignOccurrence(sourceOccurrence.id, createdOrRenamed.id)
-                                        assignment.fold(
-                                            ifLeft = {
-                                                retryAssignSpeakerId = createdOrRenamed.id
-                                                operationFailed = true
-                                                message = "Speaker created, but assignment did not finish. Retry assignment."
-                                            },
-                                            ifRight = {
-                                                onOccurrenceChanged(
-                                                    SpeakerOccurrenceLink(
-                                                        occurrenceId = sourceOccurrence.id,
-                                                        speakerId = createdOrRenamed.id,
-                                                        link = SpeakerLink.MANUAL,
-                                                        rejectedSpeakerIds = sourceOccurrence.rejectedSpeakerIds
-                                                            .filterNot { it == createdOrRenamed.id },
-                                                    ),
-                                                    sourceOccurrence.toLinkSnapshot(),
-                                                )
-                                                onClose()
-                                            },
-                                        )
-                                    } else if (editing == null) {
+                                    if (editing == null) {
                                         selectedId = createdOrRenamed.id
                                     }
                                 },
@@ -861,15 +738,7 @@ internal fun SpeakerManagementScreen(
                         }
                     },
                 ) {
-                    Text(
-                        stringResource(
-                            if (sourceOccurrence != null && editing == null) {
-                                Res.string.speaker_management_create_assign_action
-                            } else {
-                                Res.string.speaker_management_save
-                            },
-                        ),
-                    )
+                    Text(stringResource(Res.string.speaker_management_save))
                 }
             },
             dismissButton = {
@@ -891,7 +760,10 @@ internal fun SpeakerManagementScreen(
                     onClick = {
                         scope.launch {
                             speakers.deleteSpeaker(deleting.id).fold(
-                                ifLeft = { operationFailed = true; message = it.toUiMessage() },
+                                ifLeft = {
+                                    operationFailed = true
+                                    message = it.toUiMessage(notFoundMessage = "This speaker is no longer available.")
+                                },
                                 ifRight = { selectedId = null; deleteTarget = null },
                             )
                         }
@@ -919,7 +791,12 @@ internal fun SpeakerManagementScreen(
                         onClick = {
                             scope.launch {
                                 speakers.mergeSpeakers(source.id, target.id).fold(
-                                    ifLeft = { operationFailed = true; message = it.toUiMessage() },
+                                    ifLeft = {
+                                        operationFailed = true
+                                        message = it.toUiMessage(
+                                            notFoundMessage = "One of these speakers is no longer available.",
+                                        )
+                                    },
                                     ifRight = {
                                         selectedId = target.id
                                         selectedOccurrences = emptyList()
@@ -939,44 +816,6 @@ internal fun SpeakerManagementScreen(
                 },
             )
         }
-    }
-
-    if (rejectChoiceVisible && sourceOccurrence != null) {
-        AlertDialog(
-            onDismissRequest = { rejectChoiceVisible = false },
-            title = { Text(stringResource(Res.string.speaker_management_not_this_person)) },
-            text = { Text(stringResource(Res.string.speaker_management_choose_speaker)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            speakers.rejectAutomaticMatch(sourceOccurrence.id).fold(
-                                ifLeft = { operationFailed = true; message = it.toUiMessage() },
-                                ifRight = {
-                                    onOccurrenceChanged(
-                                        SpeakerOccurrenceLink(
-                                            occurrenceId = sourceOccurrence.id,
-                                            speakerId = null,
-                                            link = SpeakerLink.NONE,
-                                            rejectedSpeakerIds = (sourceOccurrence.rejectedSpeakerIds +
-                                                requireNotNull(sourceOccurrence.speakerId)).distinct(),
-                                        ),
-                                        sourceOccurrence.toLinkSnapshot(),
-                                    )
-                                    onClose()
-                                },
-                            )
-                        }
-                        rejectChoiceVisible = false
-                    },
-                ) { Text(stringResource(Res.string.speaker_management_leave_unknown)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { rejectChoiceVisible = false }) {
-                    Text(stringResource(Res.string.speaker_management_choose_another))
-                }
-            },
-        )
     }
 
     if (operationFailed && createVisible.not()) {
@@ -1043,9 +882,11 @@ private fun RecentOccurrenceRow(
     onOpen: () -> Unit,
 ) {
     val target = sampleTarget(occurrence)
+    val memoryTitle = memory.title.takeIf { it.isNotBlank() }
+        ?: stringResource(Res.string.speaker_management_untitled)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(memory.title.ifBlank { stringResource(Res.string.speaker_management_untitled) }, fontWeight = FontWeight.SemiBold)
+            Text(memoryTitle, fontWeight = FontWeight.SemiBold)
             Text(
                 formatMemoryTimestamp(memory.createdAtEpochMillis),
                 style = MaterialTheme.typography.bodySmall,
@@ -1142,9 +983,11 @@ private fun SpeakerOccurrence.toLinkSnapshot() = SpeakerOccurrenceLink(
     rejectedSpeakerIds = rejectedSpeakerIds,
 )
 
-private fun SpeakerError.toUiMessage(): String = when (this) {
+private fun SpeakerError.toUiMessage(
+    notFoundMessage: String = "The requested speaker data is no longer available.",
+): String = when (this) {
     is SpeakerError.NameTaken -> "A speaker named “$name” already exists."
     is SpeakerError.InvalidInput -> reason
-    is SpeakerError.NotFound -> "This speaker occurrence is no longer available."
+    is SpeakerError.NotFound -> notFoundMessage
     else -> "Couldn’t update speaker. Try again."
 }

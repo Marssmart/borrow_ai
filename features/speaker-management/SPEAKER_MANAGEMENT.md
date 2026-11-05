@@ -205,7 +205,7 @@ The library header may link to the current consent explanation and Settings. Do 
 4. Return distinct linked-memory counts and last-heard summaries without one query per speaker. Derive last heard from the newest linked memory's creation time, not the speaker's last-used/analysis timestamp.
 5. Return typed errors for duplicate names, missing records, and persistence failures. Voice-vector contents are not logged.
 
-Mutations validate current records, use the existing batch mechanism, and emit the speaker change signal after committed state is visible. Memory deletion continues to remove associated embeddings and occurrences. Speaker records remain in their separate collection, and audio paths remain relative.
+Mutations validate current records, let failures escape the native batch so partial writes roll back, and emit the speaker change signal only after a successful commit. Memory deletion continues to remove associated embeddings and occurrences. Speaker records remain in their separate collection, and audio paths remain relative.
 
 ## 11. Implemented behavior
 

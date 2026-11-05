@@ -194,12 +194,6 @@ class KotbaseSpeakerService private constructor(
                         target?.let { updateDocument(it.id) { setLong(KEY_LAST_USED_AT, now) } }
                     }
                 },
-                rollback = {
-                    saveOccurrence(occurrence)
-                    embedding?.let(::saveEmbedding)
-                    plan.speakersById.values.forEach(::saveSpeaker)
-                    plan.droppedEmbeddings.forEach(::saveEmbedding)
-                },
             ).bind()
         }
     }
@@ -232,12 +226,6 @@ class KotbaseSpeakerService private constructor(
                     saveOccurrence(nextOccurrence)
                     saveEmbedding(nextEmbedding)
                     applyEmbeddingChanges(plan)
-                },
-                rollback = {
-                    saveOccurrence(occurrence)
-                    saveEmbedding(embedding)
-                    plan.speakersById.values.forEach(::saveSpeaker)
-                    plan.droppedEmbeddings.forEach(::saveEmbedding)
                 },
             ).bind()
         }
@@ -301,15 +289,6 @@ class KotbaseSpeakerService private constructor(
                         target?.let { updateDocument(it.id) { setLong(KEY_LAST_USED_AT, now) } }
                     }
                 },
-                rollback = {
-                    saveOccurrence(occurrence)
-                    embedding?.let(::saveEmbedding)
-                    plan?.let {
-                        it.speakersById.values.forEach(::saveSpeaker)
-                        it.droppedEmbeddings.forEach(::saveEmbedding)
-                    }
-                    if (plan == null) target?.let(::saveSpeaker)
-                },
             ).bind()
         }
     }
@@ -362,13 +341,6 @@ class KotbaseSpeakerService private constructor(
                         saveSpeaker(updatedTarget)
                         deleteDocument(sourceId)
                     },
-                    rollback = {
-                        rows.embeddings.forEach(::saveEmbedding)
-                        rows.changedOccurrences.forEach(::saveOccurrence)
-                        saveSpeaker(source)
-                        saveSpeaker(target)
-                        dropped.forEach(::saveEmbedding)
-                    },
                 ).bind()
             }
         }
@@ -398,11 +370,6 @@ class KotbaseSpeakerService private constructor(
                     rows.embeddings.forEach { deleteDocument(it.id) }
                     updatedOccurrences.forEach(::saveOccurrence)
                     deleteDocument(id)
-                },
-                rollback = {
-                    rows.embeddings.forEach(::saveEmbedding)
-                    rows.occurrences.forEach(::saveOccurrence)
-                    saveSpeaker(speaker)
                 },
             ).bind()
         }
@@ -440,26 +407,7 @@ class KotbaseSpeakerService private constructor(
             val plan = withContext(Dispatchers.Default) {
                 persisting { planMemory(memoryId, rows, linkedSpeakerIds, usedAtEpochMillis = now) }
             }.bind()
-            // Exceptions are caught inside the batch and returned, so none crosses Couchbase's native batch boundary.
-            // A partial write is harmless: the next analysis rebuilds these rows from scratch.
-            var batchFailure: Exception? = null
-            write {
-                database.inBatch {
-                    try {
-                        applyPlan(plan)
-                    } catch (exception: Exception) {
-                        batchFailure = exception
-                    }
-                    Unit
-                }
-            }.bind()
-            batchFailure?.let { failure ->
-                // The batch can commit rows written before the failure. Remove them so a failed attempt leaves no partial result.
-                write {
-                    applyPlan(planMemory(memoryId, rows = emptyList(), linkedSpeakerIds = emptySet(), usedAtEpochMillis = null))
-                }.bind()
-                raise(SpeakerError.Persistence(failure))
-            }
+            write { database.inBatch { applyPlan(plan) } }.bind()
         }
     }
 
@@ -601,31 +549,9 @@ class KotbaseSpeakerService private constructor(
      * Commits a prevalidated mutation in one Couchbase batch. The explicit rollback restores the pre-write documents if
      * a native save fails after an earlier save in the batch.
      */
-    private suspend fun applyMutation(
-        writeChanges: () -> Unit,
-        rollback: () -> Unit,
-    ): Either<SpeakerError, Unit> {
-        var failure: Exception? = null
-        val result = write {
-            database.inBatch {
-                try {
-                    writeChanges()
-                } catch (exception: Exception) {
-                    failure = exception
-                }
-                Unit
-            }
-        }
-        if (result.isLeft()) return result.map { Unit }
-        val mutationFailure = failure ?: return Unit.right()
-        val rollbackResult = write {
-            database.inBatch { rollback() }
-        }
-        return rollbackResult.fold(
-        ifLeft = { it.left() },
-            ifRight = { SpeakerError.Persistence(mutationFailure).left() },
-        )
-    }
+    /** Let failures cross the batch boundary so Couchbase rolls back before [write] maps the error. */
+    internal suspend fun applyMutation(writeChanges: () -> Unit): Either<SpeakerError, Unit> =
+        write { database.inBatch { writeChanges() } }.map { Unit }
 
     private fun planEmbeddingChanges(
         speakerIds: Set<String>,
