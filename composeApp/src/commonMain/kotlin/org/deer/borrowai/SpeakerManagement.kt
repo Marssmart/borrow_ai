@@ -65,6 +65,7 @@ import borrowai.composeapp.generated.resources.speaker_management_delete
 import borrowai.composeapp.generated.resources.speaker_management_delete_confirm
 import borrowai.composeapp.generated.resources.speaker_management_delete_impact
 import borrowai.composeapp.generated.resources.speaker_management_delete_title
+import borrowai.composeapp.generated.resources.speaker_management_deleting
 import borrowai.composeapp.generated.resources.speaker_management_duplicate
 import borrowai.composeapp.generated.resources.speaker_management_empty_body
 import borrowai.composeapp.generated.resources.speaker_management_empty_title
@@ -173,6 +174,7 @@ internal fun SpeakerManagementScreen(
     var mergeSearch by remember { mutableStateOf("") }
     var mergeTarget by remember { mutableStateOf<Speaker?>(null) }
     var deleteTarget by remember { mutableStateOf<Speaker?>(null) }
+    var deleteInProgress by remember { mutableStateOf(false) }
     val duplicateNameMessage = stringResource(Res.string.speaker_management_duplicate, name.trim())
 
     suspend fun reload() {
@@ -611,6 +613,7 @@ internal fun SpeakerManagementScreen(
                                 onClick = {
                                     operationFailed = false
                                     message = null
+                                    deleteInProgress = false
                                     deleteTarget = selectedSpeaker
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -798,9 +801,11 @@ internal fun SpeakerManagementScreen(
         val count = summaries[deleting.id]?.linkedMemoryCount ?: 0
         AlertDialog(
             onDismissRequest = {
-                deleteTarget = null
-                operationFailed = false
-                message = null
+                if (!deleteInProgress) {
+                    deleteTarget = null
+                    operationFailed = false
+                    message = null
+                }
             },
             title = { Text(stringResource(Res.string.speaker_management_delete_title, deleting.name)) },
             text = {
@@ -816,30 +821,49 @@ internal fun SpeakerManagementScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = !deleteInProgress,
                     onClick = {
-                        scope.launch {
-                            speakers.deleteSpeaker(deleting.id).fold(
-                                ifLeft = {
-                                    operationFailed = true
-                                    message = it.toUiMessage(
-                                        notFoundMessage = speakerUnavailableMessage,
-                                        duplicateNameMessage = duplicateNameMessage,
-                                        fallbackMessage = actionFailedMessage,
+                        if (!deleteInProgress) {
+                            deleteInProgress = true
+                            scope.launch {
+                                try {
+                                    speakers.deleteSpeaker(deleting.id).fold(
+                                        ifLeft = {
+                                            operationFailed = true
+                                            message = it.toUiMessage(
+                                                notFoundMessage = speakerUnavailableMessage,
+                                                duplicateNameMessage = duplicateNameMessage,
+                                                fallbackMessage = actionFailedMessage,
+                                            )
+                                        },
+                                        ifRight = {
+                                            selectedId = null
+                                            deleteTarget = null
+                                            operationFailed = false
+                                            message = null
+                                        },
                                     )
-                                },
-                                ifRight = {
-                                    selectedId = null
-                                    deleteTarget = null
-                                    operationFailed = false
-                                    message = null
-                                },
-                            )
+                                } finally {
+                                    deleteInProgress = false
+                                }
+                            }
                         }
                     },
-                ) { Text(stringResource(Res.string.speaker_management_delete_confirm)) }
+                ) {
+                    Text(
+                        stringResource(
+                            if (deleteInProgress) {
+                                Res.string.speaker_management_deleting
+                            } else {
+                                Res.string.speaker_management_delete_confirm
+                            },
+                        ),
+                    )
+                }
             },
             dismissButton = {
                 TextButton(
+                    enabled = !deleteInProgress,
                     onClick = {
                         deleteTarget = null
                         operationFailed = false
