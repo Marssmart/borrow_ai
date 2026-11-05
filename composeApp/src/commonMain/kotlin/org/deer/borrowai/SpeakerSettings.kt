@@ -54,7 +54,7 @@ internal class SpeakerSettingsStateHolder(
             ) { _, setup -> setup }.collect { setup ->
                 if (setup.phase != lastPhase) {
                     available = when (setup.phase) {
-                        SpeakerModelSetupPhase.READY -> true
+                        SpeakerModelSetupPhase.READY -> analyzer.isAvailable()
                         SpeakerModelSetupPhase.UNSUPPORTED_DEVICE -> false
                         SpeakerModelSetupPhase.NOT_STARTED,
                         SpeakerModelSetupPhase.FAILED,

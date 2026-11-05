@@ -191,7 +191,7 @@
 <td><code>speakerStatus</code></td>
 <td>enum (<code>PENDING</code>, <code>ANALYZING</code>, <code>DONE</code>, <code>FAILED</code>, <code>SKIPPED</code>)</td>
 <td><code>PENDING</code></td>
-<td><code>SKIPPED</code> when no speech or feature off.</td>
+<td><code>SKIPPED</code> when analysis does not run; see <code>speakerSkipReason</code>.</td>
 </tr>
 <tr>
 <td><code>speakerAttempts</code></td>
@@ -210,6 +210,12 @@
 <td>Int?</td>
 <td>null</td>
 <td>Set when analysis completes.</td>
+</tr>
+<tr>
+<td><code>speakerSkipReason</code></td>
+<td>enum? (<code>NOT_ANALYZED</code>, <code>NO_SPEECH</code>)</td>
+<td>null</td>
+<td>No-speech results are not requeued; missing values from older documents remain retryable.</td>
 </tr>
 </tbody>
 </table>
@@ -385,10 +391,10 @@
 </ul>
 <h3 id="72-steps-for-one-memory">7.2 Steps for one memory</h3>
 <ol type="1">
-<li>Check the feature flag and the model state. If disabled or unavailable, set <code>SKIPPED</code> and stop.</li>
+<li>Check the feature flag and the model state. If disabled or unavailable, set <code>SKIPPED</code> with <code>NOT_ANALYZED</code> and stop.</li>
 <li>Decode the <code>.m4a</code> to 16 kHz mono float PCM. Reuse the Android decode path from <code>AndroidBatchTranscriber</code>.</li>
 <li>Run segmentation to get speech turns with speaker-local labels.</li>
-<li>For each turn, compute an embedding with the embedding model.</li>
+<li>If no speech turns remain, set <code>SKIPPED</code> with <code>NO_SPEECH</code>; this result is not requeued. Otherwise, compute an embedding for each turn with the embedding model.</li>
 <li>Cluster embeddings (agglomerative, cosine distance, threshold in §9.3). Merge clusters that are too similar. Drop clusters under <code>minSpeechMs</code> (default 1500 ms) as noise.</li>
 <li>Cap clusters at <code>maxSpeakersPerMemory</code> (default 8). Extra clusters merge into the nearest one.</li>
 <li>For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.</li>
@@ -738,8 +744,8 @@
 </tr>
 <tr>
 <td>Q-10</td>
-<td>Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (<code>SpeakerAnalysisRunner</code>, empty drafts), and SKIPPED also covers a feature that is off.</td>
-<td><strong>Open.</strong> P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE.</td>
+<td>Should the detail say "No speakers detected" for a memory that was SKIPPED? <code>speakerSkipReason</code> now distinguishes no-speech results from analysis that did not run.</td>
+<td><strong>Open.</strong> P2 shows the empty state only for DONE. Decide whether a no-speech SKIPPED result should also show that detail state.</td>
 </tr>
 <tr>
 <td>Q-11</td>

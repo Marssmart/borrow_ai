@@ -8,6 +8,7 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 - Added optional on-device speaker recognition on supported Android devices. Speaker models are downloaded only when requested, and analysis requires explicit consent after both models pass integrity verification.
 - Added consent withdrawal that disables analysis, deletes speaker data, and resets memory speaker-analysis state. Devices with less than 5 GiB RAM remain unavailable until low-end performance is validated.
+- Speaker analysis now yields to recording, bounds PCM memory, checks native runtime availability before consent, and avoids retrying no-speech recordings.
 - Updated Android and iOS versioning to 1.24.0 (build 85).
 
 ## [1.22.2]

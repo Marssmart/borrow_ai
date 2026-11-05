@@ -18,6 +18,7 @@ import org.deer.borrowai.data.domain.MAX_SUMMARY_ATTEMPTS
 import org.deer.borrowai.data.domain.MAX_TRANSCRIPTION_ATTEMPTS
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MemoryEdit
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.SummaryStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
@@ -610,6 +611,34 @@ class KotbaseMemoryServiceTest {
         assertEquals(0, memory.speakerAttempts)
         assertEquals(null, memory.lastSpeakerError)
         assertEquals(null, memory.speakerAnalysisVersion)
+        assertEquals(null, memory.speakerSkipReason)
+    }
+
+    @Test
+    fun noSpeechSkipReasonPersistsAndIsExcludedFromRequeue() = runTest {
+        val service = openService()
+        val noSpeech = service.create(
+            MemoryDraft("No speech", "", "x", "recordings/no-speech.m4a"),
+            id = "no-speech",
+        ).getOrNull()!!
+        val notAnalyzed = service.create(
+            MemoryDraft("Not analyzed", "", "x", "recordings/not-analyzed.m4a"),
+            id = "not-analyzed",
+        ).getOrNull()!!
+
+        assertTrue(service.skipSpeakerAnalysis(noSpeech.id, SpeakerSkipReason.NO_SPEECH).isRight())
+        assertTrue(service.skipSpeakerAnalysis(notAnalyzed.id).isRight())
+        assertEquals(SpeakerSkipReason.NO_SPEECH, service.findById(noSpeech.id).getOrNull()?.speakerSkipReason)
+
+        assertEquals(1, service.requeueSkippedSpeakerAnalyses().getOrNull())
+        assertEquals(
+            SpeakerStatus.SKIPPED,
+            service.findById(noSpeech.id).getOrNull()?.speakerStatus,
+        )
+        assertEquals(
+            SpeakerStatus.PENDING,
+            service.findById(notAnalyzed.id).getOrNull()?.speakerStatus,
+        )
     }
 
     private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {

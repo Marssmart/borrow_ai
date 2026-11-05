@@ -81,7 +81,7 @@ internal fun SpeakerSettingsRows(
             }
             Switch(
                 checked = state.enabled,
-                onCheckedChange = { if (it) onTurnOn() else onTurnOff() },
+                onCheckedChange = null,
                 enabled = state.switchEnabled,
             )
         }

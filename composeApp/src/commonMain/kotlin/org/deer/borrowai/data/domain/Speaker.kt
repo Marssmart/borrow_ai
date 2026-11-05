@@ -1,11 +1,13 @@
 package org.deer.borrowai.data.domain
 
 /**
- * Where a memory stands in speaker analysis. It follows the same lifecycle as [TranscriptionStatus].
- * [SKIPPED] means the memory was not analyzed: the feature is off, the analyzer is unavailable, there is no
- * audio, or there is no speech.
+ * Where a memory stands in speaker analysis. It follows the same lifecycle as [TranscriptionStatus]. [SKIPPED] means
+ * analysis produced no surfaced result; [SpeakerSkipReason] explains whether it can be retried.
  */
 enum class SpeakerStatus { PENDING, ANALYZING, DONE, FAILED, SKIPPED }
+
+/** Why a memory is skipped, used to distinguish work that can be retried from a completed no-speech analysis. */
+enum class SpeakerSkipReason { NOT_ANALYZED, NO_SPEECH }
 
 /** How many attempts a memory gets before its speaker analysis is marked [SpeakerStatus.FAILED] (section 7.1). */
 const val MAX_SPEAKER_ATTEMPTS = 3

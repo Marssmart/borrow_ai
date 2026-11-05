@@ -24,6 +24,7 @@ import org.deer.borrowai.data.domain.MAX_SPEAKER_ATTEMPTS
 import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerLink
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
@@ -167,6 +168,24 @@ class SpeakerAnalysisRunnerTest {
         assertFalse(finished)
         assertEquals(SpeakerStatus.SKIPPED, memories.get("a").speakerStatus)
         assertEquals(0, memories.get("a").speakerAttempts)
+    }
+
+    @Test
+    fun noSpeechIsSkippedWithAReasonThatPreventsUnnecessaryReanalysis() = runTest {
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        memories.addAudioMemory("a")
+        val analyzer = ScriptedAnalyzer(script = { emptyList() })
+        val runner = runner(memories, speakers, analyzer, this)
+
+        assertTrue(runner.drain())
+        val memory = memories.get("a")
+        assertEquals(SpeakerStatus.SKIPPED, memory.speakerStatus)
+        assertEquals(SpeakerSkipReason.NO_SPEECH, memory.speakerSkipReason)
+
+        assertEquals(0, runner.requeueSkippedAndRequestDrain().getOrNull())
+        advanceUntilIdle()
+        assertEquals(1, analyzer.analyzedPaths.size)
     }
 
     @Test

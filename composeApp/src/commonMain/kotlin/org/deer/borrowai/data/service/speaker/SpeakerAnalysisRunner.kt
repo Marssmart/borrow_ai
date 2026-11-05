@@ -17,6 +17,7 @@ import arrow.core.right
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerEmbedding
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.MediaSessionState
@@ -213,7 +214,7 @@ class SpeakerAnalysisRunner(
             if (drafts.isEmpty()) {
                 // Rows left by an earlier partial attempt must not stay visible when this rebuild finds no speech.
                 if (speakerService.deleteForMemory(memory.id).isLeft()) return storeFailed()
-                return skip(memory.id)
+                return skip(memory.id, SpeakerSkipReason.NO_SPEECH)
             }
             val storeError = speakerService.replaceOccurrences(memory.id, SPEAKER_ANALYSIS_VERSION, drafts).leftOrNull()
             when (storeError) {
@@ -238,8 +239,11 @@ class SpeakerAnalysisRunner(
         return speakerService.deleteForMemory(memoryId).fold(ifLeft = { storeFailed() }, ifRight = { true })
     }
 
-    private suspend fun skip(memoryId: String): Boolean =
-        memoryService.skipSpeakerAnalysis(memoryId).fold(ifLeft = { storeFailed() }, ifRight = { true })
+    private suspend fun skip(
+        memoryId: String,
+        reason: SpeakerSkipReason = SpeakerSkipReason.NOT_ANALYZED,
+    ): Boolean = memoryService.skipSpeakerAnalysis(memoryId, reason)
+        .fold(ifLeft = { storeFailed() }, ifRight = { true })
 
     private suspend fun failAttempt(memoryId: String, error: String): Boolean =
         memoryService.failSpeakerAnalysis(memoryId, error).fold(ifLeft = { storeFailed() }, ifRight = { true })

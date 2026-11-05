@@ -60,6 +60,7 @@ import org.deer.borrowai.data.domain.withFinishedTranscription
 import org.deer.borrowai.data.domain.withGaveUp
 import org.deer.borrowai.data.domain.withSummary
 import org.deer.borrowai.data.domain.SpeakerStatus
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.yieldedForSpeakerAnalysis
@@ -307,8 +308,10 @@ class KotbaseMemoryService private constructor(
     override suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.yieldedForSpeakerAnalysis() }
 
-    override suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withSpeakerSkipped() }
+    override suspend fun skipSpeakerAnalysis(
+        id: String,
+        reason: SpeakerSkipReason,
+    ): Either<MemoryError, Unit> = updateActive(id) { it.withSpeakerSkipped(reason) }
 
     override suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
         either {
@@ -335,7 +338,10 @@ class KotbaseMemoryService private constructor(
     override suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
         either {
             val skipped = withContext(Dispatchers.Default) { readAll() }.bind()
-                .filter { !it.deleted && it.recordingPath != null && it.speakerStatus == SpeakerStatus.SKIPPED }
+                .filter {
+                    !it.deleted && it.recordingPath != null && it.speakerStatus == SpeakerStatus.SKIPPED &&
+                        it.speakerSkipReason != SpeakerSkipReason.NO_SPEECH
+                }
             if (skipped.isNotEmpty()) {
                 writeAndPublish { skipped.forEach { saveMemory(it.requeuedAfterSpeakerSkip()) } }.bind()
             }
@@ -571,6 +577,7 @@ class KotbaseMemoryService private constructor(
                 speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
                 lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
                 speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
+                speakerSkipReason = getString(COLUMN_SPEAKER_SKIP_REASON)?.let(SpeakerSkipReason::valueOf),
                 summaryEditedByUser = getBoolean(COLUMN_SUMMARY_EDITED_BY_USER),
                 categoriesEditedByUser = getBoolean(COLUMN_CATEGORIES_EDITED_BY_USER),
             )
@@ -598,6 +605,7 @@ class KotbaseMemoryService private constructor(
         setInt(COLUMN_SPEAKER_ATTEMPTS, speakerAttempts)
         setString(COLUMN_LAST_SPEAKER_ERROR, lastSpeakerError)
         setNumber(COLUMN_SPEAKER_ANALYSIS_VERSION, speakerAnalysisVersion)
+        setString(COLUMN_SPEAKER_SKIP_REASON, speakerSkipReason?.name)
         setBoolean(COLUMN_SUMMARY_EDITED_BY_USER, summaryEditedByUser)
         setBoolean(COLUMN_CATEGORIES_EDITED_BY_USER, categoriesEditedByUser)
     }
@@ -633,6 +641,7 @@ class KotbaseMemoryService private constructor(
             speakerAttempts = getInt(COLUMN_SPEAKER_ATTEMPTS),
             lastSpeakerError = getString(COLUMN_LAST_SPEAKER_ERROR),
             speakerAnalysisVersion = getNumber(COLUMN_SPEAKER_ANALYSIS_VERSION)?.toInt(),
+            speakerSkipReason = getString(COLUMN_SPEAKER_SKIP_REASON)?.let(SpeakerSkipReason::valueOf),
             summaryEditedByUser = getBoolean(COLUMN_SUMMARY_EDITED_BY_USER),
             categoriesEditedByUser = getBoolean(COLUMN_CATEGORIES_EDITED_BY_USER),
         )
@@ -706,6 +715,7 @@ class KotbaseMemoryService private constructor(
         private const val COLUMN_SPEAKER_ATTEMPTS = "speakerAttempts"
         private const val COLUMN_LAST_SPEAKER_ERROR = "lastSpeakerError"
         private const val COLUMN_SPEAKER_ANALYSIS_VERSION = "speakerAnalysisVersion"
+        private const val COLUMN_SPEAKER_SKIP_REASON = "speakerSkipReason"
 
         private fun categoryDocumentId(id: Int): String = "category:$id"
 

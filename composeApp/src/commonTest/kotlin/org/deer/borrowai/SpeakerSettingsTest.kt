@@ -36,13 +36,14 @@ class SpeakerSettingsTest {
 
     private class FakeSpeakerModelSetupService(
         private val analyzer: FakeAnalyzer,
+        private val analyzerAvailableWhenReady: Boolean,
     ) : SpeakerModelSetupService {
         private val mutableState = MutableStateFlow(SpeakerModelSetupState())
         override val state: StateFlow<SpeakerModelSetupState> = mutableState
 
         override suspend fun prepare(): Either<ModelDownloadError, Unit> {
             mutableState.value = SpeakerModelSetupState(phase = SpeakerModelSetupPhase.READY)
-            analyzer.available = true
+            analyzer.available = analyzerAvailableWhenReady
             return Unit.right()
         }
 
@@ -53,12 +54,13 @@ class SpeakerSettingsTest {
         speakers: FakeSpeakerService = FakeSpeakerService(),
         memories: MemoryService = FakeMemoryService(epochClock = EpochClock { 1_800_000_000_000L }),
         analyzer: FakeAnalyzer = FakeAnalyzer(available = false),
+        analyzerAvailableWhenReady: Boolean = true,
         scope: kotlinx.coroutines.CoroutineScope,
     ): SpeakerSettingsStateHolder = SpeakerSettingsStateHolder(
         speakers = speakers,
         memories = memories,
         analyzer = analyzer,
-        modelSetup = FakeSpeakerModelSetupService(analyzer),
+        modelSetup = FakeSpeakerModelSetupService(analyzer, analyzerAvailableWhenReady),
         scope = scope,
     )
 
@@ -169,5 +171,23 @@ class SpeakerSettingsTest {
 
         assertTrue(holder.uiState.value.modelAvailable)
         assertTrue(holder.uiState.value.switchEnabled)
+    }
+
+    @Test
+    fun readyModelsDoNotEnableConsentWhenTheNativeRuntimeIsUnavailable() = runTest {
+        val analyzer = FakeAnalyzer(available = false)
+        val holder = holder(
+            analyzer = analyzer,
+            analyzerAvailableWhenReady = false,
+            scope = backgroundScope,
+        )
+        runCurrent()
+
+        holder.downloadSpeakerModels()
+        runCurrent()
+
+        assertEquals(SpeakerModelSetupPhase.READY, holder.uiState.value.modelSetup.phase)
+        assertFalse(holder.uiState.value.modelAvailable)
+        assertFalse(holder.uiState.value.switchEnabled)
     }
 }

@@ -6,6 +6,7 @@ import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MemoryEdit
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 
@@ -135,7 +136,10 @@ interface MemoryService {
     suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit>
 
     /** Marks an active memory SKIPPED. A finished analysis is kept, so a later change of setting cannot hide it. */
-    suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit>
+    suspend fun skipSpeakerAnalysis(
+        id: String,
+        reason: SpeakerSkipReason = SpeakerSkipReason.NOT_ANALYZED,
+    ): Either<MemoryError, Unit>
 
     /**
      * Returns analyses left ANALYZING by an interrupted run to PENDING, or to FAILED when their attempts are used up.

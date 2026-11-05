@@ -153,10 +153,11 @@ Add to `Memory` (`data/domain/Memory.kt`), following the existing status and att
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `speakerStatus` | enum (`PENDING`, `ANALYZING`, `DONE`, `FAILED`, `SKIPPED`) | `PENDING` | `SKIPPED` when no speech or feature off. |
+| `speakerStatus` | enum (`PENDING`, `ANALYZING`, `DONE`, `FAILED`, `SKIPPED`) | `PENDING` | `SKIPPED` when analysis does not run; see `speakerSkipReason`. |
 | `speakerAttempts` | Int | 0 | Capped, same as transcription. |
 | `lastSpeakerError` | String? | null | Shown in debug only. |
 | `speakerAnalysisVersion` | Int? | null | Set when analysis completes. |
+| `speakerSkipReason` | enum? (`NOT_ANALYZED`, `NO_SPEECH`) | null | No-speech results are not requeued; missing values from older documents remain retryable. |
 
 ### 6.2 New entities
 
@@ -222,10 +223,10 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 
 ### 7.2 Steps for one memory
 
-1. Check the feature flag and the model state. If disabled or unavailable, set `SKIPPED` and stop.
+1. Check the feature flag and the model state. If disabled or unavailable, set `SKIPPED` with `NOT_ANALYZED` and stop.
 2. Decode the `.m4a` to 16 kHz mono float PCM. Reuse the Android decode path from `AndroidBatchTranscriber`.
 3. Run segmentation to get speech turns with speaker-local labels.
-4. For each turn, compute an embedding with the embedding model.
+4. If no speech turns remain, set `SKIPPED` with `NO_SPEECH`; this result is not requeued. Otherwise, compute an embedding for each turn with the embedding model.
 5. Cluster embeddings (agglomerative, cosine distance, threshold in §9.3). Merge clusters that are too similar. Drop clusters under `minSpeechMs` (default 1500 ms) as noise.
 6. Cap clusters at `maxSpeakersPerMemory` (default 8). Extra clusters merge into the nearest one.
 7. For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.
@@ -394,7 +395,7 @@ These were open before implementation. Q-1 to Q-9 are decided, recorded in the D
 | Q-7 | Is a consent screen needed, or is a Settings explanation enough? | **Explicit in-app consent** (decided, §9.8). Analysis does not start until the user agrees. Legal concerns (BIPA, GDPR Art. 9, CUBI) are treated as covered by this explicit opt-in and the delete-all path (AC-6.6). |
 | Q-8 | Which speaker model license is acceptable? | **Any license that allows commercial use** (decided). S-5 still verifies each model. |
 | Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
-| Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (`SpeakerAnalysisRunner`, empty drafts), and SKIPPED also covers a feature that is off. | **Open.** P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE. |
+| Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? `speakerSkipReason` now distinguishes no-speech results from analysis that did not run. | **Open.** P2 shows the empty state only for DONE. Decide whether a no-speech SKIPPED result should also show that detail state. |
 | Q-11 | §9.7 says a library speaker keeps a stored colour, but `Speaker` has no colour field. | **Decided (P2).** `Speaker.colorIndex` stores the palette index (§6.2). A new speaker takes the first index no library speaker uses. |
 | Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Decided and implemented.** The consent dialog is shown before enabling analysis, and both consent and model availability are required. |
 | Q-13 | Does a sample play its first few milliseconds from the start of the recording? `play()` starts playback at once, and the seek to the sample start follows it. | **Open (device).** Check on a Pixel that a sample does not start with the first words of the recording. If it does, the playback API needs a start position for `play()`. |
