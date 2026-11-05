@@ -608,7 +608,11 @@ internal fun SpeakerManagementScreen(
                                 Text(stringResource(Res.string.speaker_management_merge))
                             }
                             OutlinedButton(
-                                onClick = { deleteTarget = selectedSpeaker },
+                                onClick = {
+                                    operationFailed = false
+                                    message = null
+                                    deleteTarget = selectedSpeaker
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(stringResource(Res.string.speaker_management_delete))
@@ -793,9 +797,23 @@ internal fun SpeakerManagementScreen(
     deleteTarget?.let { deleting ->
         val count = summaries[deleting.id]?.linkedMemoryCount ?: 0
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            onDismissRequest = {
+                deleteTarget = null
+                operationFailed = false
+                message = null
+            },
             title = { Text(stringResource(Res.string.speaker_management_delete_title, deleting.name)) },
-            text = { Text(stringResource(Res.string.speaker_management_delete_impact, deleting.name, count)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(Res.string.speaker_management_delete_impact, deleting.name, count))
+                    if (operationFailed) {
+                        Text(
+                            message ?: actionFailedMessage,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -809,14 +827,25 @@ internal fun SpeakerManagementScreen(
                                         fallbackMessage = actionFailedMessage,
                                     )
                                 },
-                                ifRight = { selectedId = null; deleteTarget = null },
+                                ifRight = {
+                                    selectedId = null
+                                    deleteTarget = null
+                                    operationFailed = false
+                                    message = null
+                                },
                             )
                         }
                     },
                 ) { Text(stringResource(Res.string.speaker_management_delete_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+                TextButton(
+                    onClick = {
+                        deleteTarget = null
+                        operationFailed = false
+                        message = null
+                    },
+                ) {
                     Text(stringResource(Res.string.speaker_management_cancel))
                 }
             },

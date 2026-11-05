@@ -58,6 +58,28 @@ class SpeakerManagementServiceTest {
     }
 
     @Test
+    fun assignmentWorksAfterDeletingTheOriginalSpeakerRemovesItsEmbedding() = runTest {
+        val service = FakeSpeakerService(enabled = true)
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        service.replaceOccurrences(
+            memoryId = "memory-1",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(draft(1, source.id)),
+        )
+        val occurrence = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertTrue(service.deleteSpeaker(source.id).isRight())
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+
+        assertTrue(service.assignOccurrence(occurrence.id, target.id).isRight())
+
+        val assigned = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertEquals(target.id, assigned.speakerId)
+        assertEquals(SpeakerLink.MANUAL, assigned.link)
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
+
+    @Test
     fun summaryCountsOnlyMemoriesInTheActiveMemoryMap() = runTest {
         val service = FakeSpeakerService(enabled = true)
         val speaker = service.createSpeaker("Speaker").getOrNull()!!

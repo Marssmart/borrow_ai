@@ -546,11 +546,7 @@ class KotbaseSpeakerService private constructor(
         }
     }
 
-    /**
-     * Commits a prevalidated mutation in one Couchbase batch. The explicit rollback restores the pre-write documents if
-     * a native save fails after an earlier save in the batch.
-     */
-    /** Let failures cross the batch boundary so Couchbase rolls back before [write] maps the error. */
+    /** Commits a prevalidated mutation in one batch; failures abort it before [write] maps the error. */
     internal suspend fun applyMutation(writeChanges: () -> Unit): Either<SpeakerError, Unit> =
         write { database.inBatch { writeChanges() } }.map { Unit }
 

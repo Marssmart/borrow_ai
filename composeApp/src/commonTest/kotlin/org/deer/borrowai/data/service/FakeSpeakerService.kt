@@ -152,7 +152,6 @@ class FakeSpeakerService(
         val occurrence = occurrences[occurrenceId] ?: return@withLock SpeakerError.NotFound(occurrenceId).left()
         if (speakerId != null && speakerId !in speakers) return@withLock SpeakerError.NotFound(speakerId).left()
         val embedding = embeddings[occurrence.embeddingId]
-            ?: return@withLock SpeakerError.NotFound(occurrence.embeddingId).left()
         val previousSpeakerId = occurrence.speakerId
         val now = epochClock.nowEpochMillis()
         occurrences[occurrenceId] = occurrence.copy(
@@ -164,8 +163,8 @@ class FakeSpeakerService(
                 else -> occurrence.rejectedSpeakerIds
             },
         )
-        embeddings[embedding.id] = embedding.copy(speakerId = speakerId)
-        setOfNotNull(previousSpeakerId, speakerId).forEach { id ->
+        embedding?.let { embeddings[it.id] = it.copy(speakerId = speakerId) }
+        setOfNotNull(embedding?.speakerId, speakerId).forEach { id ->
             speakers[id]?.let { speakers[id] = it.copy(lastUsedAtEpochMillis = if (id == speakerId) now else it.lastUsedAtEpochMillis) }
             keepNewest(id)
         }
