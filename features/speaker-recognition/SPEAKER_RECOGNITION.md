@@ -375,7 +375,7 @@ Before any production code, run a spike on a branch. The spike answers these que
 
 The spike writes its numbers into this file (§11 table, filled in) before implementation starts.
 
-**Implementation status (2026-11-05):** The Android analyzer, explicit model download, consent gate, withdrawal, and model-ready requeue are implemented. JVM unit tests run locally. S-2, S-3, S-4, S-7, and S-8 remain pending device validation; devices under 5 GiB RAM stay unsupported until S-2 passes. No device or emulator was used for this implementation.
+**Implementation status (2026-11-04):** The Android analyzer, explicit model download, consent gate, withdrawal, and model-ready requeue are implemented. JVM unit tests run locally. S-2, S-3, S-4, S-7, and S-8 remain pending device validation; devices under 5 GiB RAM stay unsupported until S-2 passes. No device or emulator was used for this implementation.
 
 ---
 
