@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.25.1]
+
+- Fixed a crash when opening speaker management by converting palette ARGB values through Compose's ARGB colour constructor.
+- Updated Android and iOS versioning to 1.25.1 (build 89).
+
 ## [1.25.0]
 
 - Added the Android speaker library with recent appearances, search, create, rename, merge, and delete.
