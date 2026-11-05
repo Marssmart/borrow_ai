@@ -357,7 +357,8 @@ class KotbaseMemoryService private constructor(
                 it.speakerStatus != SpeakerStatus.SKIPPED ||
                     it.speakerAttempts != 0 ||
                     it.lastSpeakerError != null ||
-                    it.speakerAnalysisVersion != null
+                    it.speakerAnalysisVersion != null ||
+                    it.speakerSkipReason != SpeakerSkipReason.NOT_ANALYZED
             }
             if (changed.isNotEmpty()) {
                 writeAndPublish { changed.forEach { saveMemory(it.withSpeakerAnalysisReset()) } }.bind()

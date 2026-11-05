@@ -641,6 +641,24 @@ class KotbaseMemoryServiceTest {
         )
     }
 
+    @Test
+    fun withdrawalResetMakesNoSpeechMemoryEligibleForAnalysisAgain() = runTest {
+        val service = openService()
+        val memory = service.create(
+            MemoryDraft("No speech", "", "x", "recordings/no-speech.m4a"),
+            id = "no-speech",
+        ).getOrNull()!!
+        assertTrue(service.skipSpeakerAnalysis(memory.id, SpeakerSkipReason.NO_SPEECH).isRight())
+
+        assertEquals(1, service.resetSpeakerAnalyses().getOrNull())
+        assertEquals(
+            SpeakerSkipReason.NOT_ANALYZED,
+            service.findById(memory.id).getOrNull()?.speakerSkipReason,
+        )
+        assertEquals(1, service.requeueSkippedSpeakerAnalyses().getOrNull())
+        assertEquals(SpeakerStatus.PENDING, service.findById(memory.id).getOrNull()?.speakerStatus)
+    }
+
     private fun saveRawMemory(id: String, recordingPath: String, categories: String? = null) {
         requireNotNull(database).save(
             MutableDocument(id).apply {
