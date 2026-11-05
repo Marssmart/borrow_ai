@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -63,9 +64,9 @@ import borrowai.composeapp.generated.resources.speaker_management_create_assign
 import borrowai.composeapp.generated.resources.speaker_management_create_assign_action
 import borrowai.composeapp.generated.resources.speaker_management_delete
 import borrowai.composeapp.generated.resources.speaker_management_delete_confirm
+import borrowai.composeapp.generated.resources.speaker_management_deleting
 import borrowai.composeapp.generated.resources.speaker_management_delete_impact
 import borrowai.composeapp.generated.resources.speaker_management_delete_title
-import borrowai.composeapp.generated.resources.speaker_management_deleting
 import borrowai.composeapp.generated.resources.speaker_management_duplicate
 import borrowai.composeapp.generated.resources.speaker_management_empty_body
 import borrowai.composeapp.generated.resources.speaker_management_empty_title
@@ -825,6 +826,8 @@ internal fun SpeakerManagementScreen(
                     onClick = {
                         if (!deleteInProgress) {
                             deleteInProgress = true
+                            operationFailed = false
+                            message = null
                             scope.launch {
                                 try {
                                     speakers.deleteSpeaker(deleting.id).fold(
@@ -850,15 +853,17 @@ internal fun SpeakerManagementScreen(
                         }
                     },
                 ) {
-                    Text(
-                        stringResource(
-                            if (deleteInProgress) {
-                                Res.string.speaker_management_deleting
-                            } else {
-                                Res.string.speaker_management_delete_confirm
-                            },
-                        ),
-                    )
+                    if (deleteInProgress) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(stringResource(Res.string.speaker_management_deleting))
+                        }
+                    } else {
+                        Text(stringResource(Res.string.speaker_management_delete_confirm))
+                    }
                 }
             },
             dismissButton = {

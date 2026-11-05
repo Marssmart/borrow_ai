@@ -64,7 +64,7 @@
     <string name="speaker_management_delete_title">Delete %1$s?</string>
     <string name="speaker_management_delete_impact">%1$s will become unknown in %2$d memories. Memories and recordings stay; stored voiceprints are deleted.</string>
     <string name="speaker_management_delete_confirm">Delete speaker</string>
-    <string name="speaker_management_deleting">Deleting speaker...</string>
+    <string name="speaker_management_deleting">Deleting…</string>
     <string name="speaker_management_merge_title">Merge %1$s into %2$s?</string>
     <string name="speaker_management_merge_impact">%1$d memories will use %2$s and its color. The source identity will be removed. Memories and recordings stay. This cannot be undone.</string>
     <string name="speaker_management_merge_confirm">Merge speakers</string>
