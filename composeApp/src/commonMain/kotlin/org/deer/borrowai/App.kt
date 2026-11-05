@@ -21,8 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -70,6 +72,7 @@ fun App(services: AppServices) {
         AppShellStateHolder(mainPagerState, scope)
     }
     val appUiState by appStateHolder.uiState.collectAsState()
+    var speakerManagementRequest by remember { mutableStateOf<SpeakerManagementRequest?>(null) }
     val backgroundActivities by services.backgroundActivities.collectAsState()
     val appSettings by services.appSettings.settings.collectAsState()
     val speakerSettingsHolder = remember(services, scope) {
@@ -155,6 +158,10 @@ fun App(services: AppServices) {
                             onDetailVisibilityChanged = appStateHolder::setMemoryDetailVisible,
                             onGoToRecord = { appStateHolder.navigateToPage(AppShellStateHolder.CAPTURE_PAGE) },
                             onEditingChanged = appStateHolder::setMemoryEditing,
+                            onOpenSettings = { appStateHolder.navigateToPage(AppShellStateHolder.SETTINGS_PAGE) },
+                            speakerManagementRequest = speakerManagementRequest,
+                            onOpenSpeakerManagement = { speakerManagementRequest = it },
+                            onCloseSpeakerManagement = { speakerManagementRequest = null },
                         )
 
                         AppShellStateHolder.SETTINGS_PAGE -> SettingsScreen(
@@ -176,6 +183,10 @@ fun App(services: AppServices) {
                             onRequestSpeakerWithdrawal = speakerSettingsHolder::requestWithdrawal,
                             onConfirmSpeakerWithdrawal = speakerSettingsHolder::confirmWithdrawal,
                             onCancelSpeakerWithdrawal = speakerSettingsHolder::cancelWithdrawal,
+                            onManageSpeakers = {
+                                appStateHolder.navigateToPage(AppShellStateHolder.MEMORIES_PAGE)
+                                speakerManagementRequest = SpeakerManagementRequest()
+                            },
                         )
                     }
                 }

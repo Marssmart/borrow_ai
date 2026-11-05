@@ -7,6 +7,8 @@ import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerOccurrenceLink
+import org.deer.borrowai.data.domain.SpeakerSummary
 
 const val SPEAKER_CONSENT_TEXT_VERSION = 1
 
@@ -41,6 +43,30 @@ interface SpeakerService {
 
     /** Renames the speaker [id] under the same rule as [createSpeaker]. */
     suspend fun renameSpeaker(id: String, name: String): Either<SpeakerError, Unit>
+
+    /** One-pass linked-memory counts for the library; speakers without links have a zero count. */
+    suspend fun findSpeakerSummaries(): Either<SpeakerError, Map<String, SpeakerSummary>>
+
+    /** The occurrences linked to [speakerId], newest memory ids first when their store order is available. */
+    suspend fun findOccurrencesForSpeaker(speakerId: String): Either<SpeakerError, List<SpeakerOccurrence>>
+
+    /**
+     * Assigns one occurrence to [speakerId], or clears it when null. A non-null assignment is always manual and
+     * updates its embedding, rejection history, speaker cap/count, and last-used time in the same local transaction.
+     */
+    suspend fun assignOccurrence(occurrenceId: String, speakerId: String?): Either<SpeakerError, Unit>
+
+    /** Clears an automatic link and records it as rejected so later analysis does not restore it immediately. */
+    suspend fun rejectAutomaticMatch(occurrenceId: String): Either<SpeakerError, Unit>
+
+    /** Restores [previous] only while the occurrence still matches [expected], for a persisted Undo action. */
+    suspend fun restoreOccurrenceLink(
+        expected: SpeakerOccurrenceLink,
+        previous: SpeakerOccurrenceLink,
+    ): Either<SpeakerError, Unit>
+
+    /** Moves source identity links and eligible voiceprints to the target, then removes source atomically. */
+    suspend fun mergeSpeakers(sourceId: String, targetId: String): Either<SpeakerError, Unit>
 
     /** Deletes the speaker [id]. Its voiceprints are deleted with it. Its occurrences become unknown. Memories are not touched. */
     suspend fun deleteSpeaker(id: String): Either<SpeakerError, Unit>

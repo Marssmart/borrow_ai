@@ -15,6 +15,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +26,7 @@ import borrowai.composeapp.generated.resources.settings_background_indicator_des
 import borrowai.composeapp.generated.resources.settings_background_indicator_title
 import borrowai.composeapp.generated.resources.settings_gpu_acceleration_description
 import borrowai.composeapp.generated.resources.settings_gpu_acceleration_title
+import borrowai.composeapp.generated.resources.settings_speaker_manage_speakers
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -43,6 +45,7 @@ internal fun SettingsScreen(
     onRequestSpeakerWithdrawal: () -> Unit,
     onConfirmSpeakerWithdrawal: () -> Unit,
     onCancelSpeakerWithdrawal: () -> Unit,
+    onManageSpeakers: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -107,6 +110,12 @@ internal fun SettingsScreen(
             )
         }
         if (speakerRecognitionSupported) {
+            TextButton(
+                onClick = onManageSpeakers,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(Res.string.settings_speaker_manage_speakers))
+            }
             SpeakerSettingsRows(
                 state = speakerSettings,
                 onTurnOn = onTurnOnSpeakerRecognition,

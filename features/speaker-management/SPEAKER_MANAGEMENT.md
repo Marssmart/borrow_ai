@@ -1,6 +1,6 @@
 # Speaker management and assignment
 
-Status: Product and interaction design (proposed; no UI behavior is implemented by this document)
+Status: Implemented in the current worktree; not yet released. The approved speaker-name limit is 64 characters.
 
 Scope: Android speaker-library management and assignment flows
 
@@ -14,7 +14,7 @@ Treat the speaker library as a private address book for voices, with memory occu
 
 Use one library list, one speaker detail page, and one assignment sheet. The detail page provides the identity's recent appearances and an explicit review path for automatic matches. Creating, renaming, assigning, and correcting a match should update the memory list and detail from committed local state. Merge and delete are destructive identity operations: explain exactly what changes and require confirmation. Do not silently remove memories or original recordings.
 
-This design separates confirmed behavior from proposals. The existing specification and code have a useful data and playback foundation, but the speaker library, manual assignment, correction, and merge UI are not shipped. The linked specification's §9.3 assign sheet and §9.5 library screen are planned P3 work; their acceptance criteria describe target behavior, not capabilities currently exposed by the app. The new flows below are recommendations, not descriptions of the current app.
+This document records the approved interaction design and its implementation. The library, manual assignment, correction, and merge flows are implemented in the current worktree, but are not released until the change is reviewed and merged. The linked specification's §9.3 assign sheet and §9.5 library screen are implemented as described here.
 
 ## 2. Scope and principles
 
@@ -53,7 +53,7 @@ This design separates confirmed behavior from proposals. The existing specificat
 | Detail samples | The memory detail can show occurrence cards and play a time range from the original recording. Missing audio removes playback but leaves speaker data visible. | Keep sample playback on the occurrence card; a library identity by itself is not a separate audio file. |
 | Delete | Deleting a speaker removes its library-linked embeddings, changes its occurrences to unknown, and leaves memories untouched. Samples are time ranges in the original recording. | Explain that identity links and voiceprints are removed, but the memory and its audio remain. |
 | Consent | Analysis is off until current consent is accepted and verified models are available. Turning analysis off preserves the library; withdrawal clears speaker data and turns analysis off. | Keep ordinary disable and consent withdrawal clearly distinct. |
-| UI status | Speaker chips, detail cards, consent/settings, and Android analysis are implemented. The spec marks assign/change/not-this-person actions and speaker library management as mockups/planned work. `SpeakerService` has no merge or manual assignment operation. | All library, assignment, review, correction, and merge experiences in this document are proposed. |
+| UI and service status | The Android library, detail, assignment sheet, create/rename/delete/merge flows, contextual correction actions, and matching `SpeakerService` operations are implemented in this worktree. The service also provides distinct-memory and last-heard summaries. | The experiences below describe the current implementation; the legal/privacy review remains a release prerequisite. |
 
 Primary code references: `features/speaker-recognition/SPEAKER_RECOGNITION.md`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/domain/Speaker.kt`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/SpeakerService.kt`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/kotbase/KotbaseSpeakerService.kt`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/data/service/speaker/SpeakerMatching.kt`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/SpeakerDetails.kt`; `composeApp/src/commonMain/kotlin/org/deer/borrowai/SpeakerSettings.kt`.
 
@@ -107,6 +107,7 @@ If there are no linked occurrences, show `No linked memories yet`. If a previous
 `Add speaker` opens a short form with one field, `Name`, and a helper: `This name labels a voice in your memories. It is not verified identity.` There is no enrollment recording.
 
 - Trim leading/trailing whitespace and require a non-blank name.
+- Limit the name to 64 characters. Show a live character counter and enforce the same limit in the service so other callers cannot bypass it.
 - Enforce the service's case-insensitive uniqueness rule. If taken, show `A speaker named “…” already exists.` and keep the typed value for correction.
 - Disable Save for blank input; preserve input and focus if persistence fails.
 - On success, close the form and focus the new row. The name is not saved until the local write succeeds.
@@ -194,31 +195,29 @@ The library header may link to the current consent explanation and Settings. Do 
 - Make loading, empty, search-no-results, unavailable audio, persistence failure, missing occurrence, and retry states distinct. A failed read must never masquerade as an empty library.
 - Keep labels and state distinguishable in grayscale and high contrast. Stored color is a cue, not the identity itself.
 
-## 10. Data and service work required before implementation
+## 10. Implemented data and service behavior
 
-The current interface supports listing/creating/renaming/deleting, occurrence reads, feature consent, and analysis writes. It does **not** expose the manual assignment, rejection update, merge, or aggregate memory counts required by this design.
+`SpeakerService` supports listing, creating, renaming, deleting, occurrence reads, feature consent, analysis writes, and the following management operations:
 
-Before building the UI, add service operations in `commonMain` that:
+1. Assign or clear one occurrence together with its embedding link, provenance, rejected IDs, embedding cap, and last-used timestamp.
+2. Reject an automatic match so a later analysis does not immediately restore it.
+3. Merge two speakers transactionally, moving links and eligible embeddings while preserving the target identity and enforcing the 10-embedding cap.
+4. Return distinct linked-memory counts and last-heard summaries without one query per speaker.
+5. Return typed errors for duplicate names, missing records, and persistence failures. Voice-vector contents are not logged.
 
-1. Assign or clear one occurrence atomically with its embedding's speaker link, link provenance, rejected IDs, embedding cap, count, and last-used timestamp.
-2. Reject a specific automatic match without allowing a rebuild to immediately restore it.
-3. Merge two speakers transactionally, including link/embedding movement and the 10-embedding cap.
-4. Return a library summary or efficient aggregate query for distinct linked memories and last heard, avoiding one query per row.
-5. Return actionable typed errors for duplicate names, missing speakers/occurrences/memories, and persistence failures. Keep all voice-vector contents out of logs.
+Mutations validate current records, use the existing batch mechanism, and emit the speaker change signal after committed state is visible. Memory deletion continues to remove associated embeddings and occurrences. Speaker records remain in their separate collection, and audio paths remain relative.
 
-Mutations should validate current records before writing, commit as a single batch where possible, and emit the existing speaker change signal only after committed state is visible. Ensure deleting a memory continues to remove associated embeddings and occurrences. Do not change the separate speaker collection or the relative audio-path invariant.
+## 11. Implemented behavior
 
-## 11. Proposed acceptance criteria
-
-- A user can reach the same library from Saved Memories and Settings, including when the library is empty.
-- The library differentiates empty, loading, read failure, and no search results.
-- Names can be created and renamed with trimmed, case-insensitive uniqueness and visible persistence errors.
-- A user can assign an unknown occurrence, create-and-assign, change a match, or reject an automatic match; each mutation affects only the selected occurrence and is reflected in every affected view after commit.
-- Speaker detail supports optional review of auto-matched appearances with a route back to the exact memory card and playable sample where available.
-- Merge explains impact, keeps the selected target identity's name/color, preserves underlying memories, enforces the embedding cap, and is atomic.
-- Delete explains that links become unknown and voiceprints are removed while memories/audio stay intact.
-- Turning analysis off preserves the library; consent withdrawal removes it and makes no false claim of retaining identities.
-- All actions are usable with TalkBack, keyboard/focus navigation where applicable, large text, and non-color cues.
+- The same library is reachable from Saved Memories and Settings, including when empty.
+- Loading, empty, read failure, search-no-results, unavailable audio, and retry states are distinct.
+- Names use trimmed, case-insensitive uniqueness and a 64-character maximum with a visible counter; persistence errors remain actionable.
+- Assignment, create-and-assign, correction, and automatic-match rejection affect only the selected occurrence and update after committed writes.
+- Speaker detail lists recent linked occurrences and returns to the exact memory card, with sample playback when audio is available.
+- Merge confirms impact, preserves the target's name/color and underlying memories, enforces the embedding cap, and is atomic.
+- Delete explains that links become unknown and voiceprints are removed while memories/audio remain intact.
+- Turning analysis off preserves the library; consent withdrawal retains its existing clear-data behavior.
+- Controls expose names and statuses in text, provide spoken labels for sample playback, and use scrollable management/assignment surfaces.
 
 ## 12. Open product and legal decisions
 
@@ -226,7 +225,7 @@ Mutations should validate current records before writing, commit as a single bat
 |---|---|---|
 | Is the list header link the intended primary library entry point? | Yes; add Settings as a secondary route. | Product |
 | Should automatic matches have a separate inbox or require explicit approval? | No approval gate. Use the speaker detail's recent appearances and per-memory correction actions; adding a persistent review queue would require new review state and should be a separate decision. | Product |
-| What name length/character limits should creation and rename enforce? | Add an explicit limit before implementation; current service only enforces non-blank and case-insensitive uniqueness. Prefer a generous UI cap with clear counter rather than invisible truncation. | Product |
+| What name length/character limits should creation and rename enforce? | Resolved: 64 characters, visibly counted and enforced by both UI and service. | Product (approved) |
 | Should merge be undoable? | No in v1; use clear impact confirmation and an atomic transaction. A reversible merge needs retained source identity/history and a separate data model. | Product / engineering |
 | Is this consent and biometric-like data retention model legally sufficient in each launch region? | Do not assume the draft specification answers this. Review consent wording, lawful basis, retention, withdrawal, and deletion with qualified counsel before shipping. | Legal / privacy |
 | Should library management remain available when analysis is disabled or the device no longer supports the models? | Yes for retained local data; label the analysis state separately. | Product |

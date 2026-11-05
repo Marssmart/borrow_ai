@@ -18,6 +18,9 @@ const val SPEAKER_ANALYSIS_VERSION = 1
 /** Most embeddings a library speaker keeps. Adding one past the limit drops the oldest (section 6.2). */
 const val MAX_EMBEDDINGS_PER_SPEAKER = 10
 
+/** Maximum trimmed length for a user-provided speaker name. */
+const val MAX_SPEAKER_NAME_LENGTH = 64
+
 /** A person in the speaker library. [lastUsedAtEpochMillis] orders the assign sheet. */
 data class Speaker(
     val id: String,
@@ -34,7 +37,29 @@ data class Speaker(
         require(embeddingCount in 0..MAX_EMBEDDINGS_PER_SPEAKER) {
             "A speaker keeps at most $MAX_EMBEDDINGS_PER_SPEAKER embeddings."
         }
+
         require(colorIndex in 0 until SPEAKER_PALETTE_SIZE) { "A speaker colour is an index into the palette." }
+    }
+}
+
+/** Aggregate appearance information for one library speaker. */
+data class SpeakerSummary(
+    val speakerId: String,
+    val linkedMemoryCount: Int,
+    val lastHeardAtEpochMillis: Long?,
+)
+
+/** A guarded, reversible snapshot of one occurrence's identity decision. */
+data class SpeakerOccurrenceLink(
+    val occurrenceId: String,
+    val speakerId: String?,
+    val link: SpeakerLink,
+    val rejectedSpeakerIds: List<String>,
+) {
+    init {
+        require((link == SpeakerLink.NONE) == (speakerId == null)) {
+            "An occurrence has a speaker exactly when it is linked."
+        }
     }
 }
 

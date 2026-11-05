@@ -22,6 +22,7 @@ internal data class SpeakerCard(
     val label: SpeakerLabel,
     val speechMillis: Long,
     val audio: SpeakerAudio,
+    val occurrence: SpeakerOccurrence? = null,
 )
 
 internal sealed interface SpeakerLabel {
@@ -69,6 +70,7 @@ internal fun speakersSectionState(
                 } else {
                     SpeakerAudio.Unavailable
                 },
+                occurrence = occurrence,
             )
         },
     )

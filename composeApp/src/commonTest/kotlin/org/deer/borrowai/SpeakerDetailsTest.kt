@@ -188,6 +188,7 @@ class SpeakerDetailsTest {
         assertTrue(written.isRight())
 
         val section = loadSpeakersSection(speakers, memory(SpeakerStatus.DONE), audioAvailable = true)
+        val occurrences = speakers.findOccurrences("m1").getOrNull()!!
 
         assertEquals(
             SpeakersSectionState.Cards(
@@ -197,12 +198,14 @@ class SpeakerDetailsTest {
                         label = SpeakerLabel.Named("Priya"),
                         speechMillis = 130_000L,
                         audio = SpeakerAudio.Playable(sample(1_000L, 5_000L)),
+                        occurrence = occurrences[0],
                     ),
                     SpeakerCard(
                         ordinal = 2,
                         label = SpeakerLabel.Unknown(2),
                         speechMillis = 4_000L,
                         audio = SpeakerAudio.Playable(sample(6_000L, 9_000L)),
+                        occurrence = occurrences[1],
                     ),
                 ),
             ),
