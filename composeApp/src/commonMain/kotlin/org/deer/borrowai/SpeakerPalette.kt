@@ -1,5 +1,6 @@
 package org.deer.borrowai
 
+import androidx.compose.ui.graphics.Color
 import kotlin.math.pow
 
 /**
@@ -16,6 +17,8 @@ internal val speakerPalette: List<Long> = listOf(
     0xFF0369A1,
     0xFF9A3412,
 )
+
+internal fun speakerPaletteColor(colorIndex: Int): Color = Color(speakerPalette[colorIndex])
 
 /** The WCAG contrast ratio of the opaque colour [argb] against white. */
 internal fun contrastWithWhite(argb: Long): Double {

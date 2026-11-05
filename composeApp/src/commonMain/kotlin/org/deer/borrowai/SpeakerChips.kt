@@ -65,7 +65,7 @@ internal fun SpeakerChipsRow(
 
 @Composable
 private fun SpeakerChipView(chip: SpeakerChip, onClick: () -> Unit) {
-    val color = Color(speakerPalette[chip.colorIndex])
+    val color = speakerPaletteColor(chip.colorIndex)
     val shape = SavedMemoriesStateHolder.MEMORY_CATEGORY_CHIP_SHAPE
     val label = when (chip) {
         is SpeakerChip.Recognized -> chip.name
