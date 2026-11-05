@@ -10,12 +10,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.speaker_audio_unavailable
 import borrowai.composeapp.generated.resources.speaker_no_speakers_detected
@@ -55,12 +60,19 @@ internal fun SpeakersSection(
         }
     }
     val focusRequester = remember { BringIntoViewRequester() }
+    val focusedCardSize = remember(focusedSpeakerOrdinal) { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+    val shadowOutsetPx = with(density) {
+        (SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_ELEVATION * 2f).toPx()
+    }
     val focusedCardShown = (state as? SpeakersSectionState.Cards)
         ?.cards?.any { it.ordinal == focusedSpeakerOrdinal } == true
     // Cleared once the card is in view, so a later reload of the section does not scroll again.
-    LaunchedEffect(focusedSpeakerOrdinal, focusedCardShown) {
-        if (focusedCardShown) {
-            focusRequester.bringIntoView()
+    LaunchedEffect(focusedSpeakerOrdinal, focusedCardShown, focusedCardSize.value, shadowOutsetPx) {
+        val size = focusedCardSize.value
+        if (focusedCardShown && size != IntSize.Zero) {
+            // Include the shadow spill so the detail scroller does not clip it at the viewport edge.
+            focusRequester.bringIntoView(speakerCardBringIntoViewRect(size, shadowOutsetPx))
             onSpeakerFocusHandled()
         }
     }
@@ -76,7 +88,9 @@ internal fun SpeakersSection(
         when (section) {
             is SpeakersSectionState.Cards -> section.cards.forEach { card ->
                 val focusModifier = if (card.ordinal == focusedSpeakerOrdinal) {
-                    Modifier.bringIntoViewRequester(focusRequester)
+                    Modifier
+                        .onSizeChanged { focusedCardSize.value = it }
+                        .bringIntoViewRequester(focusRequester)
                 } else {
                     Modifier
                 }
@@ -141,3 +155,10 @@ private fun speakerLabelText(label: SpeakerLabel): String = when (label) {
     is SpeakerLabel.Named -> label.name
     is SpeakerLabel.Unknown -> stringResource(Res.string.speaker_unknown_label, label.ordinal)
 }
+
+internal fun speakerCardBringIntoViewRect(size: IntSize, shadowOutsetPx: Float): Rect = Rect(
+    left = -shadowOutsetPx,
+    top = -shadowOutsetPx,
+    right = size.width + shadowOutsetPx,
+    bottom = size.height + shadowOutsetPx,
+)

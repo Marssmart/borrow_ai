@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.24.1]
+
+- Fixed speaker cards clipping their shadow when a memory detail scrolls to a speaker.
+- Updated Android and iOS versioning to 1.24.1 (build 86).
+
 ## [1.24.0]
 
 - Added optional on-device speaker recognition on supported Android devices. Speaker models are downloaded only when requested, and analysis requires explicit consent after both models pass integrity verification.
