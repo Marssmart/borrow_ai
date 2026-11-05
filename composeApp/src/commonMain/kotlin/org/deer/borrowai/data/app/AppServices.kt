@@ -93,6 +93,8 @@ class AppServices internal constructor(
     val appSettings: AppSettingsService,
     /** The background work running now, including model downloads. Empty when the app is idle. */
     val backgroundActivities: StateFlow<Set<BackgroundActivity>> = MutableStateFlow(emptySet<BackgroundActivity>()).asStateFlow(),
+    /** Coarse progress for the active transcription, or null when unavailable or inactive. */
+    val transcriptionProgress: StateFlow<Int?> = MutableStateFlow<Int?>(null).asStateFlow(),
     private val onClose: () -> Unit = {},
 ) {
     private val closed = MutableStateFlow(false)
@@ -367,6 +369,7 @@ class AppServices internal constructor(
                     backgroundActivities = combine(activityTracker.activities, modelSetup.state) { tracked, model ->
                         activeBackgroundActivities(tracked, model)
                     }.stateIn(graphScope, SharingStarted.Eagerly, emptySet()),
+                    transcriptionProgress = activityTracker.transcriptionProgress,
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {

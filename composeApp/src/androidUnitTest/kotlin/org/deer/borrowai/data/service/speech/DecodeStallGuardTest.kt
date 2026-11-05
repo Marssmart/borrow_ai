@@ -35,4 +35,21 @@ class DecodeStallGuardTest {
         nowNanos = 50_001L * millisToNanos
         assertFailsWith<TranscriptionStalledException> { guard.check() }
     }
+
+    @Test
+    fun expectedWindowCountRoundsRecordingDurationUp() {
+        assertEquals(1, expectedTranscriptionWindowCount(1L))
+        assertEquals(1, expectedTranscriptionWindowCount(30_000L))
+        assertEquals(2, expectedTranscriptionWindowCount(30_001L))
+        assertEquals(3, expectedTranscriptionWindowCount(90_000L))
+        assertEquals(null, expectedTranscriptionWindowCount(null))
+        assertEquals(null, expectedTranscriptionWindowCount(0L))
+    }
+
+    @Test
+    fun windowProgressIsCoarseAndNeverReportsOneHundredPercent() {
+        assertEquals(20, transcriptionWindowProgressPercent(completedWindows = 1, expectedWindows = 5))
+        assertEquals(99, transcriptionWindowProgressPercent(completedWindows = 5, expectedWindows = 5))
+        assertEquals(99, transcriptionWindowProgressPercent(completedWindows = 6, expectedWindows = 5))
+    }
 }

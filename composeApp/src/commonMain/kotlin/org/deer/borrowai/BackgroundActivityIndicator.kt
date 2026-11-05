@@ -30,6 +30,7 @@ import borrowai.composeapp.generated.resources.background_activity_model_downloa
 import borrowai.composeapp.generated.resources.background_activity_speaker_analysis
 import borrowai.composeapp.generated.resources.background_activity_summary
 import borrowai.composeapp.generated.resources.background_activity_transcription
+import borrowai.composeapp.generated.resources.background_activity_transcription_progress
 import borrowai.composeapp.generated.resources.background_indicator_more
 import org.deer.borrowai.data.service.background.BackgroundActivity
 import org.jetbrains.compose.resources.StringResource
@@ -45,6 +46,7 @@ internal const val BACKGROUND_INDICATOR_MAX_NAMED = 2
 internal data class BackgroundActivityIndicatorState(
     val visible: Boolean,
     val activities: List<BackgroundActivity>,
+    val transcriptionProgressPercent: Int? = null,
 ) {
     val namedActivities: List<BackgroundActivity> get() = activities.take(BACKGROUND_INDICATOR_MAX_NAMED)
 
@@ -55,11 +57,14 @@ internal data class BackgroundActivityIndicatorState(
 internal fun backgroundActivityIndicatorState(
     activities: Set<BackgroundActivity>,
     showIndicator: Boolean,
+    transcriptionProgressPercent: Int? = null,
 ): BackgroundActivityIndicatorState {
     val ordered = BackgroundActivity.entries.filter { it in activities }
     return BackgroundActivityIndicatorState(
         visible = showIndicator && ordered.isNotEmpty(),
         activities = ordered,
+        transcriptionProgressPercent = transcriptionProgressPercent
+            ?.takeIf { BackgroundActivity.TRANSCRIPTION in ordered && it in 1..99 },
     )
 }
 
@@ -80,7 +85,14 @@ internal fun BackgroundActivityIndicator(
         enter = fadeIn() + slideInVertically { -it / 2 },
         exit = fadeOut() + slideOutVertically { -it / 2 },
     ) {
-        val names = lastShown.namedActivities.map { stringResource(it.labelResource()) }
+        val names = lastShown.namedActivities.map { activity ->
+            val progress = lastShown.transcriptionProgressPercent
+            if (activity == BackgroundActivity.TRANSCRIPTION && progress != null) {
+                stringResource(Res.string.background_activity_transcription_progress, progress)
+            } else {
+                stringResource(activity.labelResource())
+            }
+        }
         val text = buildString {
             append(names.joinToString(" · "))
             if (lastShown.hiddenCount > 0) {
