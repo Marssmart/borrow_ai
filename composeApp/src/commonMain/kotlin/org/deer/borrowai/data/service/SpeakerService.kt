@@ -44,8 +44,14 @@ interface SpeakerService {
     /** Renames the speaker [id] under the same rule as [createSpeaker]. */
     suspend fun renameSpeaker(id: String, name: String): Either<SpeakerError, Unit>
 
-    /** One-pass linked-memory counts for the library; speakers without links have a zero count. */
-    suspend fun findSpeakerSummaries(): Either<SpeakerError, Map<String, SpeakerSummary>>
+    /**
+     * One-pass linked-memory counts and last-heard times for the library. [memoryCreatedAtEpochMillis] supplies active
+     * memory creation times keyed by memory id, so last-heard reflects the newest linked memory rather than a speaker
+     * update or analysis time.
+     */
+    suspend fun findSpeakerSummaries(
+        memoryCreatedAtEpochMillis: Map<String, Long>,
+    ): Either<SpeakerError, Map<String, SpeakerSummary>>
 
     /** The occurrences linked to [speakerId], newest memory ids first when their store order is available. */
     suspend fun findOccurrencesForSpeaker(speakerId: String): Either<SpeakerError, List<SpeakerOccurrence>>

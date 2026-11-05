@@ -202,7 +202,7 @@ The library header may link to the current consent explanation and Settings. Do 
 1. Assign or clear one occurrence together with its embedding link, provenance, rejected IDs, embedding cap, and last-used timestamp.
 2. Reject an automatic match so a later analysis does not immediately restore it.
 3. Merge two speakers transactionally, moving links and eligible embeddings while preserving the target identity and enforcing the 10-embedding cap.
-4. Return distinct linked-memory counts and last-heard summaries without one query per speaker.
+4. Return distinct linked-memory counts and last-heard summaries without one query per speaker. Derive last heard from the newest linked memory's creation time, not the speaker's last-used/analysis timestamp.
 5. Return typed errors for duplicate names, missing records, and persistence failures. Voice-vector contents are not logged.
 
 Mutations validate current records, use the existing batch mechanism, and emit the speaker change signal after committed state is visible. Memory deletion continues to remove associated embeddings and occurrences. Speaker records remain in their separate collection, and audio paths remain relative.

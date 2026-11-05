@@ -265,7 +265,15 @@ class KotbaseSpeakerServiceTest {
         assertEquals(target.id, assigned.speakerId)
         assertEquals(SpeakerLink.MANUAL, assigned.link)
         assertEquals(target.id, service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.single().speakerId)
-        assertEquals(1, service.findSpeakerSummaries().getOrNull()!![target.id]?.linkedMemoryCount)
+        val memoryCreatedAt = now - 86_400_000L
+        now += 10_000L
+        val targetSummary = service.findSpeakerSummaries(mapOf("memory-1" to memoryCreatedAt))
+            .getOrNull()!![target.id]!!
+        assertEquals(
+            1,
+            targetSummary.linkedMemoryCount,
+        )
+        assertEquals(memoryCreatedAt, targetSummary.lastHeardAtEpochMillis)
 
         assertTrue(service.rejectAutomaticMatch(assigned.id).leftOrNull() is SpeakerError.InvalidInput)
         assertTrue(service.assignOccurrence(assigned.id, source.id).isRight())
@@ -325,7 +333,11 @@ class KotbaseSpeakerServiceTest {
         assertEquals(target.colorIndex, service.findSpeaker(target.id).getOrNull()!!.colorIndex)
         assertEquals(target.id, service.findOccurrences("memory-source").getOrNull()!!.single().speakerId)
         assertEquals(2, service.findSpeaker(target.id).getOrNull()!!.embeddingCount)
-        assertEquals(2, service.findSpeakerSummaries().getOrNull()!![target.id]?.linkedMemoryCount)
+        assertEquals(
+            2,
+            service.findSpeakerSummaries(mapOf("memory-source" to 1L, "memory-target" to 2L))
+                .getOrNull()!![target.id]?.linkedMemoryCount,
+        )
     }
 
     @Test

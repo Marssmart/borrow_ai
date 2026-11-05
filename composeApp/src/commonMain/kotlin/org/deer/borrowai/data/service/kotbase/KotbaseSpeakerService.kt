@@ -121,7 +121,9 @@ class KotbaseSpeakerService private constructor(
         }
     }
 
-    override suspend fun findSpeakerSummaries(): Either<SpeakerError, Map<String, SpeakerSummary>> =
+    override suspend fun findSpeakerSummaries(
+        memoryCreatedAtEpochMillis: Map<String, Long>,
+    ): Either<SpeakerError, Map<String, SpeakerSummary>> =
         withContext(Dispatchers.Default) {
             persisting {
                 val speakers = readSpeakers()
@@ -131,7 +133,9 @@ class KotbaseSpeakerService private constructor(
                     speaker.id to SpeakerSummary(
                         speakerId = speaker.id,
                         linkedMemoryCount = occurrences.map { it.memoryId }.distinct().size,
-                        lastHeardAtEpochMillis = speaker.lastUsedAtEpochMillis.takeIf { occurrences.isNotEmpty() },
+                        lastHeardAtEpochMillis = occurrences.mapNotNull {
+                            memoryCreatedAtEpochMillis[it.memoryId]
+                        }.maxOrNull(),
                     )
                 }
             }

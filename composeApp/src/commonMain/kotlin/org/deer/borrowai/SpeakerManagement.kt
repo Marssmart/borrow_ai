@@ -166,8 +166,11 @@ internal fun SpeakerManagementScreen(
     suspend fun reload() {
         loading = true
         loadFailed = false
+        memoryList = memories.getState().first()
         val speakerResult = speakers.findSpeakers()
-        val summaryResult = speakers.findSpeakerSummaries()
+        val summaryResult = speakers.findSpeakerSummaries(
+            memoryList.associate { it.id to it.createdAtEpochMillis },
+        )
         if (speakerResult.isLeft() || summaryResult.isLeft()) {
             loading = false
             loadFailed = true
@@ -175,7 +178,6 @@ internal fun SpeakerManagementScreen(
         }
         library = speakerResult.getOrNull().orEmpty()
         summaries = summaryResult.getOrNull().orEmpty()
-        memoryList = memories.getState().first()
         loading = false
         selectedId?.let { id ->
             val occurrenceResult = speakers.findOccurrencesForSpeaker(id)
@@ -219,8 +221,11 @@ internal fun SpeakerManagementScreen(
         suspend fun reload() {
             loading = true
             loadFailed = false
+            val currentMemories = memories.getState().first()
             val speakerResult = speakers.findSpeakers()
-            val summaryResult = speakers.findSpeakerSummaries()
+            val summaryResult = speakers.findSpeakerSummaries(
+                currentMemories.associate { it.id to it.createdAtEpochMillis },
+            )
             if (speakerResult.isLeft() || summaryResult.isLeft()) {
                 loading = false
                 loadFailed = true
@@ -228,7 +233,7 @@ internal fun SpeakerManagementScreen(
             }
             library = speakerResult.getOrNull().orEmpty()
             summaries = summaryResult.getOrNull().orEmpty()
-            sourceMemory = memories.getState().first().firstOrNull { it.id == occurrence.memoryId }
+            sourceMemory = currentMemories.firstOrNull { it.id == occurrence.memoryId }
             loading = false
             if (sourceMemory == null) {
                 onOccurrenceUnavailable()

@@ -120,14 +120,18 @@ class FakeSpeakerService(
             }
         }
 
-    override suspend fun findSpeakerSummaries(): Either<SpeakerError, Map<String, SpeakerSummary>> =
+    override suspend fun findSpeakerSummaries(
+        memoryCreatedAtEpochMillis: Map<String, Long>,
+    ): Either<SpeakerError, Map<String, SpeakerSummary>> =
         mutex.withLock {
             speakers.values.associate { speaker ->
                 val linked = occurrences.values.filter { it.speakerId == speaker.id }
                 speaker.id to SpeakerSummary(
                     speakerId = speaker.id,
                     linkedMemoryCount = linked.map { it.memoryId }.distinct().size,
-                    lastHeardAtEpochMillis = speaker.lastUsedAtEpochMillis.takeIf { linked.isNotEmpty() },
+                    lastHeardAtEpochMillis = linked.mapNotNull {
+                        memoryCreatedAtEpochMillis[it.memoryId]
+                    }.maxOrNull(),
                 )
             }.right()
         }

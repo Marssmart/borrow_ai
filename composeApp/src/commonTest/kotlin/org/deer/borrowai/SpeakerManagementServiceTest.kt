@@ -45,8 +45,10 @@ class SpeakerManagementServiceTest {
         assertEquals(target.id, assigned.speakerId)
         assertEquals(SpeakerLink.MANUAL, assigned.link)
         assertEquals(target.id, service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.single().speakerId)
-        assertEquals(0, service.findSpeakerSummaries().getOrNull()!![source.id]?.linkedMemoryCount)
-        assertEquals(1, service.findSpeakerSummaries().getOrNull()!![target.id]?.linkedMemoryCount)
+        val summaries = service.findSpeakerSummaries(mapOf("memory-1" to 123L)).getOrNull()!!
+        assertEquals(0, summaries[source.id]?.linkedMemoryCount)
+        assertEquals(1, summaries[target.id]?.linkedMemoryCount)
+        assertEquals(123L, summaries[target.id]?.lastHeardAtEpochMillis)
 
         val expected = SpeakerOccurrenceLink(assigned.id, assigned.speakerId, assigned.link, assigned.rejectedSpeakerIds)
         assertTrue(service.restoreOccurrenceLink(expected, previous).isRight())
@@ -100,7 +102,11 @@ class SpeakerManagementServiceTest {
         assertEquals(2, retainedTarget.embeddingCount)
         assertEquals(setOf(target.id), service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!
             .mapNotNull { it.speakerId }.toSet())
-        assertEquals(2, service.findSpeakerSummaries().getOrNull()!![target.id]?.linkedMemoryCount)
+        assertEquals(
+            2,
+            service.findSpeakerSummaries(mapOf("memory-1" to 1L, "memory-2" to 2L))
+                .getOrNull()!![target.id]?.linkedMemoryCount,
+        )
         assertEquals(target.id, service.findOccurrences("memory-1").getOrNull()!!.single().speakerId)
     }
 
