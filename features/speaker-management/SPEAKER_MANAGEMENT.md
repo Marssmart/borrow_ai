@@ -136,7 +136,7 @@ Confirm with the speaker name and impact: `Delete Alex?` / `Alex will become unk
 
 On success, affected memory cards and chips become `Speaker N`; the recordings and sample ranges remain playable if their original files exist. The deleted identity's matching voiceprints are removed, so future analysis cannot use them. Do not claim that deleting the identity deletes or edits the underlying memories. No Undo is offered because the voiceprints are deleted; the user may assign the now-unknown occurrences again later.
 
-On persistence failure, keep the confirmation open, show the error inline, and leave the speaker and its links unchanged so the user can retry or cancel. Do not report a successful deletion or dismiss the dialog.
+While deletion is being persisted, disable the confirm and cancel actions and ignore back/outside dismissal so the result remains visible. On persistence failure, keep the confirmation open, show the error inline, and leave the speaker and its links unchanged so the user can retry or cancel. Do not report a successful deletion or dismiss the dialog.
 
 ## 6. Assigning and correcting occurrences
 

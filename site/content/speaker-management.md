@@ -6,7 +6,7 @@ Speaker management is available on Android from **Speakers** in Saved Memories o
 
 The library supports searching, adding, renaming, merging, and deleting speakers. Names are trimmed, case-insensitively unique, and limited to 64 characters. The create and rename fields show a live character counter. Speaker detail shows linked-memory counts, last-heard information, and recent occurrences, including whether each was matched automatically or assigned by the user.
 
-Merge and delete require confirmation. Merge keeps the target speaker's name and color and moves eligible links and voiceprints. Delete removes that identity's links and voiceprints, leaving the memories and their recordings intact. If deletion fails to persist, the confirmation stays open and shows an inline error so the user can retry or cancel.
+Merge and delete require confirmation. Merge keeps the target speaker's name and color and moves eligible links and voiceprints. Delete removes that identity's links and voiceprints, leaving the memories and their recordings intact. While deletion is pending, the dialog cannot be dismissed and its actions are disabled; if deletion fails to persist, it stays open and shows an inline error so the user can retry or cancel.
 
 ## Assign and correct
 

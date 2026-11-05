@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -63,6 +64,7 @@ import borrowai.composeapp.generated.resources.speaker_management_create_assign
 import borrowai.composeapp.generated.resources.speaker_management_create_assign_action
 import borrowai.composeapp.generated.resources.speaker_management_delete
 import borrowai.composeapp.generated.resources.speaker_management_delete_confirm
+import borrowai.composeapp.generated.resources.speaker_management_deleting
 import borrowai.composeapp.generated.resources.speaker_management_delete_impact
 import borrowai.composeapp.generated.resources.speaker_management_delete_title
 import borrowai.composeapp.generated.resources.speaker_management_duplicate
@@ -173,6 +175,7 @@ internal fun SpeakerManagementScreen(
     var mergeSearch by remember { mutableStateOf("") }
     var mergeTarget by remember { mutableStateOf<Speaker?>(null) }
     var deleteTarget by remember { mutableStateOf<Speaker?>(null) }
+    var deleteInProgress by remember { mutableStateOf(false) }
     val duplicateNameMessage = stringResource(Res.string.speaker_management_duplicate, name.trim())
 
     suspend fun reload() {
@@ -611,6 +614,7 @@ internal fun SpeakerManagementScreen(
                                 onClick = {
                                     operationFailed = false
                                     message = null
+                                    deleteInProgress = false
                                     deleteTarget = selectedSpeaker
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -798,9 +802,11 @@ internal fun SpeakerManagementScreen(
         val count = summaries[deleting.id]?.linkedMemoryCount ?: 0
         AlertDialog(
             onDismissRequest = {
-                deleteTarget = null
-                operationFailed = false
-                message = null
+                if (!deleteInProgress) {
+                    deleteTarget = null
+                    operationFailed = false
+                    message = null
+                }
             },
             title = { Text(stringResource(Res.string.speaker_management_delete_title, deleting.name)) },
             text = {
@@ -816,30 +822,51 @@ internal fun SpeakerManagementScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = !deleteInProgress,
                     onClick = {
-                        scope.launch {
-                            speakers.deleteSpeaker(deleting.id).fold(
-                                ifLeft = {
-                                    operationFailed = true
-                                    message = it.toUiMessage(
-                                        notFoundMessage = speakerUnavailableMessage,
-                                        duplicateNameMessage = duplicateNameMessage,
-                                        fallbackMessage = actionFailedMessage,
-                                    )
-                                },
-                                ifRight = {
-                                    selectedId = null
-                                    deleteTarget = null
-                                    operationFailed = false
-                                    message = null
-                                },
-                            )
+                        if (!deleteInProgress) {
+                            deleteInProgress = true
+                            operationFailed = false
+                            message = null
+                            scope.launch {
+                                speakers.deleteSpeaker(deleting.id).fold(
+                                    ifLeft = {
+                                        deleteInProgress = false
+                                        operationFailed = true
+                                        message = it.toUiMessage(
+                                            notFoundMessage = speakerUnavailableMessage,
+                                            duplicateNameMessage = duplicateNameMessage,
+                                            fallbackMessage = actionFailedMessage,
+                                        )
+                                    },
+                                    ifRight = {
+                                        deleteInProgress = false
+                                        selectedId = null
+                                        deleteTarget = null
+                                        operationFailed = false
+                                        message = null
+                                    },
+                                )
+                            }
                         }
                     },
-                ) { Text(stringResource(Res.string.speaker_management_delete_confirm)) }
+                ) {
+                    if (deleteInProgress) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(stringResource(Res.string.speaker_management_deleting))
+                        }
+                    } else {
+                        Text(stringResource(Res.string.speaker_management_delete_confirm))
+                    }
+                }
             },
             dismissButton = {
                 TextButton(
+                    enabled = !deleteInProgress,
                     onClick = {
                         deleteTarget = null
                         operationFailed = false
