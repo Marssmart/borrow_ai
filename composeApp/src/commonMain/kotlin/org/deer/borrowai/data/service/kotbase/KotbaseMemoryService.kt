@@ -62,6 +62,7 @@ import org.deer.borrowai.data.domain.withSummary
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.yieldedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
 import org.deer.borrowai.data.domain.withSpeakerAnalysisReset
 import org.deer.borrowai.data.domain.speakerStatusFor
@@ -302,6 +303,9 @@ class KotbaseMemoryService private constructor(
 
     override suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit> =
         updateActive(id) { it.withFailedSpeakerAnalysis(error) }
+
+    override suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.yieldedForSpeakerAnalysis() }
 
     override suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
         updateActive(id) { it.withSpeakerSkipped() }

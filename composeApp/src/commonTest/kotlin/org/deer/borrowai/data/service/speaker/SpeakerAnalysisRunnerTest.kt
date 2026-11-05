@@ -4,7 +4,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.Path
 import okio.Path.Companion.toPath
@@ -24,6 +27,7 @@ import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
+import org.deer.borrowai.data.service.MediaSessionState
 
 private fun turn(startMs: Long, endMs: Long, vararg values: Float) = SpeechTurn(startMs, endMs, floatArrayOf(*values))
 
@@ -38,9 +42,12 @@ class SpeakerAnalysisRunnerTest {
 
         override suspend fun isAvailable(): Boolean = available
 
-        override suspend fun analyze(recordingPath: Path): List<SpeechTurn> {
+        override suspend fun analyze(recordingPath: Path, shouldPause: () -> Boolean): List<SpeechTurn> {
             analyzedPaths += recordingPath.toString()
-            return script(recordingPath)
+            if (shouldPause()) throw SpeakerAnalysisPausedException()
+            val turns = script(recordingPath)
+            if (shouldPause()) throw SpeakerAnalysisPausedException()
+            return turns
         }
     }
 
@@ -118,6 +125,27 @@ class SpeakerAnalysisRunnerTest {
     }
 
     @Test
+    fun recordingStartedDuringAnalysisRequeuesTheClaimWithoutCountingAFailure() = runTest {
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        memories.addAudioMemory("a")
+        var recording = false
+        val analyzer = ScriptedAnalyzer(
+            script = {
+                recording = true
+                listOf(turn(0, 2_000, 1f, 0f, 0f, 0f))
+            },
+        )
+
+        val finished = runner(memories, speakers, analyzer, this, isRecording = { recording }).drain()
+
+        assertFalse(finished)
+        assertEquals(SpeakerStatus.PENDING, memories.get("a").speakerStatus)
+        assertEquals(0, memories.get("a").speakerAttempts)
+        assertTrue(speakers.findOccurrences("a").getOrNull()!!.isEmpty())
+    }
+
+    @Test
     fun featureOffSkipsWaitingMemoriesWithoutClaiming() = runTest {
         val memories = memories()
         val speakers = FakeSpeakerService(enabled = false)
@@ -154,6 +182,41 @@ class SpeakerAnalysisRunnerTest {
 
         assertEquals(SpeakerStatus.DONE, memories.get("a").speakerStatus)
         assertEquals(listOf("/root/recordings/a.m4a"), analyzer.analyzedPaths)
+    }
+
+    @Test
+    fun recordingToIdleTransitionRetriesSkippedMemories() = runTest {
+        val memories = memories()
+        memories.addAudioMemory("a")
+        memories.skipSpeakerAnalysis("a")
+        val state = MutableStateFlow<MediaSessionState>(
+            MediaSessionState.Recording(elapsedMillis = 0, transcription = ""),
+        )
+        var busy = true
+        val analyzer = ScriptedAnalyzer()
+        val runner = runner(
+            memories = memories,
+            speakers = FakeSpeakerService(enabled = true),
+            analyzer = analyzer,
+            scope = this,
+            isRecording = { busy },
+        )
+
+        val watcher = runner.watchRecordingState(state)
+        runCurrent()
+        assertEquals(SpeakerStatus.SKIPPED, memories.get("a").speakerStatus)
+
+        state.value = MediaSessionState.Idle
+        runCurrent()
+        assertEquals(SpeakerStatus.SKIPPED, memories.get("a").speakerStatus)
+
+        busy = false
+        advanceTimeBy(100)
+        runCurrent()
+
+        assertEquals(SpeakerStatus.DONE, memories.get("a").speakerStatus)
+        assertEquals(listOf("/root/recordings/a.m4a"), analyzer.analyzedPaths)
+        watcher.cancel()
     }
 
     @Test

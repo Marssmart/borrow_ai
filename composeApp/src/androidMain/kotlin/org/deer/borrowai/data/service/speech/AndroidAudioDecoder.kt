@@ -9,7 +9,13 @@ import kotlinx.coroutines.ensureActive
 import org.deer.borrowai.data.service.recording.LinearResampler
 
 /** Shared M4A decoder for transcription and speaker analysis. */
-internal class AndroidAudioDecoder {
+internal class AndroidAudioDecoder(
+    windowDurationSeconds: Int = DEFAULT_WINDOW_DURATION_SECONDS,
+) {
+    private val windowSamples = SAMPLE_RATE * windowDurationSeconds.also {
+        require(it > 0) { "Audio window duration must be positive." }
+    }
+
     suspend fun decodeToWindows(path: String, onWindow: (FloatArray) -> Unit) {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -26,7 +32,7 @@ internal class AndroidAudioDecoder {
             decoder.configure(inputFormat, null, null, 0)
             decoder.start()
 
-            val window = PcmWindowBuffer()
+            val window = PcmWindowBuffer(windowSamples)
             var channels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             var sourceRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             var resampler = LinearResampler(sourceRate, SAMPLE_RATE) { sample ->
@@ -101,19 +107,20 @@ internal class AndroidAudioDecoder {
 
     private companion object {
         const val SAMPLE_RATE = 16_000
+        const val DEFAULT_WINDOW_DURATION_SECONDS = 30
         const val TIMEOUT_US = 10_000L
         const val STALL_TIMEOUT_MS = 30_000L
         const val PCM16_SCALE = 32768f
     }
 }
 
-private class PcmWindowBuffer {
-    private val buffer = FloatArray(WINDOW_SAMPLES)
+private class PcmWindowBuffer(windowSamples: Int) {
+    private val buffer = FloatArray(windowSamples)
     private var filled = 0
 
     fun append(sample: Float, onWindow: (FloatArray) -> Unit) {
         buffer[filled++] = sample
-        if (filled == WINDOW_SAMPLES) flush(onWindow)
+        if (filled == buffer.size) flush(onWindow)
     }
 
     fun flush(onWindow: (FloatArray) -> Unit) {
@@ -122,7 +129,4 @@ private class PcmWindowBuffer {
         filled = 0
     }
 
-    private companion object {
-        const val WINDOW_SAMPLES = 16_000 * 30
-    }
 }

@@ -19,6 +19,7 @@ import org.deer.borrowai.data.service.model.ModelCatalog
 import org.deer.borrowai.data.service.model.ModelFileStore
 import org.deer.borrowai.data.service.model.ModelRole
 import org.deer.borrowai.data.service.speaker.SpeakerAnalyzer
+import org.deer.borrowai.data.service.speaker.SpeakerAnalysisPausedException
 import org.deer.borrowai.data.service.speaker.SpeechTurn
 
 internal class AndroidSpeakerAnalyzer(
@@ -38,13 +39,13 @@ internal class AndroidSpeakerAnalyzer(
         runCatching { store.isPresent(segmentation) && store.isPresent(embedding) }.getOrDefault(false)
     }
 
-    override suspend fun analyze(recordingPath: Path): List<SpeechTurn> = gate.withLock {
+    override suspend fun analyze(
+        recordingPath: Path,
+        shouldPause: () -> Boolean,
+    ): List<SpeechTurn> = gate.withLock {
         withContext(Dispatchers.Default) {
             check(isAvailable()) { "Speaker models are unavailable or failed integrity verification." }
-            val samples = FloatSamples()
-            AndroidAudioDecoder().decodeToWindows(recordingPath.toString(), samples::append)
-            val pcm = samples.toArray()
-            if (pcm.isEmpty()) return@withContext emptyList()
+            if (shouldPause()) throw SpeakerAnalysisPausedException()
 
             var diarizer: OfflineSpeakerDiarization? = null
             var extractor: SpeakerEmbeddingExtractor? = null
@@ -85,29 +86,45 @@ internal class AndroidSpeakerAnalyzer(
                 )
                 extractor = createdExtractor
                 val coroutineContext = currentCoroutineContext()
-                val turns = createdDiarizer.process(pcm).mapNotNull { segment ->
-                    coroutineContext.ensureActive()
-                    val start = (segment.start * SAMPLE_RATE).toInt().coerceIn(0, pcm.size)
-                    val end = (segment.end * SAMPLE_RATE).toInt().coerceIn(0, pcm.size)
-                    if (end - start < MIN_EMBEDDING_SAMPLES) return@mapNotNull null
-                    val stream = createdExtractor.createStream()
-                    try {
-                        stream.acceptWaveform(pcm.copyOfRange(start, end), SAMPLE_RATE)
-                        stream.inputFinished()
-                        if (!createdExtractor.isReady(stream)) return@mapNotNull null
-                        val vector = createdExtractor.compute(stream)
-                        check(vector.size == createdExtractor.dim() && vector.isNotEmpty()) {
-                            "Speaker embedding output did not match the model dimension."
+                val turns = mutableListOf<SpeechTurn>()
+                var sampleOffset = 0L
+                AndroidAudioDecoder(windowDurationSeconds = ANALYSIS_WINDOW_SECONDS)
+                    .decodeToWindows(recordingPath.toString()) { pcm ->
+                        coroutineContext.ensureActive()
+                        if (shouldPause()) throw SpeakerAnalysisPausedException()
+                        val segments = createdDiarizer.process(pcm)
+                        if (shouldPause()) throw SpeakerAnalysisPausedException()
+                        segments.forEach { segment ->
+                            coroutineContext.ensureActive()
+                            if (shouldPause()) throw SpeakerAnalysisPausedException()
+                            val start = (segment.start * SAMPLE_RATE).toInt().coerceIn(0, pcm.size)
+                            val end = (segment.end * SAMPLE_RATE).toInt().coerceIn(0, pcm.size)
+                            if (end - start >= MIN_EMBEDDING_SAMPLES) {
+                                val stream = createdExtractor.createStream()
+                                try {
+                                    stream.acceptWaveform(pcm.copyOfRange(start, end), SAMPLE_RATE)
+                                    stream.inputFinished()
+                                    if (createdExtractor.isReady(stream)) {
+                                        val vector = createdExtractor.compute(stream)
+                                        check(vector.size == createdExtractor.dim() && vector.isNotEmpty()) {
+                                            "Speaker embedding output did not match the model dimension."
+                                        }
+                                        turns += SpeechTurn(
+                                            startMs = sampleOffset * MILLIS_PER_SECOND / SAMPLE_RATE +
+                                                (segment.start * MILLIS_PER_SECOND).toLong(),
+                                            endMs = sampleOffset * MILLIS_PER_SECOND / SAMPLE_RATE +
+                                                (segment.end * MILLIS_PER_SECOND).toLong(),
+                                            embedding = vector,
+                                        )
+                                    }
+                                } finally {
+                                    stream.release()
+                                }
+                            }
                         }
-                        SpeechTurn(
-                            startMs = (segment.start * MILLIS_PER_SECOND).toLong(),
-                            endMs = (segment.end * MILLIS_PER_SECOND).toLong(),
-                            embedding = vector,
-                        )
-                    } finally {
-                        stream.release()
+                        sampleOffset += pcm.size
                     }
-                }
+                if (shouldPause()) throw SpeakerAnalysisPausedException()
                 turns
             } catch (failure: CancellationException) {
                 throw failure
@@ -125,22 +142,7 @@ internal class AndroidSpeakerAnalyzer(
         const val CLUSTERING_THRESHOLD = 0.5f
         const val MIN_DURATION_ON_SECONDS = 0.2f
         const val MIN_DURATION_OFF_SECONDS = 0.5f
+        const val ANALYSIS_WINDOW_SECONDS = 10
         const val MIN_EMBEDDING_SAMPLES = SAMPLE_RATE * 3 / 2
     }
-}
-
-private class FloatSamples {
-    private var data = FloatArray(0)
-    private var size = 0
-
-    fun append(window: FloatArray) {
-        if (window.size > data.size - size) {
-            val capacity = maxOf(size + window.size, maxOf(1_024, data.size * 2))
-            data = data.copyOf(capacity)
-        }
-        window.copyInto(data, destinationOffset = size)
-        size += window.size
-    }
-
-    fun toArray(): FloatArray = data.copyOf(size)
 }

@@ -3,8 +3,12 @@ package org.deer.borrowai.data.service.speaker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.Path
@@ -15,6 +19,7 @@ import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
 import org.deer.borrowai.data.service.background.BackgroundActivity
@@ -109,6 +114,18 @@ class SpeakerAnalysisRunner(
         }
     }
 
+    /** Requeues skipped work after recording or playback ends and the media session is no longer busy. */
+    fun watchRecordingState(state: StateFlow<MediaSessionState>): Job = scope.launch {
+        state.map { it is MediaSessionState.Recording || it is MediaSessionState.Playing }
+            .distinctUntilChanged()
+            .collect { busyState ->
+                if (!busyState) {
+                    while (!stopped && isRecording()) delay(MEDIA_SESSION_IDLE_CHECK_MS)
+                    if (!stopped) requeueSkippedAndRequestDrain()
+                }
+            }
+    }
+
     /** Requeues memories skipped while consent or model files were unavailable, then resumes the drain. */
     suspend fun requeueSkippedAndRequestDrain(): Either<MemoryError, Int> {
         if (stopped || isRecording() || !isEnabled() || !analyzer.isAvailable()) return 0.right()
@@ -145,6 +162,10 @@ class SpeakerAnalysisRunner(
     private suspend fun isEnabled(): Boolean =
         speakerService.isFeatureEnabled().fold(ifLeft = { false }, ifRight = { it })
 
+    private companion object {
+        const val MEDIA_SESSION_IDLE_CHECK_MS = 100L
+    }
+
     /**
      * Analyzes one claimed memory and stores the result. Returns false when the drain must stop: a store write failed,
      * or analysis was switched off while this memory ran. A failed analysis uses up its attempt and returns true, so the
@@ -153,9 +174,12 @@ class SpeakerAnalysisRunner(
     private suspend fun analyzeClaimed(memory: Memory, library: List<SpeakerEmbedding>): Boolean {
         val relativePath = memory.recordingPath ?: return skip(memory.id)
         val turns = try {
-            analyzer.analyze(recordingsRoot / relativePath)
+            analyzer.analyze(recordingsRoot / relativePath, shouldPause = { stopped || isRecording() })
         } catch (exception: CancellationException) {
             throw exception
+        } catch (_: SpeakerAnalysisPausedException) {
+            if (memoryService.yieldSpeakerAnalysis(memory.id).isLeft()) return storeFailed()
+            return false
         } catch (exception: Exception) {
             // The class name only: exception messages can carry file paths.
             return failAttempt(memory.id, exception::class.simpleName ?: "UnknownError")

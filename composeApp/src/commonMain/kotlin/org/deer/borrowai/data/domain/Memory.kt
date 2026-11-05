@@ -363,6 +363,13 @@ fun Memory.requeuedForSpeakerAnalysis(): Memory {
     )
 }
 
+/** Returns a live analysis claim to PENDING when it yields to recording, without charging an attempt. */
+fun Memory.yieldedForSpeakerAnalysis(): Memory =
+    if (speakerStatus != SpeakerStatus.ANALYZING) this else copy(
+        speakerStatus = SpeakerStatus.PENDING,
+        speakerAttempts = (speakerAttempts - 1).coerceAtLeast(0),
+    )
+
 private const val EXHAUSTED_SPEAKER_REASON = "Speaker analysis did not finish after several attempts."
 
 /** Stops speaker analysis for a memory that will not be analyzed. A finished analysis is kept. */

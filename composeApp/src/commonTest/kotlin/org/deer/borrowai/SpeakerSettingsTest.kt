@@ -31,7 +31,7 @@ class SpeakerSettingsTest {
     private class FakeAnalyzer(var available: Boolean) : SpeakerAnalyzer {
         override suspend fun isAvailable(): Boolean = available
 
-        override suspend fun analyze(recordingPath: Path): List<SpeechTurn> = emptyList()
+        override suspend fun analyze(recordingPath: Path, shouldPause: () -> Boolean): List<SpeechTurn> = emptyList()
     }
 
     private class FakeSpeakerModelSetupService(

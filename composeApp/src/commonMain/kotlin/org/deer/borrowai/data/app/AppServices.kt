@@ -323,9 +323,7 @@ class AppServices internal constructor(
                         if (state.isReady) speakerRunner.requeueSkippedAndRequestDrain()
                     }
                 }
-                graphScope.launch {
-                    speakerRunner.requeueSkippedAndRequestDrain()
-                }
+                val speakerRecordingStateJob = speakerRunner.watchRecordingState(mediaSession.state)
                 onSpeakerTranscriptionSucceeded = speakerRunner::onTranscriptionSucceeded
                 val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
@@ -385,6 +383,7 @@ class AppServices internal constructor(
                         summaryRecoveryJob,
                         categorizationRecoveryJob,
                         speakerModelReadyJob,
+                        speakerRecordingStateJob,
                         speakerSettingsJob,
                     ),
                     callbackGroup = callbackGroup,

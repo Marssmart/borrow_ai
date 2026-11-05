@@ -131,6 +131,9 @@ interface MemoryService {
     /** Records a failed attempt with [error] as the reason: back to PENDING while attempts remain, otherwise FAILED. */
     suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit>
 
+    /** Returns an active analysis claim to PENDING without charging an attempt, for example when recording starts. */
+    suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit>
+
     /** Marks an active memory SKIPPED. A finished analysis is kept, so a later change of setting cannot hide it. */
     suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit>
 
