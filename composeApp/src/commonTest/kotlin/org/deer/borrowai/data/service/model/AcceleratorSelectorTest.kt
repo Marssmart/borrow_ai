@@ -25,7 +25,12 @@ class AcceleratorSelectorTest {
 
     @Test
     fun speechStaysOnTheCpu() {
-        listOf(ModelRole.LIVE_VOICE, ModelRole.VOICE).forEach { role ->
+        listOf(
+            ModelRole.LIVE_VOICE,
+            ModelRole.VOICE,
+            ModelRole.SPEAKER_SEGMENTATION,
+            ModelRole.SPEAKER_EMBEDDING,
+        ).forEach { role ->
             ModelTier.entries.forEach { tier ->
                 assertEquals(Accelerator.CPU, AcceleratorSelector.select(role, tier, true))
             }

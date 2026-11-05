@@ -19,4 +19,7 @@ sealed interface SpeakerError {
 
     /** Speaker analysis is off, so its result is not stored. Turning the feature off stops analysis (AC-6.3). */
     data object Disabled : SpeakerError
+
+    /** Speaker analysis cannot be enabled before the current consent text has been accepted. */
+    data object ConsentRequired : SpeakerError
 }

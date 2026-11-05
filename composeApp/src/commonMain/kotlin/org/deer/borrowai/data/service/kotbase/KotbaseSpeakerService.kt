@@ -39,6 +39,7 @@ import org.deer.borrowai.data.domain.SpeakerOccurrence
 import org.deer.borrowai.data.domain.newSpeakerColorIndex
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
+import org.deer.borrowai.data.service.SPEAKER_CONSENT_TEXT_VERSION
 
 /**
  * [SpeakerService] backed by Couchbase Lite through Kotbase. Speaker data lives in its own collection of the borrow-ai
@@ -65,7 +66,19 @@ class KotbaseSpeakerService private constructor(
     override suspend fun isFeatureEnabled(): Either<SpeakerError, Boolean> =
         withContext(Dispatchers.Default) { persisting { readFeatureEnabled() } }
 
+    override suspend fun hasCurrentConsent(): Either<SpeakerError, Boolean> =
+        withContext(Dispatchers.Default) { persisting { hasCurrentConsentStored() } }
+
+    override suspend fun acceptConsent(): Either<SpeakerError, Unit> = mutex.withLock {
+        write { saveSettings(enabled = true, consentAcceptedAtEpochMillis = epochClock.nowEpochMillis()) }
+    }
+
     override suspend fun setFeatureEnabled(enabled: Boolean): Either<SpeakerError, Unit> = mutex.withLock {
+        if (enabled) {
+            val hasConsent = withContext(Dispatchers.Default) { persisting { hasCurrentConsentStored() } }
+                .fold(ifLeft = { return@withLock it.left() }, ifRight = { it })
+            if (!hasConsent) return@withLock SpeakerError.ConsentRequired.left()
+        }
         write { saveSettings(enabled) }
     }
 
@@ -176,8 +189,8 @@ class KotbaseSpeakerService private constructor(
 
     override suspend fun clearAll(): Either<SpeakerError, Unit> = mutex.withLock {
         either {
-            // Analysis stops first, so a partly finished withdrawal cannot leave analysis running.
-            write { saveSettings(enabled = false) }.bind()
+            // Disable analysis and invalidate consent before deleting data, so a partial withdrawal fails closed.
+            write { saveSettings(enabled = false, clearConsent = true) }.bind()
             write { deleteEverythingExceptSettings() }.bind()
         }
     }
@@ -351,10 +364,20 @@ class KotbaseSpeakerService private constructor(
         ensure(enabled) { SpeakerError.Disabled }
     }
 
-    private fun readFeatureEnabled(): Boolean = collection.getDocument(SETTINGS_ID)
-        ?.takeIf { it.getString(KEY_TYPE) == TYPE_SETTINGS }
-        ?.getBoolean(KEY_ENABLED)
-        ?: false
+    private fun readFeatureEnabled(): Boolean {
+        val settings = collection.getDocument(SETTINGS_ID)?.takeIf { it.getString(KEY_TYPE) == TYPE_SETTINGS }
+            ?: return false
+        return settings.getBoolean(KEY_ENABLED) &&
+            settings.getInt(KEY_CONSENT_TEXT_VERSION) == SPEAKER_CONSENT_TEXT_VERSION &&
+            settings.getLong(KEY_CONSENT_ACCEPTED_AT) > 0L
+    }
+
+    private fun hasCurrentConsentStored(): Boolean {
+        val settings = collection.getDocument(SETTINGS_ID)?.takeIf { it.getString(KEY_TYPE) == TYPE_SETTINGS }
+            ?: return false
+        return settings.getInt(KEY_CONSENT_TEXT_VERSION) == SPEAKER_CONSENT_TEXT_VERSION &&
+            settings.getLong(KEY_CONSENT_ACCEPTED_AT) > 0L
+    }
 
     private fun deleteEverythingExceptSettings() {
         val ids = QueryBuilder
@@ -368,11 +391,22 @@ class KotbaseSpeakerService private constructor(
         }
     }
 
-    private fun saveSettings(enabled: Boolean) {
+    private fun saveSettings(
+        enabled: Boolean,
+        consentAcceptedAtEpochMillis: Long? = null,
+        clearConsent: Boolean = false,
+    ) {
         val document = collection.getDocument(SETTINGS_ID)?.toMutable() ?: MutableDocument(SETTINGS_ID)
         document.apply {
             setString(KEY_TYPE, TYPE_SETTINGS)
             setBoolean(KEY_ENABLED, enabled)
+            if (consentAcceptedAtEpochMillis != null) {
+                setLong(KEY_CONSENT_ACCEPTED_AT, consentAcceptedAtEpochMillis)
+                setInt(KEY_CONSENT_TEXT_VERSION, SPEAKER_CONSENT_TEXT_VERSION)
+            } else if (clearConsent) {
+                setLong(KEY_CONSENT_ACCEPTED_AT, 0L)
+                setInt(KEY_CONSENT_TEXT_VERSION, 0)
+            }
         }
         collection.save(document)
     }
@@ -581,6 +615,8 @@ class KotbaseSpeakerService private constructor(
         private const val TYPE_EMBEDDING = "embedding"
         private const val TYPE_OCCURRENCE = "occurrence"
         private const val TYPE_SETTINGS = "settings"
+        private const val KEY_CONSENT_ACCEPTED_AT = "consentAcceptedAtEpochMillis"
+        private const val KEY_CONSENT_TEXT_VERSION = "consentTextVersion"
         private const val KEY_NAME = "name"
         private const val KEY_CREATED_AT = "createdAtEpochMillis"
         private const val KEY_LAST_USED_AT = "lastUsedAtEpochMillis"

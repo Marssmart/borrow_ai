@@ -4,6 +4,8 @@ enum class ModelRole {
     LIVE_VOICE,
     VOICE,
     LLM,
+    SPEAKER_SEGMENTATION,
+    SPEAKER_EMBEDDING,
 }
 
 enum class ModelTier {
@@ -52,6 +54,9 @@ object ModelTierSelector {
             else -> ModelTier.LATEST
         }
     }
+
+    fun supportsSpeakerModels(totalRamBytes: Long): Boolean =
+        select(totalRamBytes) != ModelTier.LEGACY
 }
 
 object ModelCatalog {
@@ -60,6 +65,29 @@ object ModelCatalog {
     const val LIVE_FILE_NAME = "live-encoder.int8.onnx"
     const val VOICE_FILE_NAME = "voice-encoder.int8.onnx"
     const val LLM_FILE_NAME = "llm-model.litertlm"
+    const val SPEAKER_SEGMENTATION_FILE_NAME = "speaker-segmentation.int8.onnx"
+    const val SPEAKER_EMBEDDING_FILE_NAME = "speaker-embedding.eres2net-base.onnx"
+
+    val speakerModels: List<ModelSpec> = listOf(
+        ModelSpec(
+            displayName = "Pyannote segmentation 3.0 int8",
+            role = ModelRole.SPEAKER_SEGMENTATION,
+            fileName = SPEAKER_SEGMENTATION_FILE_NAME,
+            downloadUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.int8.onnx",
+            revision = "9403a6902bb58e3d5ae8c7e77c3422de279db2e0",
+            sizeBytes = 1_540_506L,
+            sha256 = "d582f4b4c6b48205de7e0643c57df0df5615a3c176189be3fc461e9d18827b5d",
+        ),
+        ModelSpec(
+            displayName = "3D-Speaker ERes2Net-Base",
+            role = ModelRole.SPEAKER_EMBEDDING,
+            fileName = SPEAKER_EMBEDDING_FILE_NAME,
+            downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+            revision = "0e23f82691d3ea3a2fca7e698684e2c0c89eb95c",
+            sizeBytes = 39_593_761L,
+            sha256 = "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b",
+        ),
+    )
 
     /**
      * Files written by earlier catalog versions that the current runtimes cannot load:

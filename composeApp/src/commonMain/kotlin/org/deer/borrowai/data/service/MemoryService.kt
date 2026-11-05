@@ -6,6 +6,7 @@ import org.deer.borrowai.data.domain.Category
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.MemoryDraft
 import org.deer.borrowai.data.domain.MemoryEdit
+import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.TranscriptionStatus
 
@@ -131,8 +132,14 @@ interface MemoryService {
     /** Records a failed attempt with [error] as the reason: back to PENDING while attempts remain, otherwise FAILED. */
     suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit>
 
+    /** Returns an active analysis claim to PENDING without charging an attempt, for example when recording starts. */
+    suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit>
+
     /** Marks an active memory SKIPPED. A finished analysis is kept, so a later change of setting cannot hide it. */
-    suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit>
+    suspend fun skipSpeakerAnalysis(
+        id: String,
+        reason: SpeakerSkipReason = SpeakerSkipReason.NOT_ANALYZED,
+    ): Either<MemoryError, Unit>
 
     /**
      * Returns analyses left ANALYZING by an interrupted run to PENDING, or to FAILED when their attempts are used up.
@@ -142,6 +149,12 @@ interface MemoryService {
 
     /** Marks every PENDING speaker analysis SKIPPED. Used while speaker analysis cannot run. Returns how many changed. */
     suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int>
+
+    /** Requeues skipped memories with recordings after consent or model availability changes. */
+    suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int>
+
+    /** Clears analysis status and retries after speaker data is withdrawn. */
+    suspend fun resetSpeakerAnalyses(): Either<MemoryError, Int>
 
 
     /** Every row of the category master table, ordered by id. */

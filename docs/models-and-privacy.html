@@ -26,7 +26,7 @@
 <h1 id="models-and-privacy">Models and privacy</h1>
 <p>Everything runs on the device. Audio, transcripts, summaries, and categories are processed locally. The only network traffic is the download of model files, which are fetched from pinned URLs.</p>
 <h2 id="model-roles">Model roles</h2>
-<p>Each tier uses up to three models.</p>
+<p>Each tier uses up to three models during normal setup. Speaker-recognition models are a separate optional Android download.</p>
 <table>
 <thead>
 <tr>
@@ -49,6 +49,33 @@
 </tr>
 </tbody>
 </table>
+<h2 id="speaker-recognition-models">Speaker recognition models</h2>
+<p>Speaker recognition is Android-only and is off until the user downloads the models and explicitly agrees to the consent dialog. These files are not downloaded during normal setup. The download is offered only on devices with at least 5 GiB RAM; devices below that threshold do not run the analysis because low-end performance has not been validated.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Artifact</th>
+<th style="text-align: right;">Size</th>
+<th>License</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pyannote segmentation 3.0 int8</td>
+<td><a href="https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.int8.onnx">Pinned ONNX file</a></td>
+<td style="text-align: right;">1,540,506 bytes</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td>3D-Speaker ERes2Net-Base</td>
+<td><a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx">sherpa-onnx release asset</a></td>
+<td style="text-align: right;">39,593,761 bytes</td>
+<td>Apache-2.0, according to the model card</td>
+</tr>
+</tbody>
+</table>
+<p>The combined download is 41,134,267 bytes. Each file is pinned by URL, expected size, and SHA-256; it is verified before use. Downloads wait for an unmetered connection unless the user explicitly allows mobile data for that download. Analysis stays on-device.</p>
 <h2 id="tiers">Tiers</h2>
 <p>The tier comes from the RAM the operating system reports (<code>ModelTierSelector</code> in <code>data/service/model/ModelCatalog.kt</code>).</p>
 <table>

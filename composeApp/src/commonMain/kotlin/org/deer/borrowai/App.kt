@@ -73,7 +73,13 @@ fun App(services: AppServices) {
     val backgroundActivities by services.backgroundActivities.collectAsState()
     val appSettings by services.appSettings.settings.collectAsState()
     val speakerSettingsHolder = remember(services, scope) {
-        SpeakerSettingsStateHolder(services.speakers, services.speakerAnalyzer, scope)
+        SpeakerSettingsStateHolder(
+            speakers = services.speakers,
+            memories = services.memories,
+            analyzer = services.speakerAnalyzer,
+            modelSetup = services.speakerModelSetup,
+            scope = scope,
+        )
     }
     val speakerSettings by speakerSettingsHolder.uiState.collectAsState()
     val indicatorState = backgroundActivityIndicatorState(
@@ -161,7 +167,15 @@ fun App(services: AppServices) {
                                 scope.launch { services.appSettings.setUseGpuAcceleration(use) }
                             },
                             speakerSettings = speakerSettings,
+                            onTurnOnSpeakerRecognition = speakerSettingsHolder::turnOn,
                             onTurnOffSpeakerRecognition = speakerSettingsHolder::turnOff,
+                            onAgreeToSpeakerConsent = speakerSettingsHolder::agreeToConsent,
+                            onDeclineSpeakerConsent = speakerSettingsHolder::declineConsent,
+                            onDownloadSpeakerModels = speakerSettingsHolder::downloadSpeakerModels,
+                            onDownloadSpeakerModelsOverMobileData = speakerSettingsHolder::downloadOverMobileData,
+                            onRequestSpeakerWithdrawal = speakerSettingsHolder::requestWithdrawal,
+                            onConfirmSpeakerWithdrawal = speakerSettingsHolder::confirmWithdrawal,
+                            onCancelSpeakerWithdrawal = speakerSettingsHolder::cancelWithdrawal,
                         )
                     }
                 }

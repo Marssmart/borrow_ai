@@ -11,19 +11,19 @@ interface SpeakerAnalyzer {
     suspend fun isAvailable(): Boolean
 
     /** The speech turns of the recording at [recordingPath], in time order. Empty when there is no speech. */
-    suspend fun analyze(recordingPath: Path): List<SpeechTurn>
+    suspend fun analyze(recordingPath: Path, shouldPause: () -> Boolean = { false }): List<SpeechTurn>
 }
+
+/** Signals that analysis should yield to recording without counting a failed attempt. */
+class SpeakerAnalysisPausedException : Exception()
 
 /** One stretch of speech and the embedding of its voice. Times are milliseconds from the start of the recording. */
 class SpeechTurn(val startMs: Long, val endMs: Long, val embedding: FloatArray)
 
-/**
- * The analyzer used on every platform until an embedding model is pinned (spike S-5 is open). It never analyzes, so no
- * memory gets speaker data.
- */
+/** The analyzer used on platforms without a speaker runtime or model. It never writes speaker data. */
 object UnavailableSpeakerAnalyzer : SpeakerAnalyzer {
     override suspend fun isAvailable(): Boolean = false
 
-    override suspend fun analyze(recordingPath: Path): List<SpeechTurn> =
+    override suspend fun analyze(recordingPath: Path, shouldPause: () -> Boolean): List<SpeechTurn> =
         error("Speaker analysis is unavailable on this device.")
 }

@@ -18,6 +18,7 @@ import org.deer.borrowai.data.service.category.createCategoryModel
 import org.deer.borrowai.data.service.llm.createLocalLlm
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.speech.LazyBatchTranscriber
+import org.deer.borrowai.data.service.speech.AndroidSpeakerAnalyzer
 import org.deer.borrowai.data.service.speech.createLiveTranscriber
 import org.deer.borrowai.data.service.summary.createSummarizer
 import org.deer.borrowai.data.service.recording.AndroidAudioDurationReader
@@ -63,6 +64,7 @@ internal class AppServicesViewModel(
             databaseName = databaseName,
             liveTranscriber = liveTranscriber,
             batchTranscriber = LazyBatchTranscriber(modelDirectoryUnder(recordingsRoot.toString()), modelDevice.totalRamBytes),
+            speakerAnalyzer = AndroidSpeakerAnalyzer(modelDirectoryUnder(recordingsRoot.toString())),
             transcriptionScheduler = WorkManagerTranscriptionScheduler(appContext),
             summarizer = createSummarizer(runtime = runtime),
             categoryModel = createCategoryModel(runtime = runtime),

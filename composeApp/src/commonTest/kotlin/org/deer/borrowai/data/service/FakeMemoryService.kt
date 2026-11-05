@@ -24,7 +24,11 @@ import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.yieldedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
 import org.deer.borrowai.data.domain.speakerStatusFor
+import org.deer.borrowai.data.domain.SpeakerSkipReason
+import org.deer.borrowai.data.domain.withSpeakerAnalysisReset
 import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withSpeakerSkipped
@@ -273,8 +277,13 @@ class FakeMemoryService(
     override suspend fun failSpeakerAnalysis(id: String, error: String?): Either<MemoryError, Unit> =
         updateActive(id) { it.withFailedSpeakerAnalysis(error) }
 
-    override suspend fun skipSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
-        updateActive(id) { it.withSpeakerSkipped() }
+    override suspend fun yieldSpeakerAnalysis(id: String): Either<MemoryError, Unit> =
+        updateActive(id) { it.yieldedForSpeakerAnalysis() }
+
+    override suspend fun skipSpeakerAnalysis(
+        id: String,
+        reason: SpeakerSkipReason,
+    ): Either<MemoryError, Unit> = updateActive(id) { it.withSpeakerSkipped(reason) }
 
     override suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
         var requeued = 0
@@ -302,6 +311,39 @@ class FakeMemoryService(
         }
         publishMemories()
         skipped.right()
+    }
+
+    override suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var requeued = 0
+        records.replaceAll { _, memory ->
+            if (
+                !memory.deleted && memory.recordingPath != null &&
+                memory.speakerStatus == SpeakerStatus.SKIPPED &&
+                memory.speakerSkipReason != SpeakerSkipReason.NO_SPEECH
+            ) {
+                requeued++
+                memory.requeuedAfterSpeakerSkip()
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        requeued.right()
+    }
+
+    override suspend fun resetSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var reset = 0
+        records.replaceAll { _, memory ->
+            if (!memory.deleted) {
+                val next = memory.withSpeakerAnalysisReset()
+                if (next != memory) reset++
+                next
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        reset.right()
     }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =

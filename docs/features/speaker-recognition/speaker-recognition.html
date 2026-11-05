@@ -191,7 +191,7 @@
 <td><code>speakerStatus</code></td>
 <td>enum (<code>PENDING</code>, <code>ANALYZING</code>, <code>DONE</code>, <code>FAILED</code>, <code>SKIPPED</code>)</td>
 <td><code>PENDING</code></td>
-<td><code>SKIPPED</code> when no speech or feature off.</td>
+<td><code>SKIPPED</code> when analysis does not run; see <code>speakerSkipReason</code>.</td>
 </tr>
 <tr>
 <td><code>speakerAttempts</code></td>
@@ -210,6 +210,12 @@
 <td>Int?</td>
 <td>null</td>
 <td>Set when analysis completes.</td>
+</tr>
+<tr>
+<td><code>speakerSkipReason</code></td>
+<td>enum? (<code>NOT_ANALYZED</code>, <code>NO_SPEECH</code>)</td>
+<td>null</td>
+<td>No-speech results are not requeued; missing values from older documents remain retryable.</td>
 </tr>
 </tbody>
 </table>
@@ -385,10 +391,10 @@
 </ul>
 <h3 id="72-steps-for-one-memory">7.2 Steps for one memory</h3>
 <ol type="1">
-<li>Check the feature flag and the model state. If disabled or unavailable, set <code>SKIPPED</code> and stop.</li>
+<li>Check the feature flag and the model state. If disabled or unavailable, set <code>SKIPPED</code> with <code>NOT_ANALYZED</code> and stop.</li>
 <li>Decode the <code>.m4a</code> to 16 kHz mono float PCM. Reuse the Android decode path from <code>AndroidBatchTranscriber</code>.</li>
 <li>Run segmentation to get speech turns with speaker-local labels.</li>
-<li>For each turn, compute an embedding with the embedding model.</li>
+<li>If no speech turns remain, set <code>SKIPPED</code> with <code>NO_SPEECH</code>; this result is not requeued. Otherwise, compute an embedding for each turn with the embedding model.</li>
 <li>Cluster embeddings (agglomerative, cosine distance, threshold in §9.3). Merge clusters that are too similar. Drop clusters under <code>minSpeechMs</code> (default 1500 ms) as noise.</li>
 <li>Cap clusters at <code>maxSpeakersPerMemory</code> (default 8). Extra clusters merge into the nearest one.</li>
 <li>For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.</li>
@@ -422,19 +428,19 @@
 <tbody>
 <tr>
 <td><code>SPEAKER_SEGMENTATION</code></td>
-<td>pyannote segmentation 3.0 (int8)</td>
-<td>sherpa-onnx <code>speaker-segmentation-models</code> release</td>
-<td>License must be checked before shipping (see §12).</td>
+<td>Pyannote segmentation 3.0 int8</td>
+<td><a href="https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.int8.onnx">Pinned ONNX file</a></td>
+<td>MIT.</td>
 </tr>
 <tr>
 <td><code>SPEAKER_EMBEDDING</code></td>
-<td>3D-Speaker or NeMo speaker embedding</td>
-<td>sherpa-onnx <code>speaker-recongition-models</code> release</td>
-<td>Pick the smallest model that passes the spike (§11).</td>
+<td>3D-Speaker ERes2Net-Base</td>
+<td><a href="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx">sherpa-onnx release asset</a></td>
+<td>Apache-2.0 according to the model card.</td>
 </tr>
 </tbody>
 </table>
-<p>Each entry pins URL, revision, SHA-256, and size, same as the existing models. Integrity checks stay in place.</p>
+<p>Each entry pins URL, revision, SHA-256, and size, same as the existing models. Integrity checks stay in place. The pair is 41,134,267 bytes total and is downloaded only on request, not during normal app setup. The speaker models are offered only on MID and LATEST RAM tiers; LEGACY devices remain unavailable until the low-end performance spike passes.</p>
 <h3 id="82-tiers">8.2 Tiers</h3>
 <table>
 <thead>
@@ -489,12 +495,12 @@
 <li>Row: "Speaker recognition" toggle, explanation line (AC-6.2). Turning it on shows the consent screen first (§9.8).</li>
 <li>Row: model status (downloaded, downloading, not available on this device).</li>
 <li>Row: "Withdraw consent and delete speaker data" (AC-6.6). Confirmed with a dialog.</li>
-<li>P2: the switch is disabled while the feature is off, so analysis cannot start without consent. It can only be switched off until the consent screen (§9.8) ships. The model row is labelled "Speaker models" and reads "Not available on this device" while no model is pinned. The withdraw row is not in P2.</li>
+<li>The switch is disabled until both the models are verified and the user accepts the consent dialog. The model row offers an explicit download action; mobile data requires a separate user action after the unmetered-network prompt. Devices below 5 GiB RAM show "Not available on this device" and cannot download speaker models.</li>
 <li>iOS hides the Settings rows, the detail section, and the list chips (Q-5). The shared code checks <code>speakerRecognitionSupported</code>.</li>
 </ul>
 <h3 id="98-consent-screen">9.8 Consent screen</h3>
 <ul>
-<li>Shown once, before the first analysis, and again only if the user withdrew consent and turns the feature on again.</li>
+<li>Shown before the first analysis, and again only if the user withdrew consent and turns the feature on again.</li>
 <li>Text: "BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings."</li>
 <li>Buttons: "Agree" (enables the feature and starts the queue) and "Not now" (feature stays off, nothing is stored).</li>
 <li>Consent is recorded with a timestamp and the consent text version, so a later text change can ask again.</li>
@@ -648,16 +654,16 @@
 <td>Model licenses</td>
 <td>Read each model's license</td>
 <td>Must allow shipping in a commercial app.</td>
-<td><strong>Open.</strong> Segmentation (pyannote 3.0 int8): MIT, allows commercial use. Embedding models: 3D-Speaker code is Apache-2.0 at repo level, but per-model licenses are on ModelScope. NeMo TitaNet and SpeakerNet: no license found on GitHub, and the NGC page is unreachable. Each embedding model still needs its license verified.</td>
-<td>Bundled <code>LICENSE</code> in the sherpa segmentation archive (MIT, Copyright 2022 CNRS). Release body of <code>speaker-recongition-models</code>: each model has its own license. 3D-Speaker <code>LICENSE</code> and README (Apache-2.0, GitHub). huggingface.co, modelscope.cn, catalog.ngc.nvidia.com, and k2-fsa.github.io do not resolve from this host.</td>
+<td><strong>Selected pair verified from primary sources.</strong> Pyannote segmentation 3.0 int8 is MIT; the 3D-Speaker ERes2Net-Base model card lists Apache-2.0. Those licenses permit commercial use subject to their terms; product/legal approval remains outside this engineering change.</td>
+<td>Pyannote model card and MIT license; 3D-Speaker ERes2Net-Base model card. The exact model artifacts and source links are pinned in §8.1.</td>
 </tr>
 <tr>
 <td>S-6</td>
 <td>Model size</td>
 <td>Check download sizes</td>
 <td>Combined download ≤ 60 MB.</td>
-<td><strong>Met for candidate pairs.</strong> Smallest pair: SpeakerNet 23.41 MB + segmentation 6.96 MB = 30.37 MB. Largest passing embedding: TitaNet-small 40.26 MB, pair 47.22 MB. Over 60 MB alone: ERes2NetV2 71.44 MB, TitaNet-large 101.41 MB, ERes2Net-large 116.06 MB, ERes2Net 220.62 MB.</td>
-<td>Asset sizes from <code>gh api</code> for <code>speaker-segmentation-models</code> and <code>speaker-recongition-models</code>. Segmentation archive 6,958,444 B, with <code>model.int8.onnx</code> at 1,540,506 B inside. The release publishes only the archive, and <code>ModelCatalog</code> pins raw files, so P1 needs an extraction path or another raw source.</td>
+<td><strong>Met.</strong> The selected pair totals 41,134,267 B.</td>
+<td>The pinned segmentation file is 1,540,506 B and the ERes2Net-Base release asset is 39,593,761 B. Both SHA-256 digests are recorded in <code>ModelCatalog</code>.</td>
 </tr>
 <tr>
 <td>S-7</td>
@@ -678,7 +684,7 @@
 </tbody>
 </table>
 <p>The spike writes its numbers into this file (§11 table, filled in) before implementation starts.</p>
-<p><strong>P0 status (2026-11-02, no device on this host):</strong> S-1 is a go at the API level, and S-6 is met for the candidate pairs. S-5 is open for the embedding models, so no model is chosen or pinned. S-2, S-3, S-4, S-7, and S-8 are pending device. Unit tests were not run: Gradle could not download its distribution from this host because of a JDK TLS trust error.</p>
+<p><strong>Implementation status (2026-11-04):</strong> The Android analyzer, explicit model download, consent gate, withdrawal, and model-ready requeue are implemented. JVM unit tests run locally. S-2, S-3, S-4, S-7, and S-8 remain pending device validation; devices under 5 GiB RAM stay unsupported until S-2 passes. No device or emulator was used for this implementation.</p>
 <hr />
 <h2 id="12-open-questions">12. Open questions</h2>
 <p>These were open before implementation. Q-1 to Q-9 are decided, recorded in the Decision column below. Q-10 onward were found while building P2 and are open.</p>
@@ -738,8 +744,8 @@
 </tr>
 <tr>
 <td>Q-10</td>
-<td>Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (<code>SpeakerAnalysisRunner</code>, empty drafts), and SKIPPED also covers a feature that is off.</td>
-<td><strong>Open.</strong> P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE.</td>
+<td>Should the detail say "No speakers detected" for a memory that was SKIPPED? <code>speakerSkipReason</code> now distinguishes no-speech results from analysis that did not run.</td>
+<td><strong>Open.</strong> P2 shows the empty state only for DONE. Decide whether a no-speech SKIPPED result should also show that detail state.</td>
 </tr>
 <tr>
 <td>Q-11</td>
@@ -749,7 +755,7 @@
 <tr>
 <td>Q-12</td>
 <td>Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off.</td>
-<td><strong>Open.</strong> The consent screen must ship before any UI path can call <code>setFeatureEnabled(true)</code>.</td>
+<td><strong>Decided and implemented.</strong> The consent dialog is shown before enabling analysis, and both consent and model availability are required.</td>
 </tr>
 <tr>
 <td>Q-13</td>

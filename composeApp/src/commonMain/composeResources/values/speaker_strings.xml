@@ -17,4 +17,19 @@
     <string name="settings_speaker_models_title">Speaker models</string>
     <string name="settings_speaker_models_available">Available on this device</string>
     <string name="settings_speaker_models_not_available">Not available on this device</string>
+    <string name="settings_speaker_models_requires_ram">Speaker recognition requires at least 5 GiB of RAM.</string>
+    <string name="settings_speaker_models_waiting_for_wifi">Waiting for Wi-Fi</string>
+    <string name="settings_speaker_download">Download speaker models</string>
+    <string name="settings_speaker_download_progress">Downloading speaker models (%1$d%%)</string>
+    <string name="settings_speaker_download_failed">Speaker model download failed</string>
+    <string name="settings_speaker_action_failed">Could not update speaker recognition. Try again.</string>
+    <string name="settings_speaker_consent_title">Enable speaker recognition?</string>
+    <string name="settings_speaker_consent_text">BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings.</string>
+    <string name="settings_speaker_consent_agree">Agree</string>
+    <string name="settings_speaker_consent_decline">Not now</string>
+    <string name="settings_speaker_withdraw">Withdraw consent and delete speaker data</string>
+    <string name="settings_speaker_withdraw_title">Delete speaker data?</string>
+    <string name="settings_speaker_withdraw_text">This turns off speaker recognition and deletes all speakers, voice fingerprints, and speaker samples from this app. Your memories and recordings are not deleted.</string>
+    <string name="settings_speaker_withdraw_confirm">Withdraw and delete</string>
+    <string name="settings_speaker_withdraw_cancel">Cancel</string>
 </resources>

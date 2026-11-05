@@ -29,7 +29,7 @@ package org.deer.borrowai.data.domain
  *
  * [speakerStatus] tracks speaker analysis the same way [transcriptionStatus] tracks transcription. [speakerAttempts]
  * counts claims. Once it reaches [MAX_SPEAKER_ATTEMPTS], a failed analysis sets FAILED. [speakerAnalysisVersion] is set
- * when an analysis completes. [lastSpeakerError] holds the most recent failure, for debugging.
+ * when an analysis completes. [speakerSkipReason] explains why skipped analysis is not requeued.
  */
 data class Memory(
     val id: String,
@@ -52,6 +52,7 @@ data class Memory(
     val speakerAttempts: Int = 0,
     val lastSpeakerError: String? = null,
     val speakerAnalysisVersion: Int? = null,
+    val speakerSkipReason: SpeakerSkipReason? = null,
     /** Set when the user wrote the summary. The summary job then leaves it alone. */
     val summaryEditedByUser: Boolean = false,
     /** Set when the user chose the categories. The categorization job then leaves them alone. */
@@ -338,17 +339,20 @@ fun speakerStatusFor(recordingPath: String?): SpeakerStatus =
 fun Memory.claimedForSpeakerAnalysis(): Memory = copy(
     speakerStatus = SpeakerStatus.ANALYZING,
     speakerAttempts = speakerAttempts + 1,
+    speakerSkipReason = null,
 )
 
 fun Memory.withFinishedSpeakerAnalysis(analysisVersion: Int): Memory = copy(
     speakerStatus = SpeakerStatus.DONE,
     speakerAnalysisVersion = analysisVersion,
     lastSpeakerError = null,
+    speakerSkipReason = null,
 )
 
 fun Memory.withFailedSpeakerAnalysis(error: String?): Memory = copy(
     speakerStatus = speakerStatusAfterFailure(speakerAttempts),
     lastSpeakerError = error ?: lastSpeakerError,
+    speakerSkipReason = null,
 )
 
 /**
@@ -360,14 +364,44 @@ fun Memory.requeuedForSpeakerAnalysis(): Memory {
     return copy(
         speakerStatus = speakerStatusAfterFailure(speakerAttempts),
         lastSpeakerError = if (exhausted) EXHAUSTED_SPEAKER_REASON else lastSpeakerError,
+        speakerSkipReason = null,
     )
 }
+
+/** Returns a live analysis claim to PENDING when it yields to recording, without charging an attempt. */
+fun Memory.yieldedForSpeakerAnalysis(): Memory =
+    if (speakerStatus != SpeakerStatus.ANALYZING) this else copy(
+        speakerStatus = SpeakerStatus.PENDING,
+        speakerAttempts = (speakerAttempts - 1).coerceAtLeast(0),
+        speakerSkipReason = null,
+    )
 
 private const val EXHAUSTED_SPEAKER_REASON = "Speaker analysis did not finish after several attempts."
 
 /** Stops speaker analysis for a memory that will not be analyzed. A finished analysis is kept. */
-fun Memory.withSpeakerSkipped(): Memory =
-    if (speakerStatus == SpeakerStatus.DONE) this else copy(speakerStatus = SpeakerStatus.SKIPPED)
+fun Memory.withSpeakerSkipped(reason: SpeakerSkipReason = SpeakerSkipReason.NOT_ANALYZED): Memory =
+    if (speakerStatus == SpeakerStatus.DONE) this else copy(
+        speakerStatus = SpeakerStatus.SKIPPED,
+        speakerSkipReason = reason,
+    )
+
+/** Resets speaker work after consent is withdrawn, so the deleted analysis is no longer shown as complete. */
+fun Memory.withSpeakerAnalysisReset(): Memory = copy(
+    speakerStatus = SpeakerStatus.SKIPPED,
+    speakerAttempts = 0,
+    lastSpeakerError = null,
+    speakerAnalysisVersion = null,
+    speakerSkipReason = SpeakerSkipReason.NOT_ANALYZED,
+)
+
+/** Requeues an earlier skipped analysis after consent or model availability changes. */
+fun Memory.requeuedAfterSpeakerSkip(): Memory = copy(
+    speakerStatus = SpeakerStatus.PENDING,
+    speakerAttempts = 0,
+    lastSpeakerError = null,
+    speakerAnalysisVersion = null,
+    speakerSkipReason = null,
+)
 
 private fun speakerStatusAfterFailure(attempts: Int): SpeakerStatus =
     if (attempts >= MAX_SPEAKER_ATTEMPTS) SpeakerStatus.FAILED else SpeakerStatus.PENDING
