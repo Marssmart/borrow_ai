@@ -17,6 +17,7 @@ import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
 import org.deer.borrowai.data.domain.newSpeakerColorIndex
+import org.deer.borrowai.data.service.SPEAKER_CONSENT_TEXT_VERSION
 
 /** In-memory [SpeakerService] that follows the same rules as the Kotbase store, for tests that need no database. */
 class FakeSpeakerService(
@@ -27,6 +28,7 @@ class FakeSpeakerService(
 ) : SpeakerService {
     private val mutex = Mutex()
     private var featureEnabled = enabled
+    private var consentTextVersion = if (enabled) SPEAKER_CONSENT_TEXT_VERSION else 0
     private val speakers = linkedMapOf<String, Speaker>()
     private val embeddings = linkedMapOf<String, SpeakerEmbedding>()
     private val occurrences = linkedMapOf<String, SpeakerOccurrence>()
@@ -45,11 +47,26 @@ class FakeSpeakerService(
     override val changes: Flow<Unit> = events.asSharedFlow()
 
     override suspend fun isFeatureEnabled(): Either<SpeakerError, Boolean> = mutex.withLock {
-        featureEnabled.right()
+        (featureEnabled && consentTextVersion == SPEAKER_CONSENT_TEXT_VERSION).right()
     }
+
+    override suspend fun hasCurrentConsent(): Either<SpeakerError, Boolean> = mutex.withLock {
+        (consentTextVersion == SPEAKER_CONSENT_TEXT_VERSION).right()
+    }
+
+    override suspend fun acceptConsent(): Either<SpeakerError, Unit> =
+        mutex.withLock<Either<SpeakerError, Unit>> {
+            consentTextVersion = SPEAKER_CONSENT_TEXT_VERSION
+            featureEnabled = true
+            published()
+            Unit.right()
+        }
 
     override suspend fun setFeatureEnabled(enabled: Boolean): Either<SpeakerError, Unit> =
         mutex.withLock<Either<SpeakerError, Unit>> {
+            if (enabled && consentTextVersion != SPEAKER_CONSENT_TEXT_VERSION) {
+                return@withLock SpeakerError.ConsentRequired.left()
+            }
             featureEnabled = enabled
             published()
             Unit.right()
@@ -133,7 +150,9 @@ class FakeSpeakerService(
         modelVersion: Int,
         drafts: List<OccurrenceDraft>,
     ): Either<SpeakerError, Unit> = mutex.withLock<Either<SpeakerError, Unit>> {
-        if (!featureEnabled) return@withLock SpeakerError.Disabled.left()
+        if (!featureEnabled || consentTextVersion != SPEAKER_CONSENT_TEXT_VERSION) {
+            return@withLock SpeakerError.Disabled.left()
+        }
         if (failWrites) {
             return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
         }
@@ -186,6 +205,7 @@ class FakeSpeakerService(
 
     override suspend fun clearAll(): Either<SpeakerError, Unit> = mutex.withLock<Either<SpeakerError, Unit>> {
         featureEnabled = false
+        consentTextVersion = 0
         speakers.clear()
         embeddings.clear()
         occurrences.clear()

@@ -62,6 +62,8 @@ import org.deer.borrowai.data.domain.withSummary
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
+import org.deer.borrowai.data.domain.withSpeakerAnalysisReset
 import org.deer.borrowai.data.domain.speakerStatusFor
 import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
@@ -323,6 +325,34 @@ class KotbaseMemoryService private constructor(
                 writeAndPublish { pending.forEach { saveMemory(it.withSpeakerSkipped()) } }.bind()
             }
             pending.size
+        }
+    }
+
+    override suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val skipped = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted && it.recordingPath != null && it.speakerStatus == SpeakerStatus.SKIPPED }
+            if (skipped.isNotEmpty()) {
+                writeAndPublish { skipped.forEach { saveMemory(it.requeuedAfterSpeakerSkip()) } }.bind()
+            }
+            skipped.size
+        }
+    }
+
+    override suspend fun resetSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        either {
+            val active = withContext(Dispatchers.Default) { readAll() }.bind()
+                .filter { !it.deleted }
+            val changed = active.filter {
+                it.speakerStatus != SpeakerStatus.SKIPPED ||
+                    it.speakerAttempts != 0 ||
+                    it.lastSpeakerError != null ||
+                    it.speakerAnalysisVersion != null
+            }
+            if (changed.isNotEmpty()) {
+                writeAndPublish { changed.forEach { saveMemory(it.withSpeakerAnalysisReset()) } }.bind()
+            }
+            changed.size
         }
     }
 

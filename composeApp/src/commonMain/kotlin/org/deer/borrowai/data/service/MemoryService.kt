@@ -143,6 +143,12 @@ interface MemoryService {
     /** Marks every PENDING speaker analysis SKIPPED. Used while speaker analysis cannot run. Returns how many changed. */
     suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int>
 
+    /** Requeues skipped memories with recordings after consent or model availability changes. */
+    suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int>
+
+    /** Clears analysis status and retries after speaker data is withdrawn. */
+    suspend fun resetSpeakerAnalyses(): Either<MemoryError, Int>
+
 
     /** Every row of the category master table, ordered by id. */
     suspend fun findCategories(): Either<MemoryError, List<Category>>

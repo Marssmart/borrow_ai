@@ -121,6 +121,45 @@ class DownloadingModelSetupServiceTest {
     }
 
     @Test
+    fun speakerModelsAreDownloadedOnlyWhenExplicitlyRequested() = runTest {
+        val fileSystem = FakeFileSystem()
+        val speakerSegmentation = spec(
+            displayName = "Test speaker segmentation",
+            role = ModelRole.SPEAKER_SEGMENTATION,
+            fileName = ModelCatalog.SPEAKER_SEGMENTATION_FILE_NAME,
+            url = "https://example.test/speaker-segmentation.onnx",
+            sizeBytes = 1_000L,
+        )
+        val speakerEmbedding = spec(
+            displayName = "Test speaker embedding",
+            role = ModelRole.SPEAKER_EMBEDDING,
+            fileName = ModelCatalog.SPEAKER_EMBEDDING_FILE_NAME,
+            url = "https://example.test/speaker-embedding.onnx",
+            sizeBytes = 2_000L,
+        )
+        val downloader = RecordingDownloader(fileSystem, listOf(speakerSegmentation, speakerEmbedding))
+        val setup = DownloadingSpeakerModelSetupService(
+            store = store(fileSystem),
+            downloader = downloader,
+            network = FixedNetworkPolicy(true),
+            scope = backgroundScope,
+            models = listOf(speakerSegmentation, speakerEmbedding),
+        )
+
+        assertEquals(SpeakerModelSetupPhase.NOT_STARTED, setup.state.value.phase)
+        assertEquals(Unit.right(), setup.prepare())
+
+        assertEquals(SpeakerModelSetupPhase.READY, setup.state.value.phase)
+        assertEquals(
+            listOf(speakerSegmentation.downloadUrl, speakerEmbedding.downloadUrl),
+            downloader.requestedUrls,
+        )
+        assertEquals(3_000L, setup.state.value.bytesTotal)
+        assertTrue(store(fileSystem).isPresent(speakerSegmentation))
+        assertTrue(store(fileSystem).isPresent(speakerEmbedding))
+    }
+
+    @Test
     fun liveAndVoiceSharingOneFileDownloadItOnce() = runTest {
         val fileSystem = FakeFileSystem()
         val sharedLive = live.copy(

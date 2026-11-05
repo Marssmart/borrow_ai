@@ -25,6 +25,12 @@ class ModelCatalogTest {
     }
 
     @Test
+    fun speakerModelsAreUnavailableOnLegacyRamTier() {
+        assertEquals(false, ModelTierSelector.supportsSpeakerModels(5L * gib - 1))
+        assertEquals(true, ModelTierSelector.supportsSpeakerModels(5L * gib))
+    }
+
+    @Test
     fun eachTierPicksItsVoiceAndLlmModels() {
         val legacy = ModelCatalog.modelsFor(ModelTier.LEGACY)
         assertEquals("Whisper Tiny", legacy.voice.first().displayName)
@@ -101,5 +107,26 @@ class ModelCatalogTest {
                 assertTrue(model.downloadUrl.contains("/resolve/${model.revision}/"), model.displayName)
             }
         }
+    }
+
+    @Test
+    fun speakerModelsHavePinnedIntegrityMetadataAndDistinctRoles() {
+        val models = ModelCatalog.speakerModels
+
+        assertEquals(
+            listOf(ModelRole.SPEAKER_SEGMENTATION, ModelRole.SPEAKER_EMBEDDING),
+            models.map { it.role },
+        )
+        assertEquals(1_540_506L, models[0].sizeBytes)
+        assertEquals("d582f4b4c6b48205de7e0643c57df0df5615a3c176189be3fc461e9d18827b5d", models[0].sha256)
+        assertEquals(39_593_761L, models[1].sizeBytes)
+        assertEquals("1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b", models[1].sha256)
+        models.forEach { model ->
+            assertTrue(model.downloadUrl.startsWith("https://"))
+            assertEquals(40, model.revision.length)
+            assertTrue(model.sha256.matches(Regex("[0-9a-f]{64}")))
+            assertTrue(model.sizeBytes > 0L)
+        }
+        assertTrue(models[0].downloadUrl.contains("/resolve/${models[0].revision}/"))
     }
 }

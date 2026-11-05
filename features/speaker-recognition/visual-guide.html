@@ -585,7 +585,7 @@
     <section class="section">
       <p class="eyebrow">Shipped · 7 · Settings</p>
       <h2>Settings screen <span class="tag tag-live">Shipped</span></h2>
-      <p class="section-note">No longer a placeholder. It holds two switches, both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). On Android it also has the speaker recognition rows, described in the Opt-in and re-analysis section below. The consent and re-analysis parts there are mockups.</p>
+      <p class="section-note">No longer a placeholder. It holds two switches, both on by default and stored in their own local collection: the background activity indicator and GPU acceleration (Android summary and category model; falls back to the CPU if the GPU fails). On Android it also has speaker-recognition settings for model download, explicit consent, and withdrawal, described below.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -607,8 +607,8 @@
 
     <section class="section">
       <p class="eyebrow">Shipped · 9 · Speaker data layer</p>
-      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Library, assignment, consent, and re-analysis are mockups</span></h2>
-      <p class="section-note">Shipped in 1.8.0 with no interface: a speaker library and per-memory speakers in a separate local collection, speech clustering, a playable sample per speaker, and library matching. Memories gained speaker analysis status fields, and purging a memory removes its speaker data. The feature is off by default and no speech model is bundled, so no analysis runs yet. In this release, the speaker chips on the memory list, the Speakers section of the memory detail with its sample playback, and the Settings rows ship on Android only. iOS shows none of them. No speech model is pinned, so no memory has speakers yet and the list and detail look unchanged. The sections below show the planned UI, and each one notes how the shipped version differs.</p>
+      <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Library and assignment UI are mockups</span></h2>
+      <p class="section-note">The data layer provides a local speaker library, per-memory occurrences, embeddings, clustering, sample playback, and purge cleanup. This release adds the optional Android segmentation and embedding models, on-device analysis, consent, and withdrawal. Models are requested from Settings and are not part of normal setup. The switch is off until both verified models and explicit consent are available. iOS hides the feature. Detected unknown speakers can appear in chips and detail cards; library management and manual assignment remain mockups.</p>
     </section>
 
     <section class="section">
@@ -872,9 +872,9 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 3 · Settings</p>
-      <h2>Opt-in and re-analysis <span class="tag tag-live">Settings rows shipped</span> <span class="tag tag-ios">Android only</span> <span class="tag tag-mock">Consent and re-analysis are mockups</span></h2>
-      <p class="section-note">Shipped: the Speaker recognition row with its explanation, and the Speaker models row, which reads “Not available on this device” while no model is pinned. The switch stays off and locked, because turning it on needs the consent screen, which is not built yet. Off by default. Turning it on shows a consent screen first, and no analysis runs until the user agrees (master spec §9.8, Q-7). The privacy line and consent text are required copy (master spec §13). Withdrawing consent deletes all speaker data. Re-analysis is enabled as soon as the user opts in, with no separate control. It is also queued on speaker creation or model upgrade, and drains in the background on app launch.</p>
+      <p class="eyebrow">Shipped · 3 · Settings</p>
+      <h2>Opt-in and re-analysis <span class="tag tag-live">Shipped</span> <span class="tag tag-ios">Android only</span></h2>
+      <p class="section-note">Speaker models are optional and download only when requested. The model pair is about 41 MB and is verified by size and SHA-256. Devices with less than 5 GiB RAM show “Not available on this device.” On supported devices, the switch stays off until the models are available and the user agrees to the consent dialog. Analysis then runs on-device; withdrawal stops it, removes consent and speaker data, and resets analysis state. Re-analysis is also queued when speaker models become available and drains in the background at app launch.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
@@ -884,11 +884,12 @@
               <div class="setting-note">Voice analysis runs on this device. Voice samples are stored only in this app.</div>
             </div>
             <div class="setting">
-              <div class="setting-row"><span>Speaker models</span><span class="muted">Downloaded</span></div>
-              <div class="setting-note">About 60 MB. Downloaded once, verified by checksum.</div>
+              <div class="setting-row"><span>Speaker models</span><span class="muted">Available on this device</span></div>
+              <div class="setting-link">Download speaker models</div>
+              <div class="setting-note">About 41 MB. Downloads on Wi-Fi; choose the download action again to allow mobile data.</div>
             </div>
             <div class="setting">
-              <div class="setting-note">Re-analysis runs automatically in the background at low priority. It pauses while recording, when battery saver is on, or when battery is below 20% and not charging (proposed, §7.3).</div>
+              <div class="setting-note">Re-analysis runs automatically in the background, one memory at a time, and pauses while recording. Battery and charging gates remain to be validated.</div>
             </div>
             <div class="setting">
               <div class="setting-row"><span>Withdraw consent and delete speaker data</span></div>
@@ -919,6 +920,7 @@
             <div class="setting">
               <div class="setting-row"><span>Speaker recognition</span><span class="muted">Off</span></div>
               <div class="setting-note">Not available on this device. Speaker models need at least 5 GiB of RAM.</div>
+              <div class="setting-row"><span>Speaker models</span><span class="muted">Not available on this device</span></div>
             </div>
           </div></div>
           <p class="screen-caption">Settings · unavailable tier</p>

@@ -4,13 +4,24 @@ Everything runs on the device. Audio, transcripts, summaries, and categories are
 
 ## Model roles
 
-Each tier uses up to three models.
+Each tier uses up to three models during normal setup. Speaker-recognition models are a separate optional Android download.
 
 | Role | Used for |
 |------|----------|
 | `LIVE_VOICE` | Live transcription while recording (16 kHz path). |
 | `VOICE` | Batch transcription of the finished recording. |
 | `LLM` | Summaries and categories. Runs on the GPU on the MID and LATEST tiers when the GPU acceleration setting is on (default), and falls back to the CPU if the GPU fails. |
+
+## Speaker recognition models
+
+Speaker recognition is Android-only and is off until the user downloads the models and explicitly agrees to the consent dialog. These files are not downloaded during normal setup. The download is offered only on devices with at least 5 GiB RAM; devices below that threshold do not run the analysis because low-end performance has not been validated.
+
+| Model | Artifact | Size | License |
+|-------|----------|-----:|---------|
+| Pyannote segmentation 3.0 int8 | [Pinned ONNX file](https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.int8.onnx) | 1,540,506 bytes | MIT |
+| 3D-Speaker ERes2Net-Base | [sherpa-onnx release asset](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx) | 39,593,761 bytes | Apache-2.0, according to the model card |
+
+The combined download is 41,134,267 bytes. Each file is pinned by URL, expected size, and SHA-256; it is verified before use. Downloads wait for an unmetered connection unless the user explicitly allows mobile data for that download. Analysis stays on-device.
 
 ## Tiers
 

@@ -142,6 +142,21 @@ class SpeakerAnalysisRunnerTest {
     }
 
     @Test
+    fun enablingAfterModelAvailabilityRequeuesPreviouslySkippedMemories() = runTest {
+        val memories = memories()
+        memories.addAudioMemory("a")
+        memories.skipSpeakerAnalysis("a")
+        val analyzer = ScriptedAnalyzer()
+        val runner = runner(memories, FakeSpeakerService(enabled = true), analyzer, this)
+
+        assertEquals(1, runner.requeueSkippedAndRequestDrain().getOrNull())
+        advanceUntilIdle()
+
+        assertEquals(SpeakerStatus.DONE, memories.get("a").speakerStatus)
+        assertEquals(listOf("/root/recordings/a.m4a"), analyzer.analyzedPaths)
+    }
+
+    @Test
     fun transcriptionWithFeatureOffSkipsTheMemory() = runTest {
         val memories = memories()
         memories.addAudioMemory("a")

@@ -253,10 +253,11 @@ Add two roles to `ModelCatalog` (`data/service/model/ModelCatalog.kt`):
 
 | Role | Candidate | Source | Notes |
 |---|---|---|---|
-| `SPEAKER_SEGMENTATION` | pyannote segmentation 3.0 (int8) | sherpa-onnx `speaker-segmentation-models` release | License must be checked before shipping (see §12). |
-| `SPEAKER_EMBEDDING` | 3D-Speaker or NeMo speaker embedding | sherpa-onnx `speaker-recongition-models` release | Pick the smallest model that passes the spike (§11). |
+| `SPEAKER_SEGMENTATION` | Pyannote segmentation 3.0 int8 | [Pinned ONNX file](https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.int8.onnx) | MIT. |
+| `SPEAKER_EMBEDDING` | 3D-Speaker ERes2Net-Base | [sherpa-onnx release asset](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx) | Apache-2.0 according to the model card. |
 
 Each entry pins URL, revision, SHA-256, and size, same as the existing models. Integrity checks stay in place.
+The pair is 41,134,267 bytes total and is downloaded only on request, not during normal app setup. The speaker models are offered only on MID and LATEST RAM tiers; LEGACY devices remain unavailable until the low-end performance spike passes.
 
 ### 8.2 Tiers
 
@@ -303,12 +304,12 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 - Row: "Speaker recognition" toggle, explanation line (AC-6.2). Turning it on shows the consent screen first (§9.8).
 - Row: model status (downloaded, downloading, not available on this device).
 - Row: "Withdraw consent and delete speaker data" (AC-6.6). Confirmed with a dialog.
-- P2: the switch is disabled while the feature is off, so analysis cannot start without consent. It can only be switched off until the consent screen (§9.8) ships. The model row is labelled "Speaker models" and reads "Not available on this device" while no model is pinned. The withdraw row is not in P2.
+- The switch is disabled until both the models are verified and the user accepts the consent dialog. The model row offers an explicit download action; mobile data requires a separate user action after the unmetered-network prompt. Devices below 5 GiB RAM show "Not available on this device" and cannot download speaker models.
 - iOS hides the Settings rows, the detail section, and the list chips (Q-5). The shared code checks `speakerRecognitionSupported`.
 
 ### 9.8 Consent screen
 
-- Shown once, before the first analysis, and again only if the user withdrew consent and turns the feature on again.
+- Shown before the first analysis, and again only if the user withdrew consent and turns the feature on again.
 - Text: "BorrowAI can recognise who is speaking in your memories. Voice analysis runs only on this device. We store a voice fingerprint and short voice clips for each speaker, only in this app. Nothing is uploaded. You can turn this off or delete all speaker data at any time in Settings."
 - Buttons: "Agree" (enables the feature and starts the queue) and "Not now" (feature stays off, nothing is stored).
 - Consent is recorded with a timestamp and the consent text version, so a later text change can ask again.
@@ -367,14 +368,14 @@ Before any production code, run a spike on a branch. The spike answers these que
 | S-2 | Real-time factor on the reference low-end Android device | Run diarization on 5 min of audio | RTF ≤ 0.5 and peak extra memory ≤ 250 MB. | **Pending device.** Procedure: run diarization on 5 min of audio on the reference low-end Android device, then record RTF and peak extra memory. | No Android device, emulator, or KVM on this host. |
 | S-3 | Same-speaker match quality | 10 memories, 3 speakers, label by hand | Same-speaker match ≥ 85% at the proposed threshold. | **Pending device.** Procedure: label 10 memories with 3 speakers by hand, then measure the same-speaker match rate at the proposed threshold. | No device on this host. |
 | S-4 | Different-speaker false match | Same set, cross-speaker pairs | False match ≤ 5%. | **Pending device.** Procedure: run the same set and measure false matches on cross-speaker pairs. | No device on this host. |
-| S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. | **Open.** Segmentation (pyannote 3.0 int8): MIT, allows commercial use. Embedding models: 3D-Speaker code is Apache-2.0 at repo level, but per-model licenses are on ModelScope. NeMo TitaNet and SpeakerNet: no license found on GitHub, and the NGC page is unreachable. Each embedding model still needs its license verified. | Bundled `LICENSE` in the sherpa segmentation archive (MIT, Copyright 2022 CNRS). Release body of `speaker-recongition-models`: each model has its own license. 3D-Speaker `LICENSE` and README (Apache-2.0, GitHub). huggingface.co, modelscope.cn, catalog.ngc.nvidia.com, and k2-fsa.github.io do not resolve from this host. |
-| S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. | **Met for candidate pairs.** Smallest pair: SpeakerNet 23.41 MB + segmentation 6.96 MB = 30.37 MB. Largest passing embedding: TitaNet-small 40.26 MB, pair 47.22 MB. Over 60 MB alone: ERes2NetV2 71.44 MB, TitaNet-large 101.41 MB, ERes2Net-large 116.06 MB, ERes2Net 220.62 MB. | Asset sizes from `gh api` for `speaker-segmentation-models` and `speaker-recongition-models`. Segmentation archive 6,958,444 B, with `model.int8.onnx` at 1,540,506 B inside. The release publishes only the archive, and `ModelCatalog` pins raw files, so P1 needs an extraction path or another raw source. |
+| S-5 | Model licenses | Read each model's license | Must allow shipping in a commercial app. | **Selected pair verified from primary sources.** Pyannote segmentation 3.0 int8 is MIT; the 3D-Speaker ERes2Net-Base model card lists Apache-2.0. Those licenses permit commercial use subject to their terms; product/legal approval remains outside this engineering change. | Pyannote model card and MIT license; 3D-Speaker ERes2Net-Base model card. The exact model artifacts and source links are pinned in §8.1. |
+| S-6 | Model size | Check download sizes | Combined download ≤ 60 MB. | **Met.** The selected pair totals 41,134,267 B. | The pinned segmentation file is 1,540,506 B and the ERes2Net-Base release asset is 39,593,761 B. Both SHA-256 digests are recorded in `ModelCatalog`. |
 | S-7 | Launch-gate thresholds | Run a background drain on a low-end device and log battery drop, thermal state, and time to finish | Battery threshold (20%) and stop conditions hold, with no visible drain complaints. Tune if not. | **Pending device.** Procedure: run a background drain on a low-end device and log battery drop, thermal state, and time to finish. | No device on this host. |
 | S-8 | Speaker colour palette | Render the 8 colours on a real device in light and dark mode, and run a colour-blind simulation (protanopia, deuteranopia, tritanopia) on a memory with 4+ speakers | Every pair of speakers in one memory is distinguishable by name or state. If not, swap or drop colours. | **Pending device.** Procedure: render the 8 colours on a real device in light and dark mode, then run protanopia, deuteranopia, and tritanopia simulations on a memory with 4+ speakers. | No device on this host. |
 
 The spike writes its numbers into this file (§11 table, filled in) before implementation starts.
 
-**P0 status (2026-11-02, no device on this host):** S-1 is a go at the API level, and S-6 is met for the candidate pairs. S-5 is open for the embedding models, so no model is chosen or pinned. S-2, S-3, S-4, S-7, and S-8 are pending device. Unit tests were not run: Gradle could not download its distribution from this host because of a JDK TLS trust error.
+**Implementation status (2026-11-05):** The Android analyzer, explicit model download, consent gate, withdrawal, and model-ready requeue are implemented. JVM unit tests run locally. S-2, S-3, S-4, S-7, and S-8 remain pending device validation; devices under 5 GiB RAM stay unsupported until S-2 passes. No device or emulator was used for this implementation.
 
 ---
 
@@ -395,7 +396,7 @@ These were open before implementation. Q-1 to Q-9 are decided, recorded in the D
 | Q-9 | Store speakers in a separate Couchbase collection (`KotbaseSpeakerService`) or in `KotbaseMemoryService`? | **Separate `KotbaseSpeakerService`** (decided). |
 | Q-10 | Should the detail say "No speakers detected" for a memory that was SKIPPED? The runner marks no-speech memories SKIPPED (`SpeakerAnalysisRunner`, empty drafts), and SKIPPED also covers a feature that is off. | **Open.** P2 shows the empty state only for DONE, which the runner never writes for an empty result. Decide with P3 whether no-speech memories become DONE. |
 | Q-11 | §9.7 says a library speaker keeps a stored colour, but `Speaker` has no colour field. | **Decided (P2).** `Speaker.colorIndex` stores the palette index (§6.2). A new speaker takes the first index no library speaker uses. |
-| Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Open.** The consent screen must ship before any UI path can call `setFeatureEnabled(true)`. |
+| Q-12 | Before the consent screen (§9.8) ships, the switch can only turn speaker analysis off. | **Decided and implemented.** The consent dialog is shown before enabling analysis, and both consent and model availability are required. |
 | Q-13 | Does a sample play its first few milliseconds from the start of the recording? `play()` starts playback at once, and the seek to the sample start follows it. | **Open (device).** Check on a Pixel that a sample does not start with the first words of the recording. If it does, the playback API needs a start position for `play()`. |
 | Q-14 | Does a sample stop at its end on a device? The ticker wakes at the end, so the stop should land within a few milliseconds of the end. | **Open (device).** Check with recorded two-speaker memories, and listen for the next speaker at the stop. |
 | Q-15 | Does a chip tap scroll the detail to the speaker's card on a device, and do the chips read well with TalkBack? The card is brought into view with `BringIntoViewRequester`. | **Open (device).** Tap a chip on a memory with 4 or more speakers and check the card is on screen. In TalkBack, check each chip reads its name or "Speaker N", and "+N" reads as "N more speakers". |

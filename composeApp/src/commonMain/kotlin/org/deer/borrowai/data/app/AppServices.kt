@@ -39,6 +39,10 @@ import org.deer.borrowai.data.service.model.DownloadingModelSetupService
 import org.deer.borrowai.data.service.model.KtorModelDownloader
 import org.deer.borrowai.data.service.model.ModelDevice
 import org.deer.borrowai.data.service.model.ModelFileStore
+import org.deer.borrowai.data.service.model.ModelTierSelector
+import org.deer.borrowai.data.service.model.DownloadingSpeakerModelSetupService
+import org.deer.borrowai.data.service.model.SpeakerModelSetupService
+import org.deer.borrowai.data.service.model.UnavailableSpeakerModelSetupService
 import org.deer.borrowai.data.service.model.createPlatformModelHttpClient
 import org.deer.borrowai.data.service.model.modelDirectoryUnder
 import org.deer.borrowai.data.service.recording.AudioDurationReader
@@ -74,6 +78,7 @@ class AppServices internal constructor(
     val speakers: SpeakerService,
     /** Finds speakers in recordings. Settings reads its availability, which stays false until a model is pinned. */
     val speakerAnalyzer: SpeakerAnalyzer = UnavailableSpeakerAnalyzer,
+    val speakerModelSetup: SpeakerModelSetupService = UnavailableSpeakerModelSetupService,
     val mediaSession: MediaSessionService,
     /** Runs the transcription jobs. Android's WorkManager workers reach it through a holder. */
     val transcriptionRunner: TranscriptionWorkRunner,
@@ -252,13 +257,28 @@ class AppServices internal constructor(
                 val httpClient = createPlatformModelHttpClient()
                 // Closed when the graph completes, including the failure path where cancel() runs below.
                 graphJob.invokeOnCompletion { httpClient.close() }
+                val modelStore = ModelFileStore(modelDirectoryUnder(recordingsRoot.toString()))
+                val modelDownloader = KtorModelDownloader(httpClient)
+                val speakerModelsSupported = ModelTierSelector.supportsSpeakerModels(modelDevice.totalRamBytes)
+                val activeSpeakerAnalyzer = if (speakerModelsSupported) speakerAnalyzer else UnavailableSpeakerAnalyzer
                 val modelSetup = DownloadingModelSetupService(
                     totalRamBytes = modelDevice.totalRamBytes,
-                    store = ModelFileStore(modelDirectoryUnder(recordingsRoot.toString())),
-                    downloader = KtorModelDownloader(httpClient),
+                    store = modelStore,
+                    downloader = modelDownloader,
                     network = modelDevice.network,
                     scope = graphScope,
                 )
+                val speakerModelSetup = if (speakerModelsSupported) {
+                    DownloadingSpeakerModelSetupService(
+                        store = modelStore,
+                        downloader = modelDownloader,
+                        network = modelDevice.network,
+                        scope = graphScope,
+                        activityTracker = activityTracker,
+                    )
+                } else {
+                    UnavailableSpeakerModelSetupService
+                }
                 // The summary job is built after the media session, so the drain reaches it through this holder.
                 val callbackGroup = Job(graphJob)
                 var runSummaryRecovery: () -> Unit = {}
@@ -292,12 +312,20 @@ class AppServices internal constructor(
                 val speakerRunner = SpeakerAnalysisRunner(
                     memoryService = memories,
                     speakerService = speakers,
-                    analyzer = speakerAnalyzer,
+                    analyzer = activeSpeakerAnalyzer,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     scope = graphScope,
                     activityTracker = activityTracker,
                 )
+                val speakerModelReadyJob = graphScope.launch {
+                    speakerModelSetup.state.collect { state ->
+                        if (state.isReady) speakerRunner.requeueSkippedAndRequestDrain()
+                    }
+                }
+                graphScope.launch {
+                    speakerRunner.requeueSkippedAndRequestDrain()
+                }
                 onSpeakerTranscriptionSucceeded = speakerRunner::onTranscriptionSucceeded
                 val reconcilerJob = RecordingReconciler(
                     memoryService = memories,
@@ -345,7 +373,8 @@ class AppServices internal constructor(
                     modelSetup = modelSetup,
                     memories = memories,
                     speakers = speakers,
-                    speakerAnalyzer = speakerAnalyzer,
+                    speakerAnalyzer = activeSpeakerAnalyzer,
+                    speakerModelSetup = speakerModelSetup,
                     mediaSession = mediaSession,
                     transcriptionRunner = transcriptionRunner,
                     graphJob = graphJob,
@@ -355,6 +384,7 @@ class AppServices internal constructor(
                         purgerJob,
                         summaryRecoveryJob,
                         categorizationRecoveryJob,
+                        speakerModelReadyJob,
                         speakerSettingsJob,
                     ),
                     callbackGroup = callbackGroup,

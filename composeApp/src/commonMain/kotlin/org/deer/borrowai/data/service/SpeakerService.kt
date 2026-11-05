@@ -8,6 +8,8 @@ import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerOccurrence
 
+const val SPEAKER_CONSENT_TEXT_VERSION = 1
+
 /**
  * The speaker library and the occurrences found in memories. Speaker data is kept apart from memories. Speaker
  * analysis changes a memory only through its speaker status fields.
@@ -18,6 +20,12 @@ interface SpeakerService {
 
     /** Whether speaker analysis is on. It is off until the user opts in, so a missing setting reads as off. */
     suspend fun isFeatureEnabled(): Either<SpeakerError, Boolean>
+
+    /** Whether the user accepted the current consent text. */
+    suspend fun hasCurrentConsent(): Either<SpeakerError, Boolean>
+
+    /** Records the current consent text version and timestamp, then enables speaker analysis. */
+    suspend fun acceptConsent(): Either<SpeakerError, Unit>
 
     /** Turns speaker analysis on or off. Turning it off deletes nothing. */
     suspend fun setFeatureEnabled(enabled: Boolean): Either<SpeakerError, Unit>

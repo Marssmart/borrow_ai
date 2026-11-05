@@ -24,7 +24,9 @@ import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
 import org.deer.borrowai.data.domain.speakerStatusFor
+import org.deer.borrowai.data.domain.withSpeakerAnalysisReset
 import org.deer.borrowai.data.domain.withFailedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withFinishedSpeakerAnalysis
 import org.deer.borrowai.data.domain.withSpeakerSkipped
@@ -302,6 +304,35 @@ class FakeMemoryService(
         }
         publishMemories()
         skipped.right()
+    }
+
+    override suspend fun requeueSkippedSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var requeued = 0
+        records.replaceAll { _, memory ->
+            if (!memory.deleted && memory.recordingPath != null && memory.speakerStatus == SpeakerStatus.SKIPPED) {
+                requeued++
+                memory.requeuedAfterSpeakerSkip()
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        requeued.right()
+    }
+
+    override suspend fun resetSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
+        var reset = 0
+        records.replaceAll { _, memory ->
+            if (!memory.deleted) {
+                val next = memory.withSpeakerAnalysisReset()
+                if (next != memory) reset++
+                next
+            } else {
+                memory
+            }
+        }
+        publishMemories()
+        reset.right()
     }
 
     private suspend fun updateActive(id: String, change: (Memory) -> Memory): Either<MemoryError, Unit> =

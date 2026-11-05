@@ -4,6 +4,7 @@ import kotbase.DataSource
 import kotbase.Database
 import kotbase.Expression
 import kotbase.Meta
+import kotbase.MutableDocument
 import kotbase.QueryBuilder
 import kotbase.SelectResult
 import kotlinx.coroutines.test.runTest
@@ -37,13 +38,13 @@ class KotbaseSpeakerServiceTest {
         database = null
     }
 
-    /** Opens the store with analysis on, unless [enabled] is false, which keeps the default off setting. */
+    /** Opens the store with current consent and analysis on, unless [enabled] is false. */
     private suspend fun openService(enabled: Boolean = true): KotbaseSpeakerService {
         val service = KotbaseSpeakerService.open(
             database = requireNotNull(database),
             epochClock = EpochClock { now },
         ).getOrNull()!!
-        if (enabled) service.setFeatureEnabled(true)
+        if (enabled) service.acceptConsent()
         return service
     }
 
@@ -59,7 +60,7 @@ class KotbaseSpeakerServiceTest {
 
     /** Counts embedding documents straight from the collection, so rows detached from a speaker are counted too. */
     private fun storedEmbeddingCount(): Int {
-        val collection = requireNotNull(requireNotNull(database).getCollection("speakers"))
+        val collection = requireNotNull(database).let { requireNotNull(it.getCollection("speakers")) }
         return QueryBuilder
             .select(SelectResult.expression(Meta.id))
             .from(DataSource.collection(collection))
@@ -194,13 +195,36 @@ class KotbaseSpeakerServiceTest {
     }
 
     @Test
-    fun featureIsOffByDefaultAndPersistsWhenTurnedOn() = runTest {
+    fun featureIsOffByDefaultAndRequiresConsentBeforeTurningOn() = runTest {
         val service = openService(enabled = false)
         assertEquals(false, service.isFeatureEnabled().getOrNull())
 
-        service.setFeatureEnabled(true)
+        assertIs<SpeakerError.ConsentRequired>(service.setFeatureEnabled(true).leftOrNull())
+        assertEquals(false, service.isFeatureEnabled().getOrNull())
+        assertTrue(service.acceptConsent().isRight())
+        assertEquals(true, service.isFeatureEnabled().getOrNull())
 
         assertEquals(true, openService(enabled = false).isFeatureEnabled().getOrNull())
+        assertEquals(true, openService(enabled = false).hasCurrentConsent().getOrNull())
+    }
+
+    @Test
+    fun legacyEnabledSettingWithoutConsentCannotAnalyzeOrStoreRows() = runTest {
+        val collection = requireNotNull(requireNotNull(database).getCollection("speakers"))
+        val legacySettings = MutableDocument("speaker-settings").apply {
+            setString("type", "settings")
+            setBoolean("enabled", true)
+        }
+        collection.save(legacySettings)
+        val service = openService(enabled = false)
+        val ana = service.createSpeaker("Ana").getOrNull()!!
+
+        assertEquals(false, service.isFeatureEnabled().getOrNull())
+        assertEquals(false, service.hasCurrentConsent().getOrNull())
+        assertIs<SpeakerError.Disabled>(
+            service.replaceOccurrences("memory-1", SPEAKER_ANALYSIS_VERSION, listOf(draft(ana.id))).leftOrNull(),
+        )
+        assertTrue(service.findOccurrences("memory-1").getOrNull()!!.isEmpty())
     }
 
     @Test
@@ -224,6 +248,7 @@ class KotbaseSpeakerServiceTest {
 
         assertIs<SpeakerError.Disabled>(result.leftOrNull())
         assertTrue(service.findOccurrences("memory-1").getOrNull()!!.isEmpty())
+        assertEquals(false, service.hasCurrentConsent().getOrNull())
     }
 
     @Test
@@ -239,5 +264,6 @@ class KotbaseSpeakerServiceTest {
         assertTrue(service.findOccurrences("memory-1").getOrNull()!!.isEmpty())
         assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
         assertEquals(false, service.isFeatureEnabled().getOrNull())
+        assertEquals(false, service.hasCurrentConsent().getOrNull())
     }
 }

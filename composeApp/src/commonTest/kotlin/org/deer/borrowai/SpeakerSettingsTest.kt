@@ -1,6 +1,10 @@
 package org.deer.borrowai
 
+import arrow.core.Either
+import arrow.core.right
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.Path
@@ -8,20 +12,58 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.deer.borrowai.data.domain.EpochClock
+import org.deer.borrowai.data.domain.Memory
+import org.deer.borrowai.data.domain.SpeakerStatus
+import org.deer.borrowai.data.service.FakeMemoryService
 import org.deer.borrowai.data.service.FakeSpeakerService
+import org.deer.borrowai.data.service.MemoryError
+import org.deer.borrowai.data.service.MemoryService
+import org.deer.borrowai.data.service.model.ModelDownloadError
+import org.deer.borrowai.data.service.model.SpeakerModelSetupPhase
+import org.deer.borrowai.data.service.model.SpeakerModelSetupService
+import org.deer.borrowai.data.service.model.SpeakerModelSetupState
 import org.deer.borrowai.data.service.speaker.SpeakerAnalyzer
 import org.deer.borrowai.data.service.speaker.SpeechTurn
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SpeakerSettingsTest {
-    private class FakeAnalyzer(private val available: Boolean) : SpeakerAnalyzer {
+    private class FakeAnalyzer(var available: Boolean) : SpeakerAnalyzer {
         override suspend fun isAvailable(): Boolean = available
 
         override suspend fun analyze(recordingPath: Path): List<SpeechTurn> = emptyList()
     }
 
+    private class FakeSpeakerModelSetupService(
+        private val analyzer: FakeAnalyzer,
+    ) : SpeakerModelSetupService {
+        private val mutableState = MutableStateFlow(SpeakerModelSetupState())
+        override val state: StateFlow<SpeakerModelSetupState> = mutableState
+
+        override suspend fun prepare(): Either<ModelDownloadError, Unit> {
+            mutableState.value = SpeakerModelSetupState(phase = SpeakerModelSetupPhase.READY)
+            analyzer.available = true
+            return Unit.right()
+        }
+
+        override suspend fun downloadOverMobileData() = Unit
+    }
+
+    private fun holder(
+        speakers: FakeSpeakerService = FakeSpeakerService(),
+        memories: MemoryService = FakeMemoryService(epochClock = EpochClock { 1_800_000_000_000L }),
+        analyzer: FakeAnalyzer = FakeAnalyzer(available = false),
+        scope: kotlinx.coroutines.CoroutineScope,
+    ): SpeakerSettingsStateHolder = SpeakerSettingsStateHolder(
+        speakers = speakers,
+        memories = memories,
+        analyzer = analyzer,
+        modelSetup = FakeSpeakerModelSetupService(analyzer),
+        scope = scope,
+    )
+
     @Test
-    fun switchIsOffAndLockedWhileTheFeatureIsOff() {
+    fun switchIsOffAndLockedUntilTheModelsAreAvailable() {
         val state = SpeakerSettingsUiState()
 
         assertFalse(state.enabled)
@@ -29,43 +71,103 @@ class SpeakerSettingsTest {
     }
 
     @Test
-    fun switchStaysLockedWhenModelsAreAvailableBecauseConsentIsNotBuiltYet() {
-        val state = SpeakerSettingsUiState(enabled = false, modelAvailable = true)
-
-        assertFalse(state.switchEnabled)
-    }
-
-    @Test
-    fun storedOnSwitchCanBeTurnedOff() {
-        assertTrue(SpeakerSettingsUiState(enabled = true, modelAvailable = false).switchEnabled)
-    }
-
-    @Test
-    fun holderReportsNoModelWhileNoModelIsPinned() = runTest {
-        val holder = SpeakerSettingsStateHolder(FakeSpeakerService(), FakeAnalyzer(available = false), backgroundScope)
+    fun agreeingToConsentEnablesSpeakerAnalysis() = runTest {
+        val speakers = FakeSpeakerService()
+        val analyzer = FakeAnalyzer(available = true)
+        val holder = holder(speakers = speakers, analyzer = analyzer, scope = backgroundScope)
         runCurrent()
 
-        assertEquals(SpeakerSettingsUiState(enabled = false, modelAvailable = false), holder.uiState.value)
-    }
+        holder.turnOn()
+        runCurrent()
+        assertTrue(holder.uiState.value.consentDialogVisible)
+        assertEquals(false, speakers.isFeatureEnabled().getOrNull())
 
-    @Test
-    fun holderReadsTheStoredSettingAndModelAvailability() = runTest {
-        val holder = SpeakerSettingsStateHolder(FakeSpeakerService(enabled = true), FakeAnalyzer(available = true), backgroundScope)
+        holder.agreeToConsent()
         runCurrent()
 
-        assertEquals(SpeakerSettingsUiState(enabled = true, modelAvailable = true), holder.uiState.value)
+        assertEquals(true, speakers.hasCurrentConsent().getOrNull())
+        assertEquals(true, speakers.isFeatureEnabled().getOrNull())
+        assertFalse(holder.uiState.value.consentDialogVisible)
     }
 
     @Test
-    fun turningOffWritesThroughAndUpdatesTheRows() = runTest {
+    fun decliningConsentLeavesTheFeatureOff() = runTest {
+        val speakers = FakeSpeakerService()
+        val holder = holder(speakers = speakers, analyzer = FakeAnalyzer(available = true), scope = backgroundScope)
+        runCurrent()
+
+        holder.turnOn()
+        runCurrent()
+        holder.declineConsent()
+
+        assertEquals(false, speakers.isFeatureEnabled().getOrNull())
+        assertEquals(false, speakers.hasCurrentConsent().getOrNull())
+    }
+
+    @Test
+    fun turningOffKeepsConsentAndSpeakerData() = runTest {
         val speakers = FakeSpeakerService(enabled = true)
-        val holder = SpeakerSettingsStateHolder(speakers, FakeAnalyzer(available = false), backgroundScope)
+        val ana = speakers.createSpeaker("Ana").getOrNull()!!
+        val holder = holder(speakers = speakers, analyzer = FakeAnalyzer(available = true), scope = backgroundScope)
         runCurrent()
 
         holder.turnOff()
         runCurrent()
 
         assertEquals(false, speakers.isFeatureEnabled().getOrNull())
-        assertFalse(holder.uiState.value.enabled)
+        assertEquals(true, speakers.hasCurrentConsent().getOrNull())
+        assertEquals(ana, speakers.findSpeaker(ana.id).getOrNull())
+    }
+
+    @Test
+    fun withdrawalClearsConsentSpeakerDataAndAnalysisStatus() = runTest {
+        val speakers = FakeSpeakerService(enabled = true)
+        speakers.createSpeaker("Ana")
+        val memory = Memory(
+            id = "memory-1",
+            createdAtEpochMillis = 1L,
+            title = "Conversation",
+            summary = "",
+            transcription = "Hello",
+            recordingPath = "memory-1.m4a",
+            speakerStatus = SpeakerStatus.DONE,
+            speakerAnalysisVersion = 1,
+        )
+        val memories = FakeMemoryService(
+            initialMemories = listOf(memory),
+            epochClock = EpochClock { 1_800_000_000_000L },
+        )
+        val holder = holder(
+            speakers = speakers,
+            memories = memories,
+            analyzer = FakeAnalyzer(available = true),
+            scope = backgroundScope,
+        )
+        runCurrent()
+
+        holder.requestWithdrawal()
+        holder.confirmWithdrawal()
+        runCurrent()
+
+        assertEquals(false, speakers.hasCurrentConsent().getOrNull())
+        assertEquals(false, speakers.isFeatureEnabled().getOrNull())
+        assertTrue(speakers.findSpeakers().getOrNull()!!.isEmpty())
+        val reset = memories.findById(memory.id).getOrNull()!!
+        assertEquals(SpeakerStatus.SKIPPED, reset.speakerStatus)
+        assertEquals(null, reset.speakerAnalysisVersion)
+    }
+
+    @Test
+    fun downloadingSpeakerModelsMakesTheSwitchAvailable() = runTest {
+        val analyzer = FakeAnalyzer(available = false)
+        val holder = holder(analyzer = analyzer, scope = backgroundScope)
+        runCurrent()
+        assertFalse(holder.uiState.value.switchEnabled)
+
+        holder.downloadSpeakerModels()
+        runCurrent()
+
+        assertTrue(holder.uiState.value.modelAvailable)
+        assertTrue(holder.uiState.value.switchEnabled)
     }
 }

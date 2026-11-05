@@ -369,6 +369,22 @@ private const val EXHAUSTED_SPEAKER_REASON = "Speaker analysis did not finish af
 fun Memory.withSpeakerSkipped(): Memory =
     if (speakerStatus == SpeakerStatus.DONE) this else copy(speakerStatus = SpeakerStatus.SKIPPED)
 
+/** Resets speaker work after consent is withdrawn, so the deleted analysis is no longer shown as complete. */
+fun Memory.withSpeakerAnalysisReset(): Memory = copy(
+    speakerStatus = SpeakerStatus.SKIPPED,
+    speakerAttempts = 0,
+    lastSpeakerError = null,
+    speakerAnalysisVersion = null,
+)
+
+/** Requeues an earlier skipped analysis after consent or model availability changes. */
+fun Memory.requeuedAfterSpeakerSkip(): Memory = copy(
+    speakerStatus = SpeakerStatus.PENDING,
+    speakerAttempts = 0,
+    lastSpeakerError = null,
+    speakerAnalysisVersion = null,
+)
+
 private fun speakerStatusAfterFailure(attempts: Int): SpeakerStatus =
     if (attempts >= MAX_SPEAKER_ATTEMPTS) SpeakerStatus.FAILED else SpeakerStatus.PENDING
 

@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.Path
+import arrow.core.Either
+import arrow.core.right
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerEmbedding
@@ -93,7 +95,26 @@ class SpeakerAnalysisRunner(
      * turning it on starts analysis. Returns the job so the caller can stop it with the app graph.
      */
     fun watchSettings(): Job = scope.launch {
-        speakerService.changes.collect { requestDrain() }
+        var wasEnabled = speakerService.isFeatureEnabled().getOrNull()
+        speakerService.changes.collect {
+            val enabled = speakerService.isFeatureEnabled().getOrNull() ?: return@collect
+            if (enabled != wasEnabled) {
+                wasEnabled = enabled
+                if (enabled) {
+                    requeueSkippedAndRequestDrain()
+                } else {
+                    requestDrain()
+                }
+            }
+        }
+    }
+
+    /** Requeues memories skipped while consent or model files were unavailable, then resumes the drain. */
+    suspend fun requeueSkippedAndRequestDrain(): Either<MemoryError, Int> {
+        if (stopped || isRecording() || !isEnabled() || !analyzer.isAvailable()) return 0.right()
+        return memoryService.requeueSkippedSpeakerAnalyses().also { result ->
+            if (result.isRight()) requestDrain()
+        }
     }
 
     /** An unexpected failure ends only this drain. Memories it left ANALYZING are requeued by the next drain. */

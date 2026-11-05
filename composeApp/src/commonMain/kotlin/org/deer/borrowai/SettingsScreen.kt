@@ -34,7 +34,15 @@ internal fun SettingsScreen(
     useGpuAcceleration: Boolean,
     onUseGpuAccelerationChange: (Boolean) -> Unit,
     speakerSettings: SpeakerSettingsUiState,
+    onTurnOnSpeakerRecognition: () -> Unit,
     onTurnOffSpeakerRecognition: () -> Unit,
+    onAgreeToSpeakerConsent: () -> Unit,
+    onDeclineSpeakerConsent: () -> Unit,
+    onDownloadSpeakerModels: () -> Unit,
+    onDownloadSpeakerModelsOverMobileData: () -> Unit,
+    onRequestSpeakerWithdrawal: () -> Unit,
+    onConfirmSpeakerWithdrawal: () -> Unit,
+    onCancelSpeakerWithdrawal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -99,7 +107,18 @@ internal fun SettingsScreen(
             )
         }
         if (speakerRecognitionSupported) {
-            SpeakerSettingsRows(state = speakerSettings, onTurnOff = onTurnOffSpeakerRecognition)
+            SpeakerSettingsRows(
+                state = speakerSettings,
+                onTurnOn = onTurnOnSpeakerRecognition,
+                onTurnOff = onTurnOffSpeakerRecognition,
+                onAgreeToConsent = onAgreeToSpeakerConsent,
+                onDeclineConsent = onDeclineSpeakerConsent,
+                onDownloadModels = onDownloadSpeakerModels,
+                onDownloadOverMobileData = onDownloadSpeakerModelsOverMobileData,
+                onRequestWithdrawal = onRequestSpeakerWithdrawal,
+                onConfirmWithdrawal = onConfirmSpeakerWithdrawal,
+                onCancelWithdrawal = onCancelSpeakerWithdrawal,
+            )
         }
     }
 }
