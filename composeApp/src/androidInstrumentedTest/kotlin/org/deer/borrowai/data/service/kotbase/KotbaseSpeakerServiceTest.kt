@@ -134,6 +134,24 @@ class KotbaseSpeakerServiceTest {
     }
 
     @Test
+    fun assignmentWorksWhenDeletingTheOriginalSpeakerRemovedItsEmbedding() = runTest {
+        val service = openService()
+        val source = service.createSpeaker("Source").getOrNull()!!
+        val target = service.createSpeaker("Target").getOrNull()!!
+        service.replaceOccurrences("memory-1", SPEAKER_ANALYSIS_VERSION, listOf(draft(source.id)))
+        val occurrence = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertTrue(service.deleteSpeaker(source.id).isRight())
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+
+        assertTrue(service.assignOccurrence(occurrence.id, target.id).isRight())
+
+        val assigned = service.findOccurrences("memory-1").getOrNull()!!.single()
+        assertEquals(target.id, assigned.speakerId)
+        assertEquals(SpeakerLink.MANUAL, assigned.link)
+        assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
+
+    @Test
     fun replaceOccurrencesStoresTheLinkAndTheVector() = runTest {
         val service = openService()
         val ana = service.createSpeaker("Ana").getOrNull()!!
