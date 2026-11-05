@@ -14,7 +14,7 @@ Treat the speaker library as a private address book for voices, with memory occu
 
 Use one library list, one speaker detail page, and one assignment sheet. The detail page provides the identity's recent appearances and an explicit review path for automatic matches. Creating, renaming, assigning, and correcting a match should update the memory list and detail from committed local state. Merge and delete are destructive identity operations: explain exactly what changes and require confirmation. Do not silently remove memories or original recordings.
 
-This design separates confirmed behavior from proposals. The existing specification and code have a useful data and playback foundation, but the speaker library, manual assignment, correction, and merge UI are not shipped. The new flows below are recommendations, not descriptions of the current app.
+This design separates confirmed behavior from proposals. The existing specification and code have a useful data and playback foundation, but the speaker library, manual assignment, correction, and merge UI are not shipped. The linked specification's §9.3 assign sheet and §9.5 library screen are planned P3 work; their acceptance criteria describe target behavior, not capabilities currently exposed by the app. The new flows below are recommendations, not descriptions of the current app.
 
 ## 2. Scope and principles
 
@@ -149,7 +149,7 @@ Show `Speaker 2` with `Not assigned` status, speech duration, sample playback, a
 
 ### Automatically matched occurrence
 
-Show the linked name, an `Matched automatically` badge and an **Change** action. A secondary **Not this person** action opens a small choice: `Leave as unknown` or `Choose another speaker`. Choosing another name makes a manual assignment. Leaving unknown clears the current link and stores that identity in `rejectedSpeakerIds` so a later analysis does not immediately restore the same rejected match.
+Show the linked name, a `Matched automatically` badge and a **Change** action. A secondary **Not this person** action opens a small choice: `Leave as unknown` or `Choose another speaker`. Choosing another name makes a manual assignment. Leaving unknown clears the current link and stores that identity in `rejectedSpeakerIds` so a later analysis does not immediately restore the same rejected match.
 
 For review outside the source memory, the speaker detail's Recent memories list identifies auto-matched appearances. A `Check match` action opens the relevant memory and card. Do not present an accuracy score or make the user approve each match before normal use; review is optional, contextual, and reversible.
 
