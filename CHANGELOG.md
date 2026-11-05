@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.24.2]
+
+- Added the speaker management and assignment design document with a standalone visual guide, separating current behavior from proposed flows.
+- Updated Android and iOS versioning to 1.24.2 (build 87).
+
 ## [1.24.1]
 
 - Fixed speaker cards clipping their shadow when a memory detail scrolls to a speaker.
