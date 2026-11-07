@@ -1,5 +1,7 @@
 package org.deer.borrowai.data.service.speaker
 
+import org.deer.borrowai.data.domain.MAX_SAMPLES_PER_OCCURRENCE
+
 /** Sample length worth preferring, in milliseconds (section 9.6). */
 internal const val MIN_SAMPLE_MS = 4_000L
 
@@ -55,11 +57,30 @@ internal fun subtractRanges(span: TimeRange, cuts: List<TimeRange>): List<TimeRa
  * null when no part of the speaker's speech is free of other speakers.
  */
 internal fun selectSample(own: List<TimeRange>, others: List<TimeRange>): TimeRange? {
-    val spans = mergeRanges(own, gapMs = MAX_RUN_PAUSE_MS)
-    val cuts = mergeRanges(others.filter { it.lengthMs > 0 }, gapMs = 0L)
-    val runs = spans.flatMap { subtractRanges(it, cuts) }.filter { it.lengthMs > 0 }
+    val runs = cleanRuns(own, others)
     val chosen = runs.filter { it.lengthMs >= MIN_SAMPLE_MS }.maxByOrNull { it.lengthMs }
         ?: runs.maxByOrNull { it.lengthMs }
         ?: return null
     return TimeRange(chosen.startMs, chosen.startMs + minOf(chosen.lengthMs, MAX_SAMPLE_MS))
+}
+
+/**
+ * Selects up to [MAX_SAMPLES_PER_OCCURRENCE] clean runs, preferring runs at least [MIN_SAMPLE_MS] long. Each selected
+ * range is clipped to [MAX_SAMPLE_MS], appears once, and is returned in recording order.
+ */
+internal fun selectSamples(own: List<TimeRange>, others: List<TimeRange>): List<TimeRange> {
+    val runs = cleanRuns(own, others)
+    val preferred = runs.filter { it.lengthMs >= MIN_SAMPLE_MS }
+    val candidates = if (preferred.isNotEmpty()) preferred else runs
+    return candidates
+        .sortedWith(compareByDescending<TimeRange> { it.lengthMs }.thenBy { it.startMs })
+        .take(MAX_SAMPLES_PER_OCCURRENCE)
+        .map { TimeRange(it.startMs, it.startMs + minOf(it.lengthMs, MAX_SAMPLE_MS)) }
+        .sortedBy { it.startMs }
+}
+
+private fun cleanRuns(own: List<TimeRange>, others: List<TimeRange>): List<TimeRange> {
+    val spans = mergeRanges(own, gapMs = MAX_RUN_PAUSE_MS)
+    val cuts = mergeRanges(others.filter { it.lengthMs > 0 }, gapMs = 0L)
+    return spans.flatMap { subtractRanges(it, cuts) }.filter { it.lengthMs > 0 }
 }

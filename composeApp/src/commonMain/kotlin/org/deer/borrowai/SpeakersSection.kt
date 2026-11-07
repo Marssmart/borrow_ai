@@ -28,9 +28,11 @@ import borrowai.composeapp.generated.resources.Res
 import borrowai.composeapp.generated.resources.speaker_audio_unavailable
 import borrowai.composeapp.generated.resources.speaker_no_speakers_detected
 import borrowai.composeapp.generated.resources.speaker_play_sample
+import borrowai.composeapp.generated.resources.speaker_play_sample_number
 import borrowai.composeapp.generated.resources.speaker_section_title
 import borrowai.composeapp.generated.resources.speaker_speech_duration
 import borrowai.composeapp.generated.resources.speaker_stop_sample
+import borrowai.composeapp.generated.resources.speaker_stop_sample_number
 import borrowai.composeapp.generated.resources.speaker_unknown_label
 import borrowai.composeapp.generated.resources.speaker_management_assign
 import borrowai.composeapp.generated.resources.speaker_management_change
@@ -162,12 +164,17 @@ private fun SpeakerCardPanel(
             )
         }
         when (val audio = card.audio) {
-            is SpeakerAudio.Playable -> PlaybackButton(
-                playing = playingTarget == audio.target,
-                playLabel = Res.string.speaker_play_sample,
-                playingLabel = Res.string.speaker_stop_sample,
-                onClick = { onPlaySample(audio.target) },
-            )
+            is SpeakerAudio.Playable -> audio.targets.forEachIndexed { index, target ->
+                val sampleNumber = index + 1
+                PlaybackButton(
+                    playing = playingTarget == target,
+                    playLabel = Res.string.speaker_play_sample,
+                    playingLabel = Res.string.speaker_stop_sample,
+                    playText = stringResource(Res.string.speaker_play_sample_number, sampleNumber),
+                    playingText = stringResource(Res.string.speaker_stop_sample_number, sampleNumber),
+                    onClick = { onPlaySample(target) },
+                )
+            }
 
             SpeakerAudio.Unavailable -> Text(
                 stringResource(Res.string.speaker_audio_unavailable),

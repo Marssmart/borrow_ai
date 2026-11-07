@@ -18,8 +18,18 @@ const val SPEAKER_ANALYSIS_VERSION = 1
 /** Most embeddings a library speaker keeps. Adding one past the limit drops the oldest (section 6.2). */
 const val MAX_EMBEDDINGS_PER_SPEAKER = 10
 
+/** Most separate playback samples kept for one speaker occurrence in a memory. */
+const val MAX_SAMPLES_PER_OCCURRENCE = 3
+
 /** Maximum trimmed length for a user-provided speaker name. */
 const val MAX_SPEAKER_NAME_LENGTH = 64
+
+/** A half-open sample range in milliseconds from the start of a recording. */
+data class SpeakerSampleRange(val startMs: Long, val endMs: Long) {
+    init {
+        require(startMs >= 0 && endMs > startMs) { "A sample needs a positive time range." }
+    }
+}
 
 /** A person in the speaker library. [lastUsedAtEpochMillis] orders the assign sheet. */
 data class Speaker(
@@ -142,11 +152,21 @@ data class SpeakerOccurrence(
     val sampleStartMs: Long,
     val sampleEndMs: Long,
     val embeddingId: String,
+    val sampleRanges: List<SpeakerSampleRange> = listOf(SpeakerSampleRange(sampleStartMs, sampleEndMs)),
 ) {
     init {
         require(ordinal >= 1) { "Speaker ordinals start at 1." }
         require(totalSpeechMs >= 0) { "Speech time cannot be negative." }
         require(sampleStartMs >= 0 && sampleEndMs > sampleStartMs) { "A sample needs a positive time range." }
+        require(sampleRanges.size in 1..MAX_SAMPLES_PER_OCCURRENCE) {
+            "An occurrence keeps between 1 and $MAX_SAMPLES_PER_OCCURRENCE samples."
+        }
+        require(sampleRanges.first() == SpeakerSampleRange(sampleStartMs, sampleEndMs)) {
+            "The primary sample range must be the first sample."
+        }
+        require(sampleRanges.zipWithNext().all { (first, next) -> first.endMs <= next.startMs }) {
+            "Sample ranges must be ordered and non-overlapping."
+        }
         require((link == SpeakerLink.NONE) == (speakerId == null)) {
             "An occurrence has a speaker exactly when it is linked."
         }
@@ -166,11 +186,21 @@ class OccurrenceDraft(
     val sampleEndMs: Long,
     val centroid: FloatArray,
     val rejectedSpeakerIds: List<String> = emptyList(),
+    val sampleRanges: List<SpeakerSampleRange> = listOf(SpeakerSampleRange(sampleStartMs, sampleEndMs)),
 ) {
     init {
         require(ordinal >= 1) { "Speaker ordinals start at 1." }
         require(totalSpeechMs >= 0) { "Speech time cannot be negative." }
         require(sampleStartMs >= 0 && sampleEndMs > sampleStartMs) { "A sample needs a positive time range." }
+        require(sampleRanges.size in 1..MAX_SAMPLES_PER_OCCURRENCE) {
+            "An occurrence keeps between 1 and $MAX_SAMPLES_PER_OCCURRENCE samples."
+        }
+        require(sampleRanges.first() == SpeakerSampleRange(sampleStartMs, sampleEndMs)) {
+            "The primary sample range must be the first sample."
+        }
+        require(sampleRanges.zipWithNext().all { (first, next) -> first.endMs <= next.startMs }) {
+            "Sample ranges must be ordered and non-overlapping."
+        }
         require(centroid.isNotEmpty()) { "A centroid cannot be empty." }
         require((link == SpeakerLink.NONE) == (speakerId == null)) {
             "An occurrence has a speaker exactly when it is linked."

@@ -21,6 +21,7 @@ import org.deer.borrowai.data.domain.MAX_EMBEDDINGS_PER_SPEAKER
 import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.SpeakerLink
+import org.deer.borrowai.data.domain.SpeakerSampleRange
 import org.deer.borrowai.data.service.SpeakerError
 
 class KotbaseSpeakerServiceTest {
@@ -49,7 +50,12 @@ class KotbaseSpeakerServiceTest {
         return service
     }
 
-    private fun draft(speakerId: String?, startMs: Long = 0L) = OccurrenceDraft(
+    private fun draft(
+        speakerId: String?,
+        startMs: Long = 0L,
+        rejectedSpeakerIds: List<String> = emptyList(),
+        sampleRanges: List<SpeakerSampleRange> = listOf(SpeakerSampleRange(startMs, startMs + 3_000L)),
+    ) = OccurrenceDraft(
         ordinal = 1,
         speakerId = speakerId,
         link = if (speakerId == null) SpeakerLink.NONE else SpeakerLink.AUTO,
@@ -57,6 +63,8 @@ class KotbaseSpeakerServiceTest {
         sampleStartMs = startMs,
         sampleEndMs = startMs + 3_000L,
         centroid = floatArrayOf(1f, 0f, 0f),
+        rejectedSpeakerIds = rejectedSpeakerIds,
+        sampleRanges = sampleRanges,
     )
 
     /** Counts embedding documents straight from the collection, so rows detached from a speaker are counted too. */
@@ -91,6 +99,47 @@ class KotbaseSpeakerServiceTest {
 
         val stored = service.findSpeakers().getOrNull()!!.associate { it.id to it.colorIndex }
         assertEquals(mapOf(first.id to 0, second.id to 1, third.id to 2), stored)
+    }
+
+    @Test
+    fun occurrenceStoresSeveralSampleRanges() = runTest {
+        val service = openService()
+        val ranges = listOf(
+            SpeakerSampleRange(0L, 3_000L),
+            SpeakerSampleRange(5_000L, 8_000L),
+            SpeakerSampleRange(10_000L, 13_000L),
+        )
+        service.replaceOccurrences(
+            "memory-1",
+            SPEAKER_ANALYSIS_VERSION,
+            listOf(draft(null, sampleRanges = ranges)),
+        )
+
+        assertEquals(ranges, service.findOccurrences("memory-1").getOrNull()!!.single().sampleRanges)
+    }
+
+    @Test
+    fun olderOccurrenceDocumentsReadTheirLegacySampleRange() = runTest {
+        val service = openService()
+        val collection = requireNotNull(database).getCollection("speakers")!!
+        collection.save(
+            MutableDocument("legacy-occurrence").apply {
+                setString("type", "occurrence")
+                setString("memoryId", "legacy-memory")
+                setInt("ordinal", 1)
+                setString("link", SpeakerLink.NONE.name)
+                setString("rejectedSpeakerIds", "")
+                setLong("totalSpeechMs", 3_000L)
+                setLong("sampleStartMs", 2_000L)
+                setLong("sampleEndMs", 5_000L)
+                setString("embeddingId", "legacy-embedding")
+            },
+        )
+
+        assertEquals(
+            listOf(SpeakerSampleRange(2_000L, 5_000L)),
+            service.findOccurrences("legacy-memory").getOrNull()!!.single().sampleRanges,
+        )
     }
 
     @Test
@@ -149,6 +198,30 @@ class KotbaseSpeakerServiceTest {
         assertEquals(target.id, assigned.speakerId)
         assertEquals(SpeakerLink.MANUAL, assigned.link)
         assertTrue(service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.isEmpty())
+    }
+
+    @Test
+    fun backgroundMatchAttachesTheUnknownVoiceprintWithoutOverwritingManualOrRejectedLinks() = runTest {
+        val service = openService()
+        val alice = service.createSpeaker("Alice").getOrNull()!!
+        service.replaceOccurrences("known-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(alice.id)))
+        service.replaceOccurrences("unknown-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(null)))
+        service.replaceOccurrences(
+            "rejected-memory",
+            SPEAKER_ANALYSIS_VERSION,
+            listOf(draft(null, rejectedSpeakerIds = listOf(alice.id))),
+        )
+        val unknown = service.findOccurrences("unknown-memory").getOrNull()!!.single()
+        val rejected = service.findOccurrences("rejected-memory").getOrNull()!!.single()
+        val known = service.findOccurrences("known-memory").getOrNull()!!.single()
+        assertTrue(service.assignOccurrence(known.id, alice.id).isRight())
+
+        assertEquals(true, service.autoAssignUnassignedOccurrence(unknown.id, alice.id).getOrNull())
+        assertEquals(false, service.autoAssignUnassignedOccurrence(rejected.id, alice.id).getOrNull())
+        assertEquals(false, service.autoAssignUnassignedOccurrence(known.id, alice.id).getOrNull())
+        assertEquals(alice.id, service.findOccurrences("unknown-memory").getOrNull()!!.single().speakerId)
+        assertNull(service.findOccurrences("rejected-memory").getOrNull()!!.single().speakerId)
+        assertEquals(2, service.findSpeaker(alice.id).getOrNull()!!.embeddingCount)
     }
 
     @Test

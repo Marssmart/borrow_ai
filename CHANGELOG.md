@@ -4,6 +4,13 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.26.0]
+
+- Kept up to three playable samples for each speaker occurrence in a recording.
+- Matched saved unassigned speaker occurrences in the background using cumulative local voiceprints, without reprocessing audio.
+- Routed app background work through one named FIFO queue with two workers, coalescing repeated recovery triggers.
+- Updated Android and iOS versioning to 1.26.0 (build 90).
+
 ## [1.25.1]
 
 - Fixed a crash when opening speaker management by converting palette ARGB values through Compose's ARGB colour constructor.

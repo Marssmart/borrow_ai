@@ -24,6 +24,8 @@ import org.deer.borrowai.data.service.MediaSessionState
 import org.deer.borrowai.data.service.SpeakerError
 import org.deer.borrowai.data.service.SpeakerService
 import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
@@ -39,6 +41,7 @@ class SpeakerAnalysisRunner(
     private val isRecording: () -> Boolean,
     private val scope: CoroutineScope,
     private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
+    private val backgroundJobQueue: BackgroundJobQueue? = null,
 ) {
     /** Held for a whole drain. Shutdown takes it too, so it waits for the drain in progress. */
     private val drainLock = Mutex()
@@ -93,7 +96,15 @@ class SpeakerAnalysisRunner(
 
     /** Starts a drain on [scope] without waiting for it. Called at launch and after a transcript is saved. */
     fun requestDrain() {
-        scope.launch { drainSafely() }
+        scope.launch {
+            if (stopped) return@launch
+            val queue = backgroundJobQueue
+            if (queue == null) {
+                drainSafely()
+            } else {
+                queue.enqueue(BackgroundJobNames.SPEAKER_ANALYSIS) { drainSafely() }
+            }
+        }
     }
 
     /**
@@ -113,6 +124,15 @@ class SpeakerAnalysisRunner(
                 }
             }
         }
+    }
+
+    /**
+     * Reconsiders saved unknown occurrences after speaker data changes, and once at launch. This only compares stored
+     * embeddings; it never reopens recordings or changes manual/rejected links.
+     */
+    fun watchSpeakerChanges(): Job = scope.launch {
+        enqueueRelinking()
+        speakerService.changes.collect { enqueueRelinking() }
     }
 
     /** Requeues skipped work after recording or playback ends and the media session is no longer busy. */
@@ -156,6 +176,56 @@ class SpeakerAnalysisRunner(
             val memory = memoryService.claimNextPendingSpeakerAnalysis()
                 .fold(ifLeft = { return false }, ifRight = { it }) ?: return true
             if (!activityTracker.track(BackgroundActivity.SPEAKER_ANALYSIS) { analyzeClaimed(memory, library) }) return false
+        }
+    }
+
+    private suspend fun relinkUnknownOccurrencesSafely() {
+        try {
+            relinkUnknownOccurrences()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            // A later speaker-store change or app launch retries this pass.
+        }
+    }
+
+    private suspend fun enqueueRelinking() {
+        if (stopped) return
+        val queue = backgroundJobQueue
+        if (queue == null) {
+            relinkUnknownOccurrencesSafely()
+        } else {
+            queue.enqueue(BackgroundJobNames.SPEAKER_RELINKING) { relinkUnknownOccurrencesSafely() }
+        }
+    }
+
+    private suspend fun relinkUnknownOccurrences(): Boolean = drainLock.withLock {
+        if (stopped || isRecording() || !isEnabled()) return@withLock false
+        val library = speakerService.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION)
+            .fold(ifLeft = { return@withLock false }, ifRight = { it })
+        if (library.isEmpty()) return@withLock true
+        val unknownEmbeddings = speakerService.findUnassignedSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION)
+            .fold(ifLeft = { return@withLock false }, ifRight = { it })
+        if (unknownEmbeddings.isEmpty()) return@withLock true
+        val activeMemoryIds = memoryService.getState().value.mapTo(mutableSetOf()) { it.id }
+        val occurrences = speakerService.findAllOccurrences()
+            .fold(ifLeft = { return@withLock false }, ifRight = { it })
+            .filter { it.memoryId in activeMemoryIds }
+        val matches = planUnassignedOccurrenceMatches(
+            occurrences = occurrences,
+            unknownEmbeddings = unknownEmbeddings,
+            library = library,
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+        )
+        if (matches.isEmpty()) return@withLock true
+        activityTracker.track(BackgroundActivity.SPEAKER_ANALYSIS) {
+            for (match in matches) {
+                if (stopped || isRecording() || !isEnabled()) return@track false
+                if (speakerService.autoAssignUnassignedOccurrence(match.occurrenceId, match.speakerId).isLeft()) {
+                    return@track false
+                }
+            }
+            true
         }
     }
 

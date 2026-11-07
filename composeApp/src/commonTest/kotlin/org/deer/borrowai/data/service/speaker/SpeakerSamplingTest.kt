@@ -34,6 +34,26 @@ class SpeakerSamplingTest {
     }
 
     @Test
+    fun keepsUpToThreeSeparatePreferredRunsInRecordingOrder() {
+        val samples = selectSamples(
+            own = listOf(range(0, 5_000), range(10_000, 20_000), range(25_000, 31_000), range(40_000, 42_000)),
+            others = emptyList(),
+        )
+
+        assertEquals(listOf(range(0, 5_000), range(10_000, 18_000), range(25_000, 31_000)), samples)
+    }
+
+    @Test
+    fun returnsSeveralShortRunsWhenNoRunMeetsThePreferredLength() {
+        val samples = selectSamples(
+            own = listOf(range(0, 1_000), range(3_000, 5_000)),
+            others = emptyList(),
+        )
+
+        assertEquals(listOf(range(0, 1_000), range(3_000, 5_000)), samples)
+    }
+
+    @Test
     fun longestRunWinsWhenNoRunIsFourSeconds() {
         val sample = selectSample(
             own = listOf(range(0, 2_000), range(2_100, 3_500)),

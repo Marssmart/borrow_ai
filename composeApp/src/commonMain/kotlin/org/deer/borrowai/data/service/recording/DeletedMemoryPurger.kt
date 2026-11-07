@@ -11,6 +11,8 @@ import okio.Path
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 import org.deer.borrowai.data.service.SpeakerService
 
@@ -73,9 +75,20 @@ class DeletedMemoryPurger(
     }
 
     /** Runs [purge] now and then every [intervalMillis] while [scope] is active. */
-    fun start(scope: CoroutineScope, intervalMillis: Long = DEFAULT_INTERVAL_MILLIS): Job = scope.launch {
+    fun start(
+        scope: CoroutineScope,
+        intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
+        backgroundJobQueue: BackgroundJobQueue? = null,
+    ): Job = scope.launch {
         while (isActive) {
-            purge()
+            if (backgroundJobQueue == null) {
+                purge()
+            } else {
+                backgroundJobQueue.enqueue(BackgroundJobNames.DELETED_MEMORY_PURGE) {
+                    purge()
+                    Unit
+                }
+            }
             delay(intervalMillis)
         }
     }

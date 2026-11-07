@@ -13,6 +13,7 @@ import org.deer.borrowai.data.domain.SPEAKER_ANALYSIS_VERSION
 import org.deer.borrowai.data.domain.Speaker
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerSampleRange
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.service.FakeSpeakerService
 import org.deer.borrowai.data.service.PlaybackContent
@@ -38,6 +39,7 @@ class SpeakerDetailsTest {
         speechMs: Long = 2_000L,
         startMs: Long = 0L,
         endMs: Long = 4_000L,
+        sampleRanges: List<SpeakerSampleRange> = listOf(SpeakerSampleRange(startMs, endMs)),
     ) = SpeakerOccurrence(
         id = "o$ordinal",
         memoryId = "m1",
@@ -49,6 +51,7 @@ class SpeakerDetailsTest {
         sampleStartMs = startMs,
         sampleEndMs = endMs,
         embeddingId = "e$ordinal",
+        sampleRanges = sampleRanges,
     )
 
     private fun sample(startMs: Long, endMs: Long) =
@@ -103,7 +106,34 @@ class SpeakerDetailsTest {
         )
 
         assertEquals(
-            SpeakerAudio.Playable(sample(startMs = 6_000L, endMs = 9_500L)),
+            SpeakerAudio.Playable(listOf(sample(startMs = 6_000L, endMs = 9_500L))),
+            (state as SpeakersSectionState.Cards).cards.single().audio,
+        )
+    }
+
+    @Test
+    fun oneSpeakerCardExposesSeveralPlayableSamples() {
+        val occurrence = occurrence(
+            ordinal = 1,
+            startMs = 1_000L,
+            endMs = 5_000L,
+            sampleRanges = listOf(
+                SpeakerSampleRange(1_000L, 5_000L),
+                SpeakerSampleRange(7_000L, 11_000L),
+                SpeakerSampleRange(13_000L, 17_000L),
+            ),
+        )
+        val state = speakersSectionState(
+            memory = memory(SpeakerStatus.DONE),
+            occurrences = listOf(occurrence),
+            namesById = emptyMap(),
+            audioAvailable = true,
+        )
+
+        assertEquals(
+            SpeakerAudio.Playable(
+                listOf(sample(1_000L, 5_000L), sample(7_000L, 11_000L), sample(13_000L, 17_000L)),
+            ),
             (state as SpeakersSectionState.Cards).cards.single().audio,
         )
     }
@@ -197,14 +227,14 @@ class SpeakerDetailsTest {
                         ordinal = 1,
                         label = SpeakerLabel.Named("Priya"),
                         speechMillis = 130_000L,
-                        audio = SpeakerAudio.Playable(sample(1_000L, 5_000L)),
+                        audio = SpeakerAudio.Playable(listOf(sample(1_000L, 5_000L))),
                         occurrence = occurrences[0],
                     ),
                     SpeakerCard(
                         ordinal = 2,
                         label = SpeakerLabel.Unknown(2),
                         speechMillis = 4_000L,
-                        audio = SpeakerAudio.Playable(sample(6_000L, 9_000L)),
+                        audio = SpeakerAudio.Playable(listOf(sample(6_000L, 9_000L))),
                         occurrence = occurrences[1],
                     ),
                 ),

@@ -30,7 +30,10 @@ import org.deer.borrowai.data.service.category.MemoryCategorizer
 import org.deer.borrowai.data.service.category.UnavailableMemoryCategorizer
 import org.deer.borrowai.data.service.background.BackgroundActivity
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
-import org.deer.borrowai.data.service.background.activeBackgroundActivities
+import org.deer.borrowai.data.service.background.BackgroundJobFailure
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
+import org.deer.borrowai.data.service.background.BackgroundJobQueueState
 import org.deer.borrowai.data.service.kotbase.KotbaseAppSettingsService
 import org.deer.borrowai.data.service.kotbase.KotbaseMemoryService
 import org.deer.borrowai.data.service.kotbase.KotbaseSpeakerService
@@ -85,6 +88,11 @@ class AppServices internal constructor(
     private val graphJob: CompletableJob,
     private val closeScope: CoroutineScope,
     private val backgroundJobs: List<Job> = emptyList(),
+    private val backgroundJobQueue: BackgroundJobQueue? = null,
+    val backgroundJobQueueState: StateFlow<BackgroundJobQueueState> =
+        MutableStateFlow(BackgroundJobQueueState()).asStateFlow(),
+    val backgroundJobFailures: StateFlow<List<BackgroundJobFailure>> =
+        MutableStateFlow<List<BackgroundJobFailure>>(emptyList()).asStateFlow(),
     /** Parent of summary recoveries launched from transcription callbacks. Completed children detach themselves. */
     private val callbackGroup: Job = Job(),
     private val summarizer: MemorySummarizer = UnavailableMemorySummarizer,
@@ -152,6 +160,7 @@ class AppServices internal constructor(
                     callbackGroup.cancel()
                     callbackGroup.join()
                 }
+                step { backgroundJobQueue?.closeAndJoin() }
                 step { summarizer.close() }
                 step { closeModelRuntime() }
             } finally {
@@ -240,6 +249,7 @@ class AppServices internal constructor(
             try {
                 val graphScope = CoroutineScope(graphJob + dispatcher)
                 val mediaScope = CoroutineScope(graphJob + mediaSessionDispatcher)
+                val backgroundJobQueue = BackgroundJobQueue(graphScope)
                 val memories = KotbaseMemoryService.open(database = database, epochClock = epochClock).fold(
                     ifLeft = { error -> throw IllegalStateException("Memory store failed to open: $error") },
                     ifRight = { it },
@@ -267,6 +277,8 @@ class AppServices internal constructor(
                     downloader = modelDownloader,
                     network = modelDevice.network,
                     scope = graphScope,
+                    backgroundJobQueue = backgroundJobQueue,
+                    activityTracker = activityTracker,
                 )
                 val speakerModelSetup = if (speakerModelsSupported) {
                     DownloadingSpeakerModelSetupService(
@@ -275,6 +287,7 @@ class AppServices internal constructor(
                         network = modelDevice.network,
                         scope = graphScope,
                         activityTracker = activityTracker,
+                        backgroundJobQueue = backgroundJobQueue,
                     )
                 } else {
                     UnavailableSpeakerModelSetupService
@@ -296,6 +309,7 @@ class AppServices internal constructor(
                     },
                     onTranscriptionSucceeded = { memoryId -> onSpeakerTranscriptionSucceeded(memoryId) },
                     activityTracker = activityTracker,
+                    backgroundJobQueue = backgroundJobQueue,
                 )
                 val mediaSession = RecordingMediaSessionService(
                     memoryService = memories,
@@ -317,6 +331,7 @@ class AppServices internal constructor(
                     isRecording = { mediaSession.isBusy },
                     scope = graphScope,
                     activityTracker = activityTracker,
+                    backgroundJobQueue = backgroundJobQueue,
                 )
                 val speakerModelReadyJob = graphScope.launch {
                     speakerModelSetup.state.collect { state ->
@@ -332,14 +347,14 @@ class AppServices internal constructor(
                     epochClock = epochClock,
                     transcriptionScheduler = transcriptionScheduler,
                     activityTracker = activityTracker,
-                ).start(scope = graphScope)
+                ).start(scope = graphScope, backgroundJobQueue = backgroundJobQueue)
                 val purgerJob = DeletedMemoryPurger(
                     memoryService = memories,
                     recordingsRoot = recordingsRoot,
                     isRecording = { mediaSession.isBusy },
                     speakerService = speakers,
                     activityTracker = activityTracker,
-                ).start(scope = graphScope)
+                ).start(scope = graphScope, backgroundJobQueue = backgroundJobQueue)
                 // Recovers transcriptions left unfinished by an earlier run, such as a crash or a failed attempt.
                 transcriptionScheduler.enqueueSweep()
                 val summaryRecovery = MemorySummaryRecoveryJob(
@@ -348,8 +363,18 @@ class AppServices internal constructor(
                     isRecording = { mediaSession.isBusy },
                     activityTracker = activityTracker,
                 )
-                val summaryRecoveryJob = summaryRecovery.start(scope = graphScope)
-                runSummaryRecovery = { graphScope.launch(callbackGroup) { summaryRecovery.recover() } }
+                val summaryRecoveryJob = summaryRecovery.start(
+                    scope = graphScope,
+                    backgroundJobQueue = backgroundJobQueue,
+                )
+                runSummaryRecovery = {
+                    graphScope.launch(callbackGroup) {
+                        backgroundJobQueue.enqueue(BackgroundJobNames.SUMMARY_RECOVERY) {
+                            summaryRecovery.recover()
+                            Unit
+                        }
+                    }
+                }
                 val categorizer: MemoryCategorizer = categoryModel
                     ?.let { DefaultMemoryCategorizer(memoryService = memories, model = it) }
                     ?: UnavailableMemoryCategorizer
@@ -359,14 +384,23 @@ class AppServices internal constructor(
                     isRecording = { mediaSession.isBusy },
                     activityTracker = activityTracker,
                 )
-                val categorizationRecoveryJob = categorizationRecovery.start(scope = graphScope)
+                val categorizationRecoveryJob = categorizationRecovery.start(
+                    scope = graphScope,
+                    backgroundJobQueue = backgroundJobQueue,
+                )
                 runCategorizationRecovery = {
-                    graphScope.launch(callbackGroup) { categorizationRecovery.recover() }
+                    graphScope.launch(callbackGroup) {
+                        backgroundJobQueue.enqueue(BackgroundJobNames.CATEGORIZATION_RECOVERY) {
+                            categorizationRecovery.recover()
+                            Unit
+                        }
+                    }
                 }
                 // One drain at launch, started last so a failure while wiring the graph cannot leave it running. Its first
                 // step requeues analyses that an earlier run left unfinished.
                 speakerRunner.requestDrain()
                 val speakerSettingsJob = speakerRunner.watchSettings()
+                val speakerChangesJob = speakerRunner.watchSpeakerChanges()
                 return AppServices(
                     modelSetup = modelSetup,
                     memories = memories,
@@ -385,21 +419,28 @@ class AppServices internal constructor(
                         speakerModelReadyJob,
                         speakerRecordingStateJob,
                         speakerSettingsJob,
+                        speakerChangesJob,
                     ),
                     callbackGroup = callbackGroup,
+                    backgroundJobQueue = backgroundJobQueue,
+                    backgroundJobQueueState = backgroundJobQueue.state,
+                    backgroundJobFailures = backgroundJobQueue.failures,
                     summarizer = summarizer,
                     closeModelRuntime = closeModelRuntime,
                     shutdownSpeakerAnalysis = speakerRunner::shutdown,
                     summaryModelMissing = summaryModelMissingNotice(summaryRecovery.summaryModelMissing, modelSetup.state)
                         .stateIn(graphScope, SharingStarted.Eagerly, false),
                     appSettings = appSettings,
-                    backgroundActivities = combine(activityTracker.activities, modelSetup.state) { tracked, model ->
-                        activeBackgroundActivities(tracked, model)
-                    }.stateIn(graphScope, SharingStarted.Eagerly, emptySet()),
+                    backgroundActivities = activityTracker.activities.stateIn(
+                        graphScope,
+                        SharingStarted.Eagerly,
+                        emptySet(),
+                    ),
                     onClose = { database.close() },
                 )
             } catch (failure: Throwable) {
                 graphJob.cancel()
+                graphJob.join()
                 database.close()
                 // Same order as close(): the summarizer stops before the shared runtime it uses is released.
                 try {

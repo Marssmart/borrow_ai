@@ -6,6 +6,9 @@ import kotlinx.coroutines.sync.withLock
 import okio.Path
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
+import org.deer.borrowai.data.service.background.BackgroundJobQueueClosedException
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /** Dispatches the background transcription jobs. Platforms provide the implementation (WorkManager on Android). */
@@ -37,6 +40,7 @@ class TranscriptionWorkRunner(
     /** Called with the memory id after its transcript is saved. A failure there never fails the transcription. */
     private val onTranscriptionSucceeded: suspend (memoryId: String) -> Unit = {},
     private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
+    private val backgroundJobQueue: BackgroundJobQueue? = null,
 ) {
     /** Held for the whole of a drain. The sweep takes it too, so it never requeues rows a live drain is working on. */
     private val drainLock = Mutex()
@@ -66,6 +70,9 @@ class TranscriptionWorkRunner(
         true
     }
 
+    /** Entry point used by durable platform workers so their execution shares the app queue. */
+    suspend fun sweepQueued(): Boolean = runQueued(BackgroundJobNames.TRANSCRIPTION_SWEEP) { sweep() }
+
     /**
      * Transcribes PENDING memories one at a time. Returns false when the store failed or no transcriber is
      * available, so the job should be retried later. Returns true once nothing is pending.
@@ -75,6 +82,18 @@ class TranscriptionWorkRunner(
         return drainLock.withLock {
             if (stopped) return false
             drainPending(transcriber)
+        }
+    }
+
+    /** Entry point used by durable platform workers so their execution shares the app queue. */
+    suspend fun drainQueued(): Boolean = runQueued(BackgroundJobNames.TRANSCRIPTION_DRAIN) { drain() }
+
+    private suspend fun runQueued(jobName: String, work: suspend () -> Boolean): Boolean {
+        val queue = backgroundJobQueue ?: return work()
+        return try {
+            queue.run(jobName, work)
+        } catch (_: BackgroundJobQueueClosedException) {
+            false
         }
     }
 

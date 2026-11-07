@@ -963,6 +963,8 @@ internal fun PlaybackButton(
     playing: Boolean,
     playLabel: StringResource,
     playingLabel: StringResource,
+    playText: String? = null,
+    playingText: String? = null,
     onClick: () -> Unit,
 ) {
     TextButton(
@@ -985,7 +987,7 @@ internal fun PlaybackButton(
             )
             Spacer(Modifier.width(SavedMemoriesStateHolder.MEMORY_PLAYBACK_BUTTON_ICON_SPACING))
             Text(
-                stringResource(if (playing) playingLabel else playLabel),
+                if (playing) playingText ?: stringResource(playingLabel) else playText ?: stringResource(playLabel),
                 style = MaterialTheme.typography.labelSmall,
             )
         }

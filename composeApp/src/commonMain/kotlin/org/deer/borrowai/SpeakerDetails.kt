@@ -34,8 +34,8 @@ internal sealed interface SpeakerLabel {
 }
 
 internal sealed interface SpeakerAudio {
-    /** Plays this speaker's sample. [target] is the sample's range in the memory's recording. */
-    data class Playable(val target: PlaybackTarget) : SpeakerAudio
+    /** Plays this speaker's separate sample ranges from the memory's recording. */
+    data class Playable(val targets: List<PlaybackTarget>) : SpeakerAudio
 
     /** The original recording is missing, so there is nothing to play (AC-2.4). */
     data object Unavailable : SpeakerAudio
@@ -61,11 +61,13 @@ internal fun speakersSectionState(
                 speechMillis = occurrence.totalSpeechMs,
                 audio = if (audioAvailable) {
                     SpeakerAudio.Playable(
-                        PlaybackTarget(
-                            memoryId = memory.id,
-                            content = PlaybackContent.SPEAKER_SAMPLE,
-                            sample = PlaybackSample(occurrence.sampleStartMs, occurrence.sampleEndMs),
-                        ),
+                        occurrence.sampleRanges.map { range ->
+                            PlaybackTarget(
+                                memoryId = memory.id,
+                                content = PlaybackContent.SPEAKER_SAMPLE,
+                                sample = PlaybackSample(range.startMs, range.endMs),
+                            )
+                        },
                     )
                 } else {
                     SpeakerAudio.Unavailable

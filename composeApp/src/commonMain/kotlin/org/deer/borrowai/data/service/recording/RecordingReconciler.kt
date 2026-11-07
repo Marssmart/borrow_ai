@@ -14,6 +14,8 @@ import org.deer.borrowai.data.domain.TranscriptionStatus
 import org.deer.borrowai.data.service.MemoryError
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
@@ -112,9 +114,20 @@ class RecordingReconciler(
     }
 
     /** Runs [reconcile] now and then every [intervalMillis] while [scope] is active. */
-    fun start(scope: CoroutineScope, intervalMillis: Long = DEFAULT_INTERVAL_MILLIS): Job = scope.launch {
+    fun start(
+        scope: CoroutineScope,
+        intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
+        backgroundJobQueue: BackgroundJobQueue? = null,
+    ): Job = scope.launch {
         while (isActive) {
-            reconcile()
+            if (backgroundJobQueue == null) {
+                reconcile()
+            } else {
+                backgroundJobQueue.enqueue(BackgroundJobNames.RECORDING_RECONCILIATION) {
+                    reconcile()
+                    Unit
+                }
+            }
             delay(intervalMillis)
         }
     }

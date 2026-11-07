@@ -16,7 +16,8 @@ The feature:
 2. Shows speaker chips on each memory row in the list. A chip shows a recognized name or a neutral "Speaker N".
 3. In the memory detail view, shows one card per speaker with a short voice sample from the original recording that the user can play.
 4. Lets the user assign an unknown speaker to a named speaker already in the speaker library, or create a new named speaker.
-5. Stores speakers and their samples locally so that older memories can be re-analyzed later to fill gaps.
+5. Stores speakers, their cumulative voiceprints, and up to three clean sample ranges per occurrence. A background matcher
+   uses new voiceprints to name still-unassigned occurrences in older memories without reprocessing their audio.
 
 Everything runs on-device. Audio never leaves the phone.
 
@@ -28,11 +29,11 @@ Everything runs on-device. Audio never leaves the phone.
 
 - Detect all speakers in a memory, not just "you vs. someone else".
 - Show speaker chips on memory list rows without slowing scrolling.
-- Play a sample from each speaker's own speech in the detail view.
+- Play up to three samples from each speaker's own speech in the detail view.
 - Assign an unknown speaker to a previously named speaker with one tap.
 - Persist speakers, embeddings, and samples so the library grows over time.
 - Let the user rename, merge, and delete speakers in a speaker library screen (v1, per Q-4).
-- Re-analyze old memories in the background when the user opts in, the models change, or the user adds a speaker.
+- Match still-unassigned occurrences in older memories in the background when speaker voiceprints change.
 - Keep the existing recording, transcription, and categorization flows unchanged for users who never open the feature.
 
 ### Non-goals (v1)
@@ -55,7 +56,7 @@ Everything runs on-device. Audio never leaves the phone.
 | Cluster | Group of segments whose embeddings are close. One cluster is one speaker in one memory. |
 | Speaker (library) | A person the user has named. Holds one or more embeddings and a display name. |
 | Occurrence | One cluster in one memory. Links a memory to a speaker, either matched or unknown. |
-| Sample | A short time range (default 4 to 8 s) from the original recording, chosen from the cluster's cleanest speech. |
+| Sample | One of up to three short, non-overlapping time ranges (4 to 8 s where possible) from a cluster's clean speech. |
 | Match threshold | Cosine-similarity score above which an occurrence is auto-linked to a library speaker. |
 
 ---
@@ -77,10 +78,10 @@ As a user, I want to see the speakers in a memory from the list so I know whethe
 As a user, I want to hear a short clip of each speaker in a memory so I can recognize them.
 
 - AC-2.1: The detail view shows one speaker card per occurrence, ordered as in the chips.
-- AC-2.2: Each card has a Play button that plays only that speaker's sample, from the original `.m4a`.
+- AC-2.2: Each card has up to three Play buttons, one for each of that speaker's samples in the original `.m4a`.
 - AC-2.3: Only one sample plays at a time. Starting another stops the first.
 - AC-2.4: If the original recording file is missing, the card shows "Audio unavailable" and no play button. Other data still shows.
-- AC-2.5: A sample never spans a speaker change. It is taken from a single segment or a merged run of one speaker.
+- AC-2.5: No sample spans a speaker change. Each is taken from a single segment or a merged run of one speaker.
 
 ### US-3: Name an unknown speaker
 
@@ -90,7 +91,7 @@ As a user, I want to tell the app who an unknown speaker is so future memories a
 - AC-3.2: Choosing a library speaker links this occurrence to that speaker and stores the occurrence's embedding on that speaker.
 - AC-3.3: Choosing "New speaker" asks for a name, creates a library speaker, and links the occurrence to it.
 - AC-3.4: After assigning, the chip and card update in the list and detail view without a restart.
-- AC-3.5: Assigning does not change other memories automatically in v1. Those memories can be re-analyzed (US-5).
+- AC-3.5: Assigning adds a voiceprint and queues a background match for unassigned occurrences in other active memories (US-5). Existing manual links and rejected matches are unchanged.
 
 ### US-4: Recognize a known speaker automatically
 
@@ -101,14 +102,14 @@ As a user, I want new memories to show my known speakers without me doing anythi
 - AC-4.3: A user's manual assignment is never overridden by automatic matching.
 - AC-4.4: Auto-links can be undone from the card ("Not this person"). That occurrence becomes unknown and is excluded from matching against that speaker.
 
-### US-5: Re-analyze older memories
+### US-5: Match older memories
 
-As a user, I want older memories to pick up speakers I added later.
+As a user, I want older memories with unassigned speakers to pick up speakers I added later.
 
-- AC-5.1: Each memory stores the speaker-model version and matching-library version it was analyzed with.
-- AC-5.2: When the user opts in, a speaker is created, or the speaker model changes, memories with an older version are queued for re-analysis. The queue is drained in the background, at low priority, on every app launch.
-- AC-5.3: Re-analysis never removes manual assignments. It only fills unknown or auto-matched occurrences.
-- AC-5.4: Re-analysis is enabled as soon as the user opts in (§9.8). There is no separate control to start or stop it. Turning the feature off stops it.
+- AC-5.1: Each occurrence stores its centroid embedding and model version.
+- AC-5.2: On app launch and when the speaker library changes, a background job compares stored embeddings with the cumulative library for active memories that contain unassigned occurrences. It does not decode or re-analyze their recordings.
+- AC-5.3: Background matching only fills unassigned occurrences. It never replaces manual or automatic links and never restores a speaker rejected for an occurrence.
+- AC-5.4: Matching runs only with current consent and speaker recognition enabled. Turning the feature off stops the job.
 
 ### US-6: Stay in control of privacy
 
@@ -135,10 +136,12 @@ flowchart TD
     E --> F[Diarize: segments per speaker]
     F --> G[Embed each segment]
     G --> H[Cluster embeddings into speakers]
-    H --> I[Pick best sample per cluster]
+    H --> I[Pick up to three clean samples per cluster]
     I --> J[Match clusters to library speakers]
     J --> K[Write occurrences and sample ranges]
     K --> L[Update chips and cards]
+    M[Speaker library changes] --> N[Match saved unassigned embeddings]
+    N --> K
 ```
 
 The speaker job runs after transcription, so the transcription status is never blocked by speaker analysis.
@@ -197,8 +200,9 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 | `link` | enum (`NONE`, `AUTO`, `MANUAL`) | `MANUAL` is never overwritten by matching. |
 | `rejectedSpeakerIds` | List<String> | Filled by "Not this person" (AC-4.4). |
 | `totalSpeechMs` | Long | Used to rank samples and to drop tiny clusters. |
-| `sampleStartMs` | Long | Relative to the recording. |
-| `sampleEndMs` | Long | |
+| `sampleStartMs` | Long | First sample's start; retained for existing readers. |
+| `sampleEndMs` | Long | First sample's end; retained for existing readers. |
+| `sampleRanges` | List of time ranges | Up to three non-overlapping samples, in recording order. Older documents without this field use the legacy range above. |
 | `embeddingId` | String | Centroid embedding for this occurrence. |
 
 **Rules**
@@ -229,20 +233,19 @@ Stored in a separate Couchbase Lite collection set, managed by `KotbaseSpeakerSe
 4. If no speech turns remain, set `SKIPPED` with `NO_SPEECH`; this result is not requeued. Otherwise, compute an embedding for each turn with the embedding model.
 5. Cluster embeddings (agglomerative, cosine distance, threshold in §9.3). Merge clusters that are too similar. Drop clusters under `minSpeechMs` (default 1500 ms) as noise.
 6. Cap clusters at `maxSpeakersPerMemory` (default 8). Extra clusters merge into the nearest one.
-7. For each cluster, pick the sample range: the longest single-speaker run of at least 4 s, clipped to 8 s. If none, use the longest run available.
+7. For each cluster, pick up to three distinct single-speaker runs, preferring runs of at least 4 s, clipping each to 8 s, and ordering them by recording time. If no run reaches 4 s, use the longest available runs.
 8. Compute each cluster's centroid. Compare it with every library speaker's embeddings. Use the best score, and link `AUTO` if it is at or above the match threshold and the speaker is not rejected.
-9. Write occurrences, the centroid embedding, and the sample range in one batch. Set `speakerStatus = DONE` and `speakerAnalysisVersion`. *Deviation (P1):* the occurrences and embeddings go in one batch, but the DONE write is a separate memory-record write. A crash between the two leaves the memory ANALYZING. The retry rebuilds the same rows, so nothing is lost or duplicated.
+9. Write occurrences, the centroid embedding, and sample ranges in one batch. Set `speakerStatus = DONE` and `speakerAnalysisVersion`. *Deviation (P1):* the occurrences and embeddings go in one batch, but the DONE write is a separate memory-record write. A crash between the two leaves the memory ANALYZING. The retry rebuilds the same rows, so nothing is lost or duplicated.
 10. Emit a change event so the list and detail views refresh.
 
-### 7.3 Re-analysis
+### 7.3 Background matching
 
-- Queued by: opt-in (covers all existing memories), speaker created, speaker model upgraded.
-- Drained by: app launch, in the background at low priority (AC-5.2).
-- Re-analysis recomputes segmentation and clusters, then re-runs matching. It keeps `MANUAL` links where the occurrence's centroid still maps to the same speaker. Otherwise the manual link stays as it was (see AC-5.3). Simple rule for v1: a manual link is never removed by re-analysis.
-- Runs with the same low priority as other background jobs. Pauses while recording.
-- Launch gate (proposed, confirm in S-7): the drain starts only when the device is not recording, battery saver is off, and battery is at least 20% or charging. It stops if any of these change mid-run, and the remaining queue waits for the next launch. *P1 checks these between memories. The check between speech turns belongs in the analyzer wrapper, and is added in P5 with the first real analyzer.*
-- Notes for later phases. P2 withdrawal must also reset each memory's `speakerStatus` (DONE becomes SKIPPED or PENDING), not only delete the speaker data. P4 re-analysis must include SKIPPED memories as well as PENDING ones.
-- Scope in v1: the drain runs only while the app process is alive. No WorkManager or BGTask job in v1. The queue is persisted, so a killed app loses nothing.
+- Triggered on app launch and speaker-store changes, including when a user assigns an occurrence and adds its voiceprint to a named speaker.
+- Reads stored occurrence embeddings and the cumulative speaker library. It does not decode audio or change analysis status.
+- Considers only active memories with occurrences that are still unassigned. The strongest eligible match wins when several occurrences compete for one speaker in a memory.
+- Existing manual and automatic links are not changed. A speaker in an occurrence's rejected list is excluded from that occurrence's candidates.
+- Uses the same feature-consent and recording guards as speaker analysis, is tracked as speaker background activity, and stops before the database closes.
+- The pass runs while the app process is alive; app launch retries unmatched work after a previous interruption.
 
 ---
 
@@ -270,7 +273,7 @@ The pair is 41,134,267 bytes total and is downloaded only on request, not during
 
 ### 8.3 Sample storage
 
-Samples are stored as time ranges in the original `.m4a`, not as separate audio files. This keeps storage flat and avoids a second copy of audio. Playback seeks into the original file. If the file is missing, the card shows "Audio unavailable" (AC-2.4).
+Samples are stored as up to three time ranges per occurrence in the original `.m4a`, not as separate audio files. This keeps storage flat and avoids a second copy of audio. Playback seeks into the original file. If the file is missing, the card shows "Audio unavailable" (AC-2.4).
 
 ### 8.4 Storage cost
 
@@ -290,7 +293,7 @@ Estimate per memory: segment embeddings are not stored. Only centroid embeddings
 ### 9.2 Memory detail
 
 - New "Speakers" section below the transcript, above the category.
-- One card per occurrence, showing: label or name, speech duration, a Play button for the sample, and the action button.
+- One card per occurrence, showing: label or name, speech duration, up to three separately playable samples, and the action button.
 - Action button is "Assign" for unknown, "Change" for matched, and "Not this person" as a secondary action on auto-matched cards.
 - Empty state: "No speakers detected in this memory." Shown only when analysis is DONE and found no speakers (Q-10).
 - P2: the section is left out while the memory has no speakers and its analysis is PENDING, ANALYZING, FAILED, or SKIPPED. Cards show the label, "Speech m:ss", and Play sample. A missing recording shows "Audio unavailable" with no button (AC-2.4). The visual guide's "Audio unavailable. The original recording is missing." is shortened to the AC-2.4 text.

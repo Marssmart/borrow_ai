@@ -14,6 +14,8 @@ import kotlinx.coroutines.withTimeout
 import org.deer.borrowai.data.domain.Memory
 import org.deer.borrowai.data.service.MemoryService
 import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
 
 /**
@@ -111,9 +113,20 @@ class MemorySummaryRecoveryJob(
     }
 
     /** Runs [recover] now and then every [intervalMillis] while [scope] is active. */
-    fun start(scope: CoroutineScope, intervalMillis: Long = DEFAULT_INTERVAL_MILLIS): Job = scope.launch {
+    fun start(
+        scope: CoroutineScope,
+        intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
+        backgroundJobQueue: BackgroundJobQueue? = null,
+    ): Job = scope.launch {
         while (isActive) {
-            recover()
+            if (backgroundJobQueue == null) {
+                recover()
+            } else {
+                backgroundJobQueue.enqueue(BackgroundJobNames.SUMMARY_RECOVERY) {
+                    recover()
+                    Unit
+                }
+            }
             delay(intervalMillis)
         }
     }

@@ -2,6 +2,7 @@ package org.deer.borrowai.data.service.model
 
 import arrow.core.Either
 import arrow.core.left
+import arrow.core.raise.either
 import arrow.core.right
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.deer.borrowai.data.service.background.BackgroundActivity
 import org.deer.borrowai.data.service.background.BackgroundActivityTracker
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 
 enum class SpeakerModelSetupPhase {
     NOT_STARTED,
@@ -62,6 +65,7 @@ class DownloadingSpeakerModelSetupService(
     private val scope: CoroutineScope,
     private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
     private val models: List<ModelSpec> = ModelCatalog.speakerModels,
+    private val backgroundJobQueue: BackgroundJobQueue? = null,
 ) : SpeakerModelSetupService {
     private val mutex = Mutex()
     private var attempt: Deferred<Either<ModelDownloadError, Unit>>? = null
@@ -76,13 +80,11 @@ class DownloadingSpeakerModelSetupService(
         }
     }
 
-    override suspend fun prepare(): Either<ModelDownloadError, Unit> = activityTracker.track(
-        BackgroundActivity.MODEL_DOWNLOAD,
-    ) {
+    override suspend fun prepare(): Either<ModelDownloadError, Unit> {
         val work = mutex.withLock {
             attempt?.takeIf { it.isActive } ?: scope.async { downloadModels() }.also { attempt = it }
         }
-        work.await()
+        return work.await()
     }
 
     private suspend fun downloadModels(): Either<ModelDownloadError, Unit> {
@@ -99,7 +101,17 @@ class DownloadingSpeakerModelSetupService(
                     continue
                 }
                 store.preparePartial(spec)
-                val completePartial = store.commitCompletePartial(spec).fold(
+                val checkPartial = suspend {
+                    activityTracker.track(BackgroundActivity.MODEL_DOWNLOAD) {
+                        store.commitCompletePartial(spec)
+                    }
+                }
+                val partialResult = backgroundJobQueue?.run(
+                    BackgroundJobNames.modelPartialCheck(spec.fileName),
+                    cancelOnClose = true,
+                    block = checkPartial,
+                ) ?: checkPartial()
+                val completePartial = partialResult.fold(
                     ifLeft = { error ->
                         publish(SpeakerModelSetupPhase.FAILED, completedBytes, totalBytes, error.describe())
                         return error.left()
@@ -113,24 +125,30 @@ class DownloadingSpeakerModelSetupService(
                 }
                 awaitTransferAllowed(completedBytes, totalBytes)
                 publish(SpeakerModelSetupPhase.DOWNLOADING, completedBytes, totalBytes)
-                val digest = downloader.download(
-                    url = spec.downloadUrl,
-                    destination = store.partialPath(spec),
-                    expectedSizeBytes = spec.sizeBytes,
-                ) { bytes ->
-                    publish(
-                        SpeakerModelSetupPhase.DOWNLOADING,
-                        completedBytes + bytes,
-                        totalBytes,
-                    )
-                }.fold(
-                    ifLeft = { error ->
-                        publish(SpeakerModelSetupPhase.FAILED, completedBytes, totalBytes, error.describe())
-                        return error.left()
-                    },
-                    ifRight = { it },
-                )
-                store.commit(spec, digest).fold(
+                val downloadAndCommit = suspend {
+                    activityTracker.track(BackgroundActivity.MODEL_DOWNLOAD) {
+                        either {
+                            val digest = downloader.download(
+                                url = spec.downloadUrl,
+                                destination = store.partialPath(spec),
+                                expectedSizeBytes = spec.sizeBytes,
+                            ) { bytes ->
+                                publish(
+                                    SpeakerModelSetupPhase.DOWNLOADING,
+                                    completedBytes + bytes,
+                                    totalBytes,
+                                )
+                            }.bind()
+                            store.commit(spec, digest).bind()
+                        }
+                    }
+                }
+                val downloadResult = backgroundJobQueue?.run(
+                    BackgroundJobNames.modelDownload(spec.fileName),
+                    cancelOnClose = true,
+                    block = downloadAndCommit,
+                ) ?: downloadAndCommit()
+                downloadResult.fold(
                     ifLeft = { error ->
                         publish(SpeakerModelSetupPhase.FAILED, completedBytes, totalBytes, error.describe())
                         return error.left()
