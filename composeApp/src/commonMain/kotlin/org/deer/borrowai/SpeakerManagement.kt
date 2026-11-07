@@ -91,8 +91,7 @@ import borrowai.composeapp.generated.resources.speaker_management_not_this_perso
 import borrowai.composeapp.generated.resources.speaker_management_occurrence_label
 import borrowai.composeapp.generated.resources.speaker_management_open_memory
 import borrowai.composeapp.generated.resources.speaker_management_play_sample
-import borrowai.composeapp.generated.resources.speaker_management_play_occurrence_sample_accessibility
-import borrowai.composeapp.generated.resources.speaker_management_play_speaker_sample_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_play_occurrence_sample_number_accessibility
 import borrowai.composeapp.generated.resources.speaker_management_recent
 import borrowai.composeapp.generated.resources.speaker_management_rename
 import borrowai.composeapp.generated.resources.speaker_management_retry
@@ -104,8 +103,11 @@ import borrowai.composeapp.generated.resources.speaker_management_speaker_color
 import borrowai.composeapp.generated.resources.speaker_management_speaker_unavailable
 import borrowai.composeapp.generated.resources.speaker_management_speakers_unavailable
 import borrowai.composeapp.generated.resources.speaker_management_stop_sample
-import borrowai.composeapp.generated.resources.speaker_management_stop_occurrence_sample_accessibility
-import borrowai.composeapp.generated.resources.speaker_management_stop_speaker_sample_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_stop_occurrence_sample_number_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_play_sample_number_accessibility
+import borrowai.composeapp.generated.resources.speaker_management_stop_sample_number_accessibility
+import borrowai.composeapp.generated.resources.speaker_play_sample_number
+import borrowai.composeapp.generated.resources.speaker_stop_sample_number
 import borrowai.composeapp.generated.resources.speaker_management_title
 import borrowai.composeapp.generated.resources.speaker_management_untitled
 import borrowai.composeapp.generated.resources.speaker_management_create_failed
@@ -325,24 +327,35 @@ internal fun SpeakerManagementScreen(
                 Text(sourceMemoryTitle, style = MaterialTheme.typography.bodyMedium)
                 sourceMemory?.let { memory ->
                     if (hasRecordingFile(memory)) {
-                        val target = sampleTarget(occurrence)
-                        val isPlaying = playingTarget == target
-                        val sampleDescription = stringResource(
-                            if (isPlaying) {
-                                Res.string.speaker_management_stop_occurrence_sample_accessibility
-                            } else {
-                                Res.string.speaker_management_play_occurrence_sample_accessibility
-                            },
-                            occurrence.ordinal,
-                            sourceMemoryTitle,
-                        )
-                        TextButton(onClick = { onPlaySample(target) }) {
-                            Text(
-                                stringResource(if (isPlaying) Res.string.speaker_management_stop_sample else Res.string.speaker_management_play_sample),
-                                modifier = Modifier.semantics {
-                                    contentDescription = sampleDescription
+                        occurrence.sampleRanges.forEachIndexed { index, range ->
+                            val target = sampleTarget(occurrence, range.startMs, range.endMs)
+                            val sampleNumber = index + 1
+                            val isPlaying = playingTarget == target
+                            val sampleDescription = stringResource(
+                                if (isPlaying) {
+                                    Res.string.speaker_management_stop_occurrence_sample_number_accessibility
+                                } else {
+                                    Res.string.speaker_management_play_occurrence_sample_number_accessibility
                                 },
+                                sampleNumber,
+                                occurrence.ordinal,
+                                sourceMemoryTitle,
                             )
+                            TextButton(onClick = { onPlaySample(target) }) {
+                                Text(
+                                    stringResource(
+                                        if (isPlaying) {
+                                            Res.string.speaker_stop_sample_number
+                                        } else {
+                                            Res.string.speaker_play_sample_number
+                                        },
+                                        sampleNumber,
+                                    ),
+                                    modifier = Modifier.semantics {
+                                        contentDescription = sampleDescription
+                                    },
+                                )
+                            }
                         }
                     } else {
                         Text(stringResource(Res.string.speaker_management_audio_unavailable))
@@ -986,7 +999,6 @@ private fun RecentOccurrenceRow(
     onPlaySample: (PlaybackTarget) -> Unit,
     onOpen: () -> Unit,
 ) {
-    val target = sampleTarget(occurrence)
     val memoryTitle = memory.title.takeIf { it.isNotBlank() }
         ?: stringResource(Res.string.speaker_management_untitled)
     Card(Modifier.fillMaxWidth()) {
@@ -1010,25 +1022,35 @@ private fun RecentOccurrenceRow(
                 ),
                 style = MaterialTheme.typography.bodySmall,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (hasAudio) {
-                    val isPlaying = playingTarget == target
-                    val sampleDescription = stringResource(
-                        if (isPlaying) {
-                            Res.string.speaker_management_stop_speaker_sample_accessibility
-                        } else {
-                            Res.string.speaker_management_play_speaker_sample_accessibility
-                        },
-                        speakerName,
-                        memoryTitle,
-                    )
-                    TextButton(onClick = { onPlaySample(target) }) {
-                        Text(
-                            stringResource(if (isPlaying) Res.string.speaker_management_stop_sample else Res.string.speaker_management_play_sample),
-                            modifier = Modifier.semantics {
-                                contentDescription = sampleDescription
+                    occurrence.sampleRanges.forEachIndexed { index, range ->
+                        val target = sampleTarget(occurrence, range.startMs, range.endMs)
+                        val sampleNumber = index + 1
+                        val isPlaying = playingTarget == target
+                        val sampleDescription = stringResource(
+                            if (isPlaying) {
+                                Res.string.speaker_management_stop_sample_number_accessibility
+                            } else {
+                                Res.string.speaker_management_play_sample_number_accessibility
                             },
+                            sampleNumber,
+                            speakerName,
+                            memoryTitle,
                         )
+                        TextButton(onClick = { onPlaySample(target) }) {
+                            Text(
+                                stringResource(
+                                    if (isPlaying) {
+                                        Res.string.speaker_stop_sample_number
+                                    } else {
+                                        Res.string.speaker_play_sample_number
+                                    },
+                                    sampleNumber,
+                                ),
+                                modifier = Modifier.semantics { contentDescription = sampleDescription },
+                            )
+                        }
                     }
                 } else {
                     Text(stringResource(Res.string.speaker_management_audio_unavailable))
@@ -1085,10 +1107,14 @@ private fun LoadingSpeakerRows(modifier: Modifier = Modifier) {
     }
 }
 
-private fun sampleTarget(occurrence: SpeakerOccurrence) = PlaybackTarget(
+private fun sampleTarget(
+    occurrence: SpeakerOccurrence,
+    startMs: Long = occurrence.sampleStartMs,
+    endMs: Long = occurrence.sampleEndMs,
+) = PlaybackTarget(
     memoryId = occurrence.memoryId,
     content = PlaybackContent.SPEAKER_SAMPLE,
-    sample = PlaybackSample(occurrence.sampleStartMs, occurrence.sampleEndMs),
+    sample = PlaybackSample(startMs, endMs),
 )
 
 private fun SpeakerOccurrence.toLinkSnapshot() = SpeakerOccurrenceLink(

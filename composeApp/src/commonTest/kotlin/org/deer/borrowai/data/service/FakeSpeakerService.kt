@@ -172,6 +172,40 @@ class FakeSpeakerService(
         Unit.right()
     }
 
+    override suspend fun autoAssignUnassignedOccurrence(
+    occurrenceId: String,
+    speakerId: String,
+    ): Either<SpeakerError, Boolean> = mutex.withLock<Either<SpeakerError, Boolean>> {
+    if (!featureEnabled || consentTextVersion != SPEAKER_CONSENT_TEXT_VERSION) {
+        return@withLock SpeakerError.Disabled.left()
+    }
+    if (failWrites) {
+        return@withLock SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+    }
+    val occurrence = occurrences[occurrenceId] ?: return@withLock SpeakerError.NotFound(occurrenceId).left()
+    if (
+        occurrence.speakerId != null ||
+        occurrence.link != SpeakerLink.NONE ||
+        speakerId in occurrence.rejectedSpeakerIds ||
+        occurrences.values.any {
+            it.memoryId == occurrence.memoryId && it.id != occurrence.id && it.speakerId == speakerId
+        }
+    ) {
+        return@withLock false.right()
+    }
+    val target = speakers[speakerId] ?: return@withLock SpeakerError.NotFound(speakerId).left()
+    val embedding = embeddings[occurrence.embeddingId]
+        ?: return@withLock SpeakerError.NotFound(occurrence.embeddingId).left()
+    if (embedding.speakerId != null) return@withLock false.right()
+
+    occurrences[occurrenceId] = occurrence.copy(speakerId = speakerId, link = SpeakerLink.AUTO)
+    embeddings[embedding.id] = embedding.copy(speakerId = speakerId)
+    speakers[speakerId] = target.copy(lastUsedAtEpochMillis = epochClock.nowEpochMillis())
+    keepNewest(speakerId)
+    published()
+    true.right()
+    }
+
     override suspend fun rejectAutomaticMatch(occurrenceId: String): Either<SpeakerError, Unit> =
         mutex.withLock<Either<SpeakerError, Unit>> {
             if (failWrites) {
@@ -287,6 +321,16 @@ class FakeSpeakerService(
             embeddings.values.filter { it.speakerId != null && it.modelVersion == modelVersion }.right()
         }
 
+    override suspend fun findUnassignedSpeakerEmbeddings(
+        modelVersion: Int,
+    ): Either<SpeakerError, List<SpeakerEmbedding>> = mutex.withLock {
+        if (failReads) {
+            SpeakerError.Persistence(IllegalStateException("speaker store unavailable")).left()
+        } else {
+            embeddings.values.filter { it.speakerId == null && it.modelVersion == modelVersion }.right()
+        }
+    }
+
     override suspend fun findOccurrences(memoryId: String): Either<SpeakerError, List<SpeakerOccurrence>> =
         mutex.withLock {
             occurrences.values.filter { it.memoryId == memoryId }.sortedBy { it.ordinal }.right()
@@ -333,6 +377,7 @@ class FakeSpeakerService(
                 sampleStartMs = draft.sampleStartMs,
                 sampleEndMs = draft.sampleEndMs,
                 embeddingId = embeddingId,
+                sampleRanges = draft.sampleRanges,
             )
             draft.speakerId?.let { speakerId ->
                 speakers[speakerId] = speakers.getValue(speakerId).copy(lastUsedAtEpochMillis = now)

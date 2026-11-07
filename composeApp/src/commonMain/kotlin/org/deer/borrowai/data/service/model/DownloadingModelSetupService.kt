@@ -22,6 +22,10 @@ import org.deer.borrowai.data.service.ModelSetupMilestones
 import org.deer.borrowai.data.service.ModelSetupPhase
 import org.deer.borrowai.data.service.ModelSetupService
 import org.deer.borrowai.data.service.ModelSetupState
+import org.deer.borrowai.data.service.background.BackgroundActivity
+import org.deer.borrowai.data.service.background.BackgroundActivityTracker
+import org.deer.borrowai.data.service.background.BackgroundJobNames
+import org.deer.borrowai.data.service.background.BackgroundJobQueue
 
 /**
  * Chooses the tier models from the device RAM and downloads them to static files.
@@ -36,6 +40,8 @@ class DownloadingModelSetupService(
     private val choosingHoldMillis: Long = CHOOSING_HOLD_MILLIS,
     private val loadingHoldMillis: Long = LOADING_HOLD_MILLIS,
     private val modelsForRam: (totalRamBytes: Long) -> TierModels = ModelCatalog::modelsForRam,
+    private val backgroundJobQueue: BackgroundJobQueue? = null,
+    private val activityTracker: BackgroundActivityTracker = BackgroundActivityTracker(),
 ) : ModelSetupService {
     private val setupMutex = Mutex()
     private var setupAttempt: Deferred<Either<ModelDownloadError, Unit>>? = null
@@ -219,7 +225,17 @@ class DownloadingModelSetupService(
             return@either false
         }
         store.preparePartial(spec)
-        if (store.commitCompletePartial(spec).bind()) {
+        val checkPartial = suspend {
+            activityTracker.track(BackgroundActivity.MODEL_DOWNLOAD) {
+                store.commitCompletePartial(spec)
+            }
+        }
+        val partialResult = backgroundJobQueue?.run(
+            BackgroundJobNames.modelPartialCheck(spec.fileName),
+            cancelOnClose = true,
+            block = checkPartial,
+        ) ?: checkPartial()
+        if (partialResult.bind()) {
             transition(phase, progress = endProgress, bytesDownloaded = completedBytes, bytesTotal = bundleTotalBytes)
             return@either false
         }
@@ -230,20 +246,32 @@ class DownloadingModelSetupService(
             bytesDownloaded = bundleOffsetBytes,
             bytesTotal = bundleTotalBytes,
         )
-        val downloadedSha256 = downloader.download(
-            spec.downloadUrl,
-            store.partialPath(spec),
-            spec.sizeBytes,
-        ) { bytes ->
-            val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
-            transition(
-                phase = phase,
-                progress = startProgress + (endProgress - startProgress) * fraction,
-                bytesDownloaded = bundleOffsetBytes + bytes,
-                bytesTotal = bundleTotalBytes,
-            )
-        }.bind()
-        store.commit(spec, downloadedSha256).bind()
+        val downloadAndCommit = suspend {
+            activityTracker.track(BackgroundActivity.MODEL_DOWNLOAD) {
+                either {
+                    val downloadedSha256 = downloader.download(
+                        spec.downloadUrl,
+                        store.partialPath(spec),
+                        spec.sizeBytes,
+                    ) { bytes ->
+                        val fraction = (bytes.toFloat() / spec.sizeBytes).coerceIn(0f, 1f)
+                        transition(
+                            phase = phase,
+                            progress = startProgress + (endProgress - startProgress) * fraction,
+                            bytesDownloaded = bundleOffsetBytes + bytes,
+                            bytesTotal = bundleTotalBytes,
+                        )
+                    }.bind()
+                    store.commit(spec, downloadedSha256).bind()
+                }
+            }
+        }
+        val downloadResult = backgroundJobQueue?.run(
+            BackgroundJobNames.modelDownload(spec.fileName),
+            cancelOnClose = true,
+            block = downloadAndCommit,
+        ) ?: downloadAndCommit()
+        downloadResult.bind()
         transition(phase, progress = endProgress, bytesDownloaded = completedBytes, bytesTotal = bundleTotalBytes)
         true
     }

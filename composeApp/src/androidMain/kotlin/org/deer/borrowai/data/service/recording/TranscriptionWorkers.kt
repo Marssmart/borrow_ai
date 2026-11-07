@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
+import org.deer.borrowai.data.service.background.BackgroundJobNames
 
 /**
  * Builds the transcription workers with the runner of the live graph. WorkManager is configured
@@ -60,8 +61,8 @@ internal class WorkManagerTranscriptionScheduler(context: Context) : Transcripti
     }
 
     private companion object {
-        const val DRAIN_WORK_NAME = "transcription-drain"
-        const val SWEEP_WORK_NAME = "transcription-sweep"
+        const val DRAIN_WORK_NAME = BackgroundJobNames.TRANSCRIPTION_DRAIN
+        const val SWEEP_WORK_NAME = BackgroundJobNames.TRANSCRIPTION_SWEEP
     }
 }
 
@@ -102,7 +103,7 @@ internal class TranscriptionDrainWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val runner = runnerProvider()
-        val finished = runner?.drain() ?: false
+        val finished = runner?.drainQueued() ?: false
         return transcriptionWorkStep(
             runnerAttached = runner != null,
             finished = finished,
@@ -119,7 +120,7 @@ internal class TranscriptionSweepWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val runner = runnerProvider()
-        val finished = runner?.sweep() ?: false
+        val finished = runner?.sweepQueued() ?: false
         return transcriptionWorkStep(
             runnerAttached = runner != null,
             finished = finished,

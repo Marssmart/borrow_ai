@@ -6,8 +6,6 @@ import kotlin.test.assertFailsWith
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import org.deer.borrowai.data.service.ModelSetupPhase
-import org.deer.borrowai.data.service.ModelSetupState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BackgroundActivityTrackerTest {
@@ -59,21 +57,14 @@ class BackgroundActivityTrackerTest {
     }
 
     @Test
-    fun modelPhaseAddsModelDownloadOnlyWhileWorkRuns() {
-        val tracked = setOf(BackgroundActivity.TRANSCRIPTION)
+    fun modelTransferActivityIsReportedOnlyWhileTheTransferRuns() = runTest {
+        val tracker = BackgroundActivityTracker()
 
-        assertEquals(
-            setOf(BackgroundActivity.TRANSCRIPTION, BackgroundActivity.MODEL_DOWNLOAD),
-            activeBackgroundActivities(tracked, ModelSetupState(phase = ModelSetupPhase.DOWNLOADING_VOICE)),
-        )
-        assertEquals(
-            setOf(BackgroundActivity.MODEL_DOWNLOAD),
-            activeBackgroundActivities(emptySet(), ModelSetupState(phase = ModelSetupPhase.LOADING_VOICE)),
-        )
-        assertEquals(tracked, activeBackgroundActivities(tracked, ModelSetupState(phase = ModelSetupPhase.READY)))
-        assertEquals(
-            tracked,
-            activeBackgroundActivities(tracked, ModelSetupState(phase = ModelSetupPhase.WAITING_FOR_UNMETERED_NETWORK)),
-        )
+        assertEquals(emptySet(), tracker.activities.first())
+        val during = tracker.track(BackgroundActivity.MODEL_DOWNLOAD) {
+            tracker.activities.first()
+        }
+        assertEquals(setOf(BackgroundActivity.MODEL_DOWNLOAD), during)
+        assertEquals(emptySet(), tracker.activities.first())
     }
 }

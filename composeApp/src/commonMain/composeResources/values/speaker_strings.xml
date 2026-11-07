@@ -4,6 +4,8 @@
     <string name="speaker_speech_duration">Speech %1$s</string>
     <string name="speaker_play_sample">Play sample</string>
     <string name="speaker_stop_sample">Stop sample</string>
+    <string name="speaker_play_sample_number">Play sample %1$d</string>
+    <string name="speaker_stop_sample_number">Stop sample %1$d</string>
     <string name="speaker_audio_unavailable">Audio unavailable</string>
     <string name="speaker_no_speakers_detected">No speakers detected in this memory.</string>
     <string name="speaker_pending_description">Analyzing speakers</string>

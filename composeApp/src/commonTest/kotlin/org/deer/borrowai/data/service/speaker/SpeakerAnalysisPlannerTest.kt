@@ -7,6 +7,7 @@ import kotlin.test.assertTrue
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerSampleRange
 
 class SpeakerAnalysisPlannerTest {
     private fun turn(startMs: Long, endMs: Long, vararg values: Float) =
@@ -38,6 +39,33 @@ class SpeakerAnalysisPlannerTest {
         assertEquals(3_000L, draft.totalSpeechMs)
         assertEquals(0L, draft.sampleStartMs)
         assertEquals(3_000L, draft.sampleEndMs)
+    }
+
+    @Test
+    fun repeatedSpeakerTurnsStayOneOccurrenceWithSeveralSamples() {
+        val drafts = planSpeakerOccurrences(
+            turns = listOf(
+                turn(0, 5_000, 1f, 0f, 0f, 0f),
+                turn(5_000, 10_000, 0f, 1f, 0f, 0f),
+                turn(10_000, 15_000, 1f, 0f, 0f, 0f),
+                turn(15_000, 20_000, 0f, 1f, 0f, 0f),
+                turn(20_000, 25_000, 1f, 0f, 0f, 0f),
+            ),
+            library = emptyList(),
+            modelVersion = 1,
+            knownSpeakerIds = emptySet(),
+        )
+
+        assertEquals(2, drafts.size)
+        assertEquals(
+            listOf(
+                SpeakerSampleRange(0, 5_000),
+                SpeakerSampleRange(10_000, 15_000),
+                SpeakerSampleRange(20_000, 25_000),
+            ),
+            drafts.first().sampleRanges,
+        )
+        assertEquals(SpeakerSampleRange(0, 5_000), drafts.first().sampleRanges.first())
     }
 
     @Test

@@ -5,8 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
-import org.deer.borrowai.data.service.ModelSetupPhase
-import org.deer.borrowai.data.service.ModelSetupState
 
 /** Work the app does without the user asking for it. The order here is the order the indicator lists them in. */
 enum class BackgroundActivity {
@@ -44,17 +42,3 @@ class BackgroundActivityTracker {
         }
     }
 }
-
-/** Model download is not tracked by the jobs. It comes from the model setup phase instead. */
-internal fun activeBackgroundActivities(
-    tracked: Set<BackgroundActivity>,
-    model: ModelSetupState,
-): Set<BackgroundActivity> =
-    if (model.phase in MODEL_WORK_PHASES) tracked + BackgroundActivity.MODEL_DOWNLOAD else tracked
-
-private val MODEL_WORK_PHASES = setOf(
-    ModelSetupPhase.DOWNLOADING_LIVE_VOICE,
-    ModelSetupPhase.DOWNLOADING_VOICE,
-    ModelSetupPhase.LOADING_VOICE,
-    ModelSetupPhase.DOWNLOADING_LLM,
-)

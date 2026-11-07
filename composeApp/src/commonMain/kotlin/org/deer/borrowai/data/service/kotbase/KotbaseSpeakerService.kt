@@ -38,6 +38,7 @@ import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
 import org.deer.borrowai.data.domain.SpeakerOccurrenceLink
+import org.deer.borrowai.data.domain.SpeakerSampleRange
 import org.deer.borrowai.data.domain.SpeakerSummary
 import org.deer.borrowai.data.domain.newSpeakerColorIndex
 import org.deer.borrowai.data.service.SpeakerError
@@ -196,6 +197,62 @@ class KotbaseSpeakerService private constructor(
                     }
                 },
             ).bind()
+        }
+    }
+
+    override suspend fun autoAssignUnassignedOccurrence(
+        occurrenceId: String,
+        speakerId: String,
+    ): Either<SpeakerError, Boolean> = mutex.withLock {
+        either {
+            ensureEnabled().bind()
+            val occurrence = withContext(Dispatchers.Default) {
+                persisting { readOccurrenceRows(Meta.id.equalTo(Expression.string(occurrenceId))).firstOrNull() }
+            }.bind() ?: raise(SpeakerError.NotFound(occurrenceId))
+            if (
+                occurrence.speakerId != null ||
+                occurrence.link != SpeakerLink.NONE ||
+                speakerId in occurrence.rejectedSpeakerIds
+            ) {
+                false
+            } else {
+                findSpeaker(speakerId).bind()
+                val speakerAlreadyLinkedInMemory = withContext(Dispatchers.Default) {
+                    persisting {
+                        readOccurrenceRows(memoryIdIs(occurrence.memoryId))
+                            .any { it.id != occurrenceId && it.speakerId == speakerId }
+                    }
+                }.bind()
+                if (speakerAlreadyLinkedInMemory) {
+                    false
+                } else {
+                    val embedding = withContext(Dispatchers.Default) {
+                        persisting {
+                            readEmbeddings { it.getString(COLUMN_ID) == occurrence.embeddingId }.firstOrNull()
+                        }
+                    }.bind() ?: raise(SpeakerError.NotFound(occurrence.embeddingId))
+                    if (embedding.speakerId != null) {
+                        false
+                    } else {
+                        val now = epochClock.nowEpochMillis()
+                        val nextOccurrence = occurrence.copy(speakerId = speakerId, link = SpeakerLink.AUTO)
+                        val nextEmbedding = embedding.copy(speakerId = speakerId)
+                        val plan = withContext(Dispatchers.Default) {
+                            persisting {
+                                planEmbeddingChanges(setOf(speakerId), nextEmbedding, now)
+                            }
+                        }.bind()
+                        applyMutation(
+                            writeChanges = {
+                                saveOccurrence(nextOccurrence)
+                                saveEmbedding(nextEmbedding)
+                                applyEmbeddingChanges(plan)
+                            },
+                        ).bind()
+                        true
+                    }
+                }
+            }
         }
     }
 
@@ -386,6 +443,16 @@ class KotbaseSpeakerService private constructor(
             }
         }
 
+    override suspend fun findUnassignedSpeakerEmbeddings(
+        modelVersion: Int,
+    ): Either<SpeakerError, List<SpeakerEmbedding>> = withContext(Dispatchers.Default) {
+        persisting {
+            readEmbeddings { row ->
+                row.getString(KEY_SPEAKER_ID) == null && row.getInt(KEY_MODEL_VERSION) == modelVersion
+            }
+        }
+    }
+
     override suspend fun findOccurrences(memoryId: String): Either<SpeakerError, List<SpeakerOccurrence>> =
         withContext(Dispatchers.Default) {
             persisting { readOccurrences { row -> row.getString(KEY_MEMORY_ID) == memoryId }.sortedBy { it.ordinal } }
@@ -496,6 +563,7 @@ class KotbaseSpeakerService private constructor(
                     sampleStartMs = draft.sampleStartMs,
                     sampleEndMs = draft.sampleEndMs,
                     embeddingId = embeddingId,
+                    sampleRanges = draft.sampleRanges,
                 ),
                 embedding = SpeakerEmbedding(
                     id = embeddingId,
@@ -707,6 +775,7 @@ class KotbaseSpeakerService private constructor(
             setLong(KEY_TOTAL_SPEECH_MS, occurrence.totalSpeechMs)
             setLong(KEY_SAMPLE_START_MS, occurrence.sampleStartMs)
             setLong(KEY_SAMPLE_END_MS, occurrence.sampleEndMs)
+            setString(KEY_SAMPLE_RANGES, encodeSampleRanges(occurrence.sampleRanges))
             setString(KEY_EMBEDDING_ID, occurrence.embeddingId)
         }
         collection.save(document)
@@ -772,6 +841,7 @@ class KotbaseSpeakerService private constructor(
             SelectResult.property(KEY_TOTAL_SPEECH_MS),
             SelectResult.property(KEY_SAMPLE_START_MS),
             SelectResult.property(KEY_SAMPLE_END_MS),
+            SelectResult.property(KEY_SAMPLE_RANGES),
             SelectResult.property(KEY_EMBEDDING_ID),
         ).filter(keep).map { it.toOccurrence() }
 
@@ -787,6 +857,7 @@ class KotbaseSpeakerService private constructor(
         SelectResult.property(KEY_TOTAL_SPEECH_MS),
         SelectResult.property(KEY_SAMPLE_START_MS),
         SelectResult.property(KEY_SAMPLE_END_MS),
+        SelectResult.property(KEY_SAMPLE_RANGES),
         SelectResult.property(KEY_EMBEDDING_ID),
     ).map { it.toOccurrence() }
 
@@ -863,7 +934,28 @@ class KotbaseSpeakerService private constructor(
                 sampleStartMs = getLong(KEY_SAMPLE_START_MS),
                 sampleEndMs = getLong(KEY_SAMPLE_END_MS),
                 embeddingId = getString(KEY_EMBEDDING_ID).orEmpty(),
+                sampleRanges = decodeSampleRanges(
+                    encoded = getString(KEY_SAMPLE_RANGES),
+                    legacyStartMs = getLong(KEY_SAMPLE_START_MS),
+                    legacyEndMs = getLong(KEY_SAMPLE_END_MS),
+                ),
             )
+        }
+    }
+
+    private fun encodeSampleRanges(ranges: List<SpeakerSampleRange>): String =
+        ranges.joinToString(SAMPLE_RANGE_SEPARATOR) { "${it.startMs}: ${it.endMs}" }
+
+    private fun decodeSampleRanges(
+        encoded: String?,
+        legacyStartMs: Long,
+        legacyEndMs: Long,
+    ): List<SpeakerSampleRange> {
+        if (encoded.isNullOrBlank()) return listOf(SpeakerSampleRange(legacyStartMs, legacyEndMs))
+        return encoded.split(SAMPLE_RANGE_SEPARATOR).map { encodedRange ->
+            val bounds = encodedRange.split(SAMPLE_BOUND_SEPARATOR)
+            require(bounds.size == 2) { "A stored speaker sample has invalid bounds." }
+            SpeakerSampleRange(bounds[0].trim().toLong(), bounds[1].trim().toLong())
         }
     }
 
@@ -936,10 +1028,13 @@ class KotbaseSpeakerService private constructor(
         private const val KEY_TOTAL_SPEECH_MS = "totalSpeechMs"
         private const val KEY_SAMPLE_START_MS = "sampleStartMs"
         private const val KEY_SAMPLE_END_MS = "sampleEndMs"
+        private const val KEY_SAMPLE_RANGES = "sampleRanges"
         private const val KEY_EMBEDDING_ID = "embeddingId"
         private const val KEY_ENABLED = "enabled"
         private const val VECTOR_CONTENT_TYPE = "application/octet-stream"
         private const val ID_SEPARATOR = "|"
+        private const val SAMPLE_RANGE_SEPARATOR = ";"
+        private const val SAMPLE_BOUND_SEPARATOR = ":"
 
         /**
          * Opens the speaker store on [database], creating its collection on first use. Speaker analysis stays off until

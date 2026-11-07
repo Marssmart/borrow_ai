@@ -95,6 +95,60 @@ class SpeakerAnalysisRunnerTest {
     }
 
     @Test
+    fun speakerLibraryChangesRelinkUnknownMemoriesWithoutReanalyzingAudio() = runTest {
+        val memories = memories()
+        memories.addAudioMemory("known")
+        memories.addAudioMemory("unknown")
+        val speakers = FakeSpeakerService(enabled = true)
+        val alice = speakers.createSpeaker("Alice").getOrNull()!!
+        speakers.replaceOccurrences(
+            memoryId = "known",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(
+                OccurrenceDraft(
+                    ordinal = 1,
+                    speakerId = alice.id,
+                    link = SpeakerLink.AUTO,
+                    totalSpeechMs = 3_000L,
+                    sampleStartMs = 0L,
+                    sampleEndMs = 3_000L,
+                    centroid = floatArrayOf(1f, 0f, 0f, 0f),
+                ),
+            ),
+        )
+        speakers.replaceOccurrences(
+            memoryId = "unknown",
+            modelVersion = SPEAKER_ANALYSIS_VERSION,
+            drafts = listOf(
+                OccurrenceDraft(
+                    ordinal = 1,
+                    speakerId = null,
+                    link = SpeakerLink.NONE,
+                    totalSpeechMs = 3_000L,
+                    sampleStartMs = 0L,
+                    sampleEndMs = 3_000L,
+                    centroid = floatArrayOf(0.9f, 0.1f, 0f, 0f),
+                ),
+            ),
+        )
+        val analyzer = ScriptedAnalyzer(available = false)
+        val runner = runner(memories, speakers, analyzer, this)
+
+        val watchJob = runner.watchSpeakerChanges()
+        advanceUntilIdle()
+
+        val knownOccurrence = speakers.findOccurrences("known").getOrNull()!!.single()
+        val unknownOccurrence = speakers.findOccurrences("unknown").getOrNull()!!.single()
+        assertEquals(alice.id, knownOccurrence.speakerId)
+        assertEquals(SpeakerLink.AUTO, unknownOccurrence.link)
+        assertEquals(alice.id, unknownOccurrence.speakerId)
+        assertTrue(analyzer.analyzedPaths.isEmpty())
+
+        watchJob.cancel()
+        runner.shutdown()
+    }
+
+    @Test
     fun repeatedFailuresEndInFailedAfterTheAttemptCap() = runTest {
         val memories = memories()
         val speakers = FakeSpeakerService(enabled = true)

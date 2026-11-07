@@ -36,8 +36,12 @@
     <string name="speaker_management_stop_sample">Stop sample</string>
     <string name="speaker_management_play_occurrence_sample_accessibility">Play sample for Speaker %1$d in %2$s</string>
     <string name="speaker_management_stop_occurrence_sample_accessibility">Stop sample for Speaker %1$d in %2$s</string>
+    <string name="speaker_management_play_occurrence_sample_number_accessibility">Play sample %1$d for Speaker %2$d in %3$s</string>
+    <string name="speaker_management_stop_occurrence_sample_number_accessibility">Stop sample %1$d for Speaker %2$d in %3$s</string>
     <string name="speaker_management_play_speaker_sample_accessibility">Play sample for %1$s in %2$s</string>
     <string name="speaker_management_stop_speaker_sample_accessibility">Stop sample for %1$s in %2$s</string>
+    <string name="speaker_management_play_sample_number_accessibility">Play sample %1$d for %2$s in %3$s</string>
+    <string name="speaker_management_stop_sample_number_accessibility">Stop sample %1$d for %2$s in %3$s</string>
     <string name="speaker_management_speaker_color">Speaker color</string>
     <string name="speaker_management_occurrence_label">Speaker %1$d · %2$s</string>
     <string name="speaker_management_audio_unavailable">Audio unavailable</string>

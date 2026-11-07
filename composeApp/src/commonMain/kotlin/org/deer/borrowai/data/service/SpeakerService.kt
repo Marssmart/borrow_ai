@@ -86,6 +86,18 @@ interface SpeakerService {
     /** Embeddings attached to a speaker and stored with [modelVersion]. Unknown embeddings are left out. */
     suspend fun findSpeakerEmbeddings(modelVersion: Int): Either<SpeakerError, List<SpeakerEmbedding>>
 
+    /** Embeddings of unassigned occurrences stored with [modelVersion]. */
+    suspend fun findUnassignedSpeakerEmbeddings(modelVersion: Int): Either<SpeakerError, List<SpeakerEmbedding>>
+
+    /**
+     * Automatically links an unassigned occurrence to [speakerId]. A manual/automatic link, rejected match, duplicate
+     * speaker link in the same memory, or a stale occurrence is left unchanged and returns false.
+     */
+    suspend fun autoAssignUnassignedOccurrence(
+        occurrenceId: String,
+        speakerId: String,
+    ): Either<SpeakerError, Boolean>
+
     /** The occurrences of memory [memoryId], ordered by ordinal. */
     suspend fun findOccurrences(memoryId: String): Either<SpeakerError, List<SpeakerOccurrence>>
 

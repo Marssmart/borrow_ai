@@ -4,6 +4,7 @@ import org.deer.borrowai.data.domain.OccurrenceDraft
 import org.deer.borrowai.data.domain.SpeakerEmbedding
 import org.deer.borrowai.data.domain.SpeakerLink
 import org.deer.borrowai.data.domain.SpeakerOccurrence
+import org.deer.borrowai.data.domain.SpeakerSampleRange
 
 /**
  * Turns the speech turns of one recording into occurrence drafts. Clusters the turns into speakers, picks a sample for
@@ -25,11 +26,14 @@ internal fun planSpeakerOccurrences(
         val own = turns.indices.filter { labels[it] == label }
         val ownRanges = own.map { turns[it].toRange() }
         val otherRanges = turns.indices.filter { labels[it] != label }.map { turns[it].toRange() }
-        val sample = selectSample(ownRanges, otherRanges) ?: continue
+        val samples = selectSamples(ownRanges, otherRanges)
+        if (samples.isEmpty()) continue
         // Earlier analyses of the same audio carry over: a MANUAL link and rejections survive a rebuild (AC-5.3).
-        val history = previous.filter { overlaps(it.sampleRange(), ownRanges) }
+        val history = previous.filter { prior ->
+            prior.sampleRanges().any { sample -> overlaps(sample, ownRanges) }
+        }
         planned += PlannedSpeaker(
-            sample = sample,
+            samples = samples,
             speechMs = unionLength(ownRanges),
             centroid = meanDirection(own.map { normalized(turns[it].embedding) }),
             manualSpeakerId = history
@@ -46,10 +50,11 @@ internal fun planSpeakerOccurrences(
             speakerId = links[index].speakerId,
             link = links[index].link,
             totalSpeechMs = speaker.speechMs,
-            sampleStartMs = speaker.sample.startMs,
-            sampleEndMs = speaker.sample.endMs,
+            sampleStartMs = speaker.samples.first().startMs,
+            sampleEndMs = speaker.samples.first().endMs,
             centroid = speaker.centroid,
             rejectedSpeakerIds = speaker.rejected.toList(),
+            sampleRanges = speaker.samples.map { SpeakerSampleRange(it.startMs, it.endMs) },
         )
     }
 }
@@ -95,7 +100,7 @@ private fun validateTurns(turns: List<SpeechTurn>) {
 }
 
 private class PlannedSpeaker(
-    val sample: TimeRange,
+    val samples: List<TimeRange>,
     val speechMs: Long,
     val centroid: FloatArray,
     val manualSpeakerId: String?,
@@ -105,7 +110,8 @@ private class PlannedSpeaker(
 /** A possible link between a planned speaker and a library speaker, with its similarity. */
 private class Candidate(val index: Int, val speakerId: String, val score: Double)
 
-private fun SpeakerOccurrence.sampleRange(): TimeRange = TimeRange(sampleStartMs, sampleEndMs)
+private fun SpeakerOccurrence.sampleRanges(): List<TimeRange> =
+    sampleRanges.map { TimeRange(it.startMs, it.endMs) }
 
 private fun overlaps(range: TimeRange, ranges: List<TimeRange>): Boolean =
     ranges.any { it.startMs < range.endMs && range.startMs < it.endMs }

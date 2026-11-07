@@ -122,6 +122,48 @@ class SpeakerManagementServiceTest {
     }
 
     @Test
+    fun backgroundMatchLinksOnlyAnUnassignedOccurrenceAndAddsItsVoiceprint() = runTest {
+        val service = FakeSpeakerService(enabled = true)
+        val alice = service.createSpeaker("Alice").getOrNull()!!
+        service.replaceOccurrences("known-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(1, alice.id)))
+        service.replaceOccurrences("unknown-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(1, null)))
+        val unknown = service.findOccurrences("unknown-memory").getOrNull()!!.single()
+
+        assertEquals(true, service.autoAssignUnassignedOccurrence(unknown.id, alice.id).getOrNull())
+
+        val matched = service.findOccurrences("unknown-memory").getOrNull()!!.single()
+        assertEquals(alice.id, matched.speakerId)
+        assertEquals(SpeakerLink.AUTO, matched.link)
+        assertEquals(2, service.findSpeaker(alice.id).getOrNull()!!.embeddingCount)
+        assertEquals(
+            setOf(alice.id),
+            service.findSpeakerEmbeddings(SPEAKER_ANALYSIS_VERSION).getOrNull()!!.mapNotNull { it.speakerId }.toSet(),
+        )
+    }
+
+    @Test
+    fun backgroundMatchCannotRestoreRejectedOrOverwriteManualLinks() = runTest {
+        val service = FakeSpeakerService(enabled = true)
+        val alice = service.createSpeaker("Alice").getOrNull()!!
+        val bob = service.createSpeaker("Bob").getOrNull()!!
+        service.replaceOccurrences(
+            "rejected-memory",
+            SPEAKER_ANALYSIS_VERSION,
+            listOf(draft(1, null, rejectedSpeakerIds = listOf(alice.id))),
+        )
+        service.replaceOccurrences("manual-memory", SPEAKER_ANALYSIS_VERSION, listOf(draft(1, bob.id)))
+        val rejected = service.findOccurrences("rejected-memory").getOrNull()!!.single()
+        val manual = service.findOccurrences("manual-memory").getOrNull()!!.single()
+        service.assignOccurrence(manual.id, null)
+
+        assertEquals(false, service.autoAssignUnassignedOccurrence(rejected.id, alice.id).getOrNull())
+        assertEquals(false, service.autoAssignUnassignedOccurrence(manual.id, bob.id).getOrNull())
+
+        assertNull(service.findOccurrences("rejected-memory").getOrNull()!!.single().speakerId)
+        assertNull(service.findOccurrences("manual-memory").getOrNull()!!.single().speakerId)
+    }
+
+    @Test
     fun mergeKeepsTargetIdentityAndMovesLinksAndEmbeddingHistory() = runTest {
         val service = FakeSpeakerService(enabled = true)
         val source = service.createSpeaker("Source").getOrNull()!!
@@ -154,7 +196,11 @@ class SpeakerManagementServiceTest {
         assertEquals(target.id, service.findOccurrences("memory-1").getOrNull()!!.single().speakerId)
     }
 
-    private fun draft(ordinal: Int, speakerId: String?) = OccurrenceDraft(
+    private fun draft(
+        ordinal: Int,
+        speakerId: String?,
+        rejectedSpeakerIds: List<String> = emptyList(),
+    ) = OccurrenceDraft(
         ordinal = ordinal,
         speakerId = speakerId,
         link = if (speakerId == null) SpeakerLink.NONE else SpeakerLink.AUTO,
@@ -162,5 +208,6 @@ class SpeakerManagementServiceTest {
         sampleStartMs = ordinal * 2_000L,
         sampleEndMs = ordinal * 2_000L + 1_000L,
         centroid = floatArrayOf(1f, 0f, 0f),
+        rejectedSpeakerIds = rejectedSpeakerIds,
     )
 }
