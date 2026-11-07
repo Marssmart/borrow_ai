@@ -147,6 +147,12 @@ interface MemoryService {
      */
     suspend fun requeueUnfinishedSpeakerAnalyses(): Either<MemoryError, Int>
 
+    /**
+     * Requeues completed analyses written by an older [analysisVersion] when their recording is still available.
+     * Existing occurrences remain in place until the new analysis replaces them.
+     */
+    suspend fun requeueOutdatedSpeakerAnalyses(analysisVersion: Int): Either<MemoryError, Int>
+
     /** Marks every PENDING speaker analysis SKIPPED. Used while speaker analysis cannot run. Returns how many changed. */
     suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int>
 

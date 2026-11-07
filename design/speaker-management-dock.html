@@ -230,7 +230,8 @@
     .speaker-info strong { display: block; overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .speaker-info span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
     .speaker-last { color: #789195; font-size: 9px; white-space: nowrap; }
-    .selected-check { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: #e3f2f1; color: var(--teal); }
+    .selected-check { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: #e3f2f1; color: var(--teal); font-size: 11px; font-weight: 800; }
+    .selected-check[hidden] { display: none; }
 
     .detail-card {
       margin-top: 12px;
@@ -240,7 +241,7 @@
       background: var(--paper);
       box-shadow: 0 9px 24px rgba(43,91,99,.07);
     }
-    .detail-heading { display: flex; align-items: center; gap: 10px; }
+    .detail-heading { position: relative; display: flex; align-items: center; gap: 10px; }
     .detail-heading .avatar { width: 43px; height: 43px; border-radius: 15px; }
     .detail-name { min-width: 0; flex: 1; }
     .detail-name h2 { margin: 0; font-size: 16px; line-height: 1.2; letter-spacing: -.025em; }
@@ -369,8 +370,8 @@
     .popover {
       position: absolute;
       z-index: 4;
-      right: 17px;
-      top: 321px;
+      right: 0;
+      top: calc(100% + 6px);
       display: none;
       width: 147px;
       padding: 5px;
@@ -452,25 +453,25 @@
             <span class="avatar maya">MC</span>
             <span class="speaker-info"><strong>Maya Chen</strong><span>7 linked memories</span></span>
             <span class="speaker-last">Today</span>
-            <span class="selected-check" aria-label="Selected"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="m3.3 8.2 3 3 6.4-6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="selected-check" aria-hidden="true">✓</span>
           </button>
           <button class="speaker-row" type="button" data-name="Daniel Brooks" data-id="daniel" aria-pressed="false">
             <span class="avatar daniel">DB</span>
             <span class="speaker-info"><strong>Daniel Brooks</strong><span>4 linked memories</span></span>
             <span class="speaker-last">Yesterday</span>
-            <span class="selected-check" aria-label="Selected" hidden></span>
+            <span class="selected-check" aria-hidden="true" hidden>✓</span>
           </button>
           <button class="speaker-row" type="button" data-name="Sofia Reyes" data-id="sofia" aria-pressed="false">
             <span class="avatar sofia">SR</span>
             <span class="speaker-info"><strong>Sofia Reyes</strong><span>2 linked memories</span></span>
             <span class="speaker-last">Oct 30</span>
-            <span class="selected-check" aria-label="Selected" hidden></span>
+            <span class="selected-check" aria-hidden="true" hidden>✓</span>
           </button>
           <button class="speaker-row" type="button" data-name="Noah Kim" data-id="noah" aria-pressed="false">
             <span class="avatar noah">NK</span>
             <span class="speaker-info"><strong>Noah Kim</strong><span>1 linked memory</span></span>
             <span class="speaker-last">Oct 22</span>
-            <span class="selected-check" aria-label="Selected" hidden></span>
+            <span class="selected-check" aria-hidden="true" hidden>✓</span>
           </button>
           <div class="empty-search" id="empty-search">No speakers match that name.</div>
         </div>
@@ -480,6 +481,11 @@
             <span class="avatar maya" id="detail-avatar">MC</span>
             <div class="detail-name"><h2 id="detail-name">Maya Chen</h2><p id="detail-caption">Matched in your memories</p></div>
             <button class="more-button" id="more-button" type="button" aria-label="More actions">•••</button>
+            <div class="popover" id="speaker-menu" role="menu" aria-label="Speaker actions">
+              <button type="button" data-action="Rename">Rename speaker</button>
+              <button type="button" data-action="Merge into…">Merge into…</button>
+              <button class="danger" type="button" data-action="Delete">Delete speaker</button>
+            </div>
           </div>
           <div class="detail-stats">
             <span class="stat-pill"><strong id="detail-memory-count">7</strong> memories</span>
@@ -524,11 +530,6 @@
         </button>
       </div>
 
-      <div class="popover" id="speaker-menu" role="menu" aria-label="Speaker actions">
-        <button type="button" data-action="Rename">Rename speaker</button>
-        <button type="button" data-action="Merge into…">Merge into…</button>
-        <button class="danger" type="button" data-action="Delete">Delete speaker</button>
-      </div>
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
       <div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <form class="modal" id="speaker-form">
@@ -574,6 +575,7 @@
     let toastTimer;
     let selectedId = "maya";
     let editingName = false;
+    let modalReturnFocus = null;
 
     function showToast(message) {
       toast.textContent = message;
@@ -591,21 +593,18 @@
         item.querySelector(".selected-check").hidden = !selected;
       });
       const avatar = document.getElementById("detail-avatar");
-      avatar.className = `avatar ${selectedId}`;
+      avatar.className = row.querySelector(".avatar").className;
       avatar.textContent = speaker.initials;
       document.getElementById("detail-name").textContent = speaker.name;
       document.getElementById("detail-caption").textContent = speaker.caption;
       document.getElementById("detail-memory-count").textContent = speaker.count;
       document.getElementById("detail-last-heard").textContent = speaker.last;
-      document.querySelectorAll(".memory-copy strong").forEach((item, index) => {
-        item.textContent = index === 0 ? `${speaker.name.split(" ")[0]} · Sunday market walk` : "Planning the garden";
-      });
       stopSample();
     }
 
     rows.forEach(row => row.addEventListener("click", () => selectSpeaker(row)));
-    document.getElementById("speaker-search").addEventListener("input", event => {
-      const query = event.target.value.trim().toLowerCase();
+    function applySearchFilter() {
+      const query = document.getElementById("speaker-search").value.trim().toLowerCase();
       let shown = 0;
       rows.forEach(row => {
         const matches = row.dataset.name.toLowerCase().includes(query);
@@ -613,7 +612,8 @@
         if (matches) shown++;
       });
       document.getElementById("empty-search").style.display = shown ? "none" : "block";
-    });
+    }
+    document.getElementById("speaker-search").addEventListener("input", applySearchFilter);
 
     function stopSample() {
       const button = document.getElementById("sample-button");
@@ -632,8 +632,9 @@
 
     const backdrop = document.getElementById("modal-backdrop");
     const nameInput = document.getElementById("speaker-name");
-    function openModal(edit = false) {
+    function openModal(edit = false, returnFocus = document.activeElement) {
       editingName = edit;
+      modalReturnFocus = returnFocus;
       document.getElementById("modal-title").textContent = edit ? "Rename speaker" : "Add a speaker";
       document.getElementById("modal-copy").textContent = edit
         ? "This name labels a voice in your memories; it is not verified identity."
@@ -642,9 +643,31 @@
       backdrop.classList.add("open");
       nameInput.focus();
     }
-    function closeModal() { backdrop.classList.remove("open"); }
+    function closeModal() {
+      backdrop.classList.remove("open");
+      modalReturnFocus?.focus();
+      modalReturnFocus = null;
+    }
     document.getElementById("add-speaker").addEventListener("click", () => openModal());
     document.getElementById("cancel-modal").addEventListener("click", closeModal);
+    backdrop.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...backdrop.querySelectorAll("button:not([disabled]), input:not([disabled])")];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
     backdrop.addEventListener("click", event => { if (event.target === backdrop) closeModal(); });
     document.getElementById("speaker-form").addEventListener("submit", event => {
       event.preventDefault();
@@ -657,6 +680,7 @@
         row.dataset.name = value;
         row.querySelector(".speaker-info strong").textContent = value;
         document.getElementById("detail-name").textContent = value;
+        applySearchFilter();
         showToast("Speaker renamed.");
       } else {
         const id = `new-${Date.now()}`;
@@ -683,13 +707,14 @@
         const selectedMark = document.createElement("span");
         selectedMark.className = "selected-check";
         selectedMark.hidden = true;
-        selectedMark.setAttribute("aria-label", "Selected");
+        selectedMark.setAttribute("aria-hidden", "true");
         selectedMark.textContent = "✓";
         row.append(avatar, info, lastHeard, selectedMark);
         row.addEventListener("click", () => selectSpeaker(row));
         document.getElementById("speaker-list").insertBefore(row, document.getElementById("empty-search"));
         rows.push(row);
         speakerData[id] = { name: value, initials, count: 0, last: "not yet", caption: "New speaker" };
+        applySearchFilter();
         selectSpeaker(row);
         document.getElementById("speaker-count").textContent = rows.length;
         showToast("Speaker added.");
@@ -697,15 +722,16 @@
       closeModal();
     });
 
-    function doAction(action) {
+    function doAction(action, trigger) {
+      const returnFocus = menu.contains(trigger) ? document.getElementById("more-button") : trigger;
       menu.classList.remove("open");
-      if (action === "Rename") return openModal(true);
+      if (action === "Rename") return openModal(true, returnFocus);
       if (action === "Delete") return showToast("Delete would make linked voices unknown; memories stay.");
       if (action === "Merge into…") return showToast("Choose a destination speaker to merge into.");
       showToast(`${action} for ${speakerData[selectedId].name}.`);
     }
     document.getElementById("more-button").addEventListener("click", () => menu.classList.toggle("open"));
-    document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => doAction(button.dataset.action)));
+    document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", event => doAction(button.dataset.action, event.currentTarget)));
     document.querySelectorAll("[data-toast]").forEach(button => button.addEventListener("click", () => showToast(button.dataset.toast)));
     document.querySelectorAll(".dock-item").forEach(button => button.addEventListener("click", () => {
       document.querySelectorAll(".dock-item").forEach(item => item.removeAttribute("aria-current"));
