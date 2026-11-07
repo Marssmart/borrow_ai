@@ -75,7 +75,7 @@ internal fun SpeakersSection(
     val focusedCardSize = remember(focusedSpeakerOrdinal) { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
     val shadowOutsetPx = with(density) {
-        (SavedMemoriesStateHolder.MEMORY_PANEL_DEFAULT_ELEVATION * 2f).toPx()
+        (SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION * 2f).toPx()
     }
     val focusedCardShown = (state as? SpeakersSectionState.Cards)
         ?.cards?.any { it.ordinal == focusedSpeakerOrdinal } == true
@@ -83,7 +83,7 @@ internal fun SpeakersSection(
     LaunchedEffect(focusedSpeakerOrdinal, focusedCardShown, focusedCardSize.value, shadowOutsetPx) {
         val size = focusedCardSize.value
         if (focusedCardShown && size != IntSize.Zero) {
-            // Include the shadow spill so the detail scroller does not clip it at the viewport edge.
+            // Keep the focused panel's full bounds visible after scrolling.
             focusRequester.bringIntoView(speakerCardBringIntoViewRect(size, shadowOutsetPx))
             onSpeakerFocusHandled()
         }
@@ -138,6 +138,7 @@ private fun SpeakerCardPanel(
 ) {
     AuroraPanel(
         containerColor = Color.White.copy(alpha = SavedMemoriesStateHolder.MEMORY_DETAIL_HEADER_SURFACE_ALPHA),
+        elevation = SavedMemoriesStateHolder.MEMORY_PANEL_FLAT_ELEVATION,
     ) {
         Text(
             speakerLabelText(card.label),
