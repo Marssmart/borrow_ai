@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.26.1]
+
+- Reanalyzed saved speaker results from older analysis versions in the background, consolidating legacy repeated speaker occurrences into multi-sample occurrences while preserving manual links.
+- Updated Android and iOS versioning to 1.26.1 (build 92).
+
 ## [1.26.0]
 
 - Kept up to three playable samples for each speaker occurrence in a recording.

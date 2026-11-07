@@ -13,7 +13,7 @@ enum class SpeakerSkipReason { NOT_ANALYZED, NO_SPEECH }
 const val MAX_SPEAKER_ATTEMPTS = 3
 
 /** Version of the speaker model and clustering that a completed analysis is written with (section 6.1). */
-const val SPEAKER_ANALYSIS_VERSION = 1
+const val SPEAKER_ANALYSIS_VERSION = 2
 
 /** Most embeddings a library speaker keeps. Adding one past the limit drops the oldest (section 6.2). */
 const val MAX_EMBEDDINGS_PER_SPEAKER = 10

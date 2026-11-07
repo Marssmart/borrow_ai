@@ -63,6 +63,7 @@ import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.SpeakerSkipReason
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysisUpdate
 import org.deer.borrowai.data.domain.yieldedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
 import org.deer.borrowai.data.domain.withSpeakerAnalysisReset
@@ -323,6 +324,20 @@ class KotbaseMemoryService private constructor(
             unfinished.size
         }
     }
+
+    override suspend fun requeueOutdatedSpeakerAnalyses(analysisVersion: Int): Either<MemoryError, Int> =
+        mutex.withLock {
+            either {
+                val outdated = withContext(Dispatchers.Default) { readAll() }.bind()
+                    .filter { it.requeuedForSpeakerAnalysisUpdate(analysisVersion) != it }
+                if (outdated.isNotEmpty()) {
+                    writeAndPublish {
+                        outdated.forEach { saveMemory(it.requeuedForSpeakerAnalysisUpdate(analysisVersion)) }
+                    }.bind()
+                }
+                outdated.size
+            }
+        }
 
     override suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
         either {

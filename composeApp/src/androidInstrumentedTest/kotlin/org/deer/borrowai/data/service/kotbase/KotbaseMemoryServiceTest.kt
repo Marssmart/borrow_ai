@@ -642,6 +642,23 @@ class KotbaseMemoryServiceTest {
     }
 
     @Test
+    fun outdatedCompletedSpeakerAnalysesAreRequeuedOnlyOnce() = runTest {
+        val service = openService()
+        val memory = service.create(
+            MemoryDraft("Legacy analysis", "", "x", "recordings/legacy.m4a"),
+            id = "legacy-analysis",
+        ).getOrNull()!!
+        assertTrue(service.completeSpeakerAnalysis(memory.id, analysisVersion = 1).isRight())
+
+        assertEquals(1, service.requeueOutdatedSpeakerAnalyses(analysisVersion = 2).getOrNull())
+        val requeued = service.findById(memory.id).getOrNull()!!
+        assertEquals(SpeakerStatus.PENDING, requeued.speakerStatus)
+        assertEquals(0, requeued.speakerAttempts)
+        assertEquals(1, requeued.speakerAnalysisVersion)
+        assertEquals(0, service.requeueOutdatedSpeakerAnalyses(analysisVersion = 2).getOrNull())
+    }
+
+    @Test
     fun withdrawalResetMakesNoSpeechMemoryEligibleForAnalysisAgain() = runTest {
         val service = openService()
         val memory = service.create(

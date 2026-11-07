@@ -83,6 +83,7 @@ class SpeakerAnalysisRunner(
         if (stopped) return@withLock false
         // Requeued before the checks below, so an interrupted analysis is never stranded while the feature is off.
         if (memoryService.requeueUnfinishedSpeakerAnalyses().isLeft()) return@withLock false
+        if (memoryService.requeueOutdatedSpeakerAnalyses(SPEAKER_ANALYSIS_VERSION).isLeft()) return@withLock false
         if (isRecording()) return@withLock false
         // An unreadable setting is not treated as off. Otherwise a read failure would mark waiting memories SKIPPED.
         val enabled = speakerService.isFeatureEnabled().getOrNull() ?: return@withLock false
