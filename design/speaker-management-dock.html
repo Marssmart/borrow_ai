@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eaf5f4">
+  <title>Speaker library — BorrowAI design concept</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #123b43;
+      --muted: #58777c;
+      --teal: #14757b;
+      --teal-deep: #0e6167;
+      --mist: #eaf5f4;
+      --line: #d7e8e8;
+      --paper: rgba(255, 255, 255, .86);
+      --violet: #7772d8;
+      --shadow: 0 24px 80px rgba(31, 74, 83, .16);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 18% 12%, rgba(86, 181, 174, .19), transparent 35rem),
+        radial-gradient(ellipse at 84% 82%, rgba(119, 114, 216, .15), transparent 36rem),
+        linear-gradient(145deg, #f3f8f6, #e1edf2 58%, #e8e9f7);
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .layout {
+      width: min(1120px, calc(100% - 48px));
+      min-height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(330px, 430px) minmax(300px, 1fr);
+      align-items: center;
+      gap: clamp(44px, 9vw, 120px);
+      padding: 46px 0;
+    }
+
+    .phone {
+      width: min(100%, 402px);
+      height: 852px;
+      justify-self: center;
+      overflow: hidden;
+      position: relative;
+      border: 8px solid rgba(255, 255, 255, .86);
+      border-radius: 48px;
+      background:
+        radial-gradient(circle at 98% 0%, rgba(88, 181, 174, .25), transparent 19rem),
+        radial-gradient(circle at 0% 85%, rgba(133, 137, 224, .13), transparent 20rem),
+        linear-gradient(150deg, #edf6f4 0%, #e3eff2 53%, #ebecf8 100%);
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,255,255,.9);
+    }
+
+    .status {
+      height: 37px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1px 24px 0;
+      font-size: 12px;
+      font-weight: 720;
+      letter-spacing: .01em;
+    }
+
+    .status-right { display: flex; align-items: center; gap: 6px; }
+    .signal { display: flex; align-items: end; gap: 2px; height: 12px; }
+    .signal i { width: 3px; border-radius: 2px; background: var(--ink); }
+    .signal i:nth-child(1) { height: 4px; }
+    .signal i:nth-child(2) { height: 7px; }
+    .signal i:nth-child(3) { height: 10px; }
+    .signal i:nth-child(4) { height: 12px; }
+    .battery { width: 18px; height: 9px; border: 1.4px solid var(--ink); border-radius: 3px; position: relative; }
+    .battery::before { content: ""; position: absolute; inset: 1.5px 3px 1.5px 1.5px; border-radius: 1px; background: var(--teal); }
+    .battery::after { content: ""; position: absolute; right: -3px; top: 2px; width: 2px; height: 4px; border-radius: 0 2px 2px 0; background: var(--ink); }
+
+    .screen-scroll {
+      height: calc(100% - 122px);
+      overflow: auto;
+      padding: 13px 20px 24px;
+      scrollbar-width: none;
+    }
+    .screen-scroll::-webkit-scrollbar { display: none; }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+    .eyebrow {
+      color: var(--teal);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .round-button {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,.9);
+      border-radius: 50%;
+      background: rgba(255,255,255,.66);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .round-button:hover, .round-button:focus-visible { background: white; outline: 2px solid rgba(20,117,123,.22); }
+    h1 {
+      margin: 0;
+      font-size: 29px;
+      line-height: 1.12;
+      letter-spacing: -.045em;
+      font-weight: 760;
+    }
+    .subtitle { margin: 5px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .overview {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 12px;
+      padding: 11px 12px;
+      border: 1px solid rgba(255,255,255,.85);
+      border-radius: 18px;
+      background: rgba(255,255,255,.57);
+    }
+    .count { display: flex; align-items: baseline; gap: 7px; }
+    .count strong { font-size: 20px; letter-spacing: -.04em; }
+    .count span { color: var(--muted); font-size: 11px; }
+    .private-note { color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+    .search-row { display: flex; gap: 9px; margin-bottom: 13px; }
+    .search {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 12px;
+      border: 1px solid rgba(255,255,255,.9);
+      border-radius: 14px;
+      background: rgba(255,255,255,.75);
+      color: #769297;
+    }
+    .search input { width: 100%; padding: 11px 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 12px; }
+    .search input::placeholder { color: #81999d; }
+    .add-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--teal);
+      box-shadow: 0 5px 13px rgba(20,117,123,.17);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .add-button:hover { background: var(--teal-deep); }
+
+    .section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 16px 1px 8px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .section-label small { font-size: 10px; font-weight: 550; letter-spacing: 0; text-transform: none; }
+
+    .speaker-list { display: grid; gap: 7px; }
+    .speaker-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border: 1px solid rgba(255,255,255,.88);
+      border-radius: 16px;
+      background: rgba(255,255,255,.68);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    .speaker-row:hover { transform: translateY(-1px); }
+    .speaker-row[aria-pressed="true"] {
+      border-color: rgba(20,117,123,.36);
+      background: rgba(255,255,255,.97);
+      box-shadow: 0 5px 15px rgba(38,95,101,.08);
+    }
+    .avatar {
+      width: 37px;
+      height: 37px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 13px;
+      color: white;
+      font-size: 11px;
+      font-weight: 760;
+      letter-spacing: .02em;
+    }
+    .avatar.maya { background: linear-gradient(145deg, #16848a, #125c68); }
+    .avatar.daniel { background: linear-gradient(145deg, #6354cd, #4338ca); }
+    .avatar.sofia { background: linear-gradient(145deg, #da7c57, #9a3412); }
+    .avatar.noah { background: linear-gradient(145deg, #30986a, #15803d); }
+    .speaker-info { min-width: 0; flex: 1; }
+    .speaker-info strong { display: block; overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .speaker-info span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .speaker-last { color: #789195; font-size: 9px; white-space: nowrap; }
+    .selected-check { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: #e3f2f1; color: var(--teal); }
+
+    .detail-card {
+      margin-top: 12px;
+      padding: 13px;
+      border: 1px solid rgba(255,255,255,.96);
+      border-radius: 21px;
+      background: var(--paper);
+      box-shadow: 0 9px 24px rgba(43,91,99,.07);
+    }
+    .detail-heading { display: flex; align-items: center; gap: 10px; }
+    .detail-heading .avatar { width: 43px; height: 43px; border-radius: 15px; }
+    .detail-name { min-width: 0; flex: 1; }
+    .detail-name h2 { margin: 0; font-size: 16px; line-height: 1.2; letter-spacing: -.025em; }
+    .detail-name p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+    .more-button { width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: #668489; cursor: pointer; }
+    .more-button:hover { background: #edf5f4; }
+
+    .detail-stats { display: flex; align-items: center; gap: 8px; margin: 12px 0 10px; }
+    .stat-pill { display: flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid #e3eeee; border-radius: 10px; background: #f7fbfa; color: #4a6d72; font-size: 9px; }
+    .stat-pill strong { color: var(--ink); font-size: 10px; }
+    .sample-button {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 10px;
+      border: 1px solid #d5e9e7;
+      border-radius: 13px;
+      background: linear-gradient(100deg, #f0f9f7, #f7f8ff);
+      color: var(--teal-deep);
+      text-align: left;
+      cursor: pointer;
+    }
+    .play-circle { width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--teal); color: white; }
+    .sample-copy { min-width: 0; flex: 1; }
+    .sample-copy strong { display: block; font-size: 10px; }
+    .sample-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .wave { height: 20px; display: flex; align-items: center; gap: 2px; opacity: .8; }
+    .wave i { width: 2px; height: var(--h); border-radius: 2px; background: #62a9a8; }
+    .wave.playing i { animation: pulse .6s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -65ms); }
+    @keyframes pulse { to { transform: scaleY(.42); opacity: .56; } }
+
+    .detail-actions { display: flex; gap: 7px; margin-top: 9px; }
+    .action {
+      flex: 1;
+      padding: 8px 7px;
+      border: 1px solid #e1ecec;
+      border-radius: 11px;
+      background: rgba(255,255,255,.75);
+      color: #355d62;
+      font-size: 9px;
+      font-weight: 680;
+      cursor: pointer;
+    }
+    .action:hover { border-color: #aacdce; background: white; }
+
+    .recent-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 7px; }
+    .recent-head strong { font-size: 11px; }
+    .recent-head button { padding: 0; border: 0; background: none; color: var(--teal); font-size: 9px; font-weight: 700; cursor: pointer; }
+    .memory-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-top: 1px solid #e9f0ef; }
+    .memory-icon { width: 29px; height: 29px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #edf5f5; color: var(--teal); }
+    .memory-copy { min-width: 0; flex: 1; }
+    .memory-copy strong { display: block; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .memory-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .tiny-play { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid #dcebea; border-radius: 50%; background: white; color: var(--teal); cursor: pointer; }
+
+    .empty-search { display: none; padding: 15px 8px; color: var(--muted); text-align: center; font-size: 11px; }
+
+    .dock {
+      position: absolute;
+      right: 15px;
+      bottom: 11px;
+      left: 15px;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.92);
+      border-radius: 23px;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 8px 22px rgba(34,76,84,.13);
+      backdrop-filter: blur(18px);
+    }
+    .dock-item {
+      min-width: 0;
+      height: 47px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border: 0;
+      border-radius: 17px;
+      background: transparent;
+      color: #58777c;
+      font-size: 9px;
+      font-weight: 630;
+      cursor: pointer;
+    }
+    .dock-item svg { width: 18px; height: 18px; }
+    .dock-item[aria-current="page"] { background: #e4f2f3; color: var(--teal); font-weight: 760; }
+    .dock-item:hover:not([aria-current="page"]) { background: #f4f8f7; }
+
+    .rationale { max-width: 490px; }
+    .rationale .eyebrow { margin-bottom: 13px; }
+    .rationale h2 { max-width: 450px; margin: 0; font-size: clamp(30px, 4vw, 46px); line-height: 1.04; letter-spacing: -.055em; }
+    .rationale-intro { max-width: 450px; margin: 16px 0 27px; color: #47656b; font-size: 15px; line-height: 1.65; }
+    .decision-list { display: grid; gap: 15px; }
+    .decision { display: grid; grid-template-columns: 35px 1fr; gap: 12px; align-items: start; }
+    .decision-number { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid rgba(20,117,123,.17); border-radius: 11px; background: rgba(255,255,255,.54); color: var(--teal); font-size: 11px; font-weight: 800; }
+    .decision h3 { margin: 1px 0 4px; font-size: 13px; }
+    .decision p { margin: 0; color: #58777c; font-size: 12px; line-height: 1.55; }
+    .concept-note { margin-top: 25px; padding-top: 14px; border-top: 1px solid rgba(18,59,67,.12); color: #6a8589; font-size: 10px; line-height: 1.5; }
+
+    .toast {
+      position: absolute;
+      z-index: 5;
+      right: 22px;
+      bottom: 87px;
+      left: 22px;
+      padding: 11px 14px;
+      border: 1px solid rgba(255,255,255,.9);
+      border-radius: 13px;
+      background: #123b43;
+      box-shadow: 0 6px 22px rgba(18,59,67,.18);
+      color: white;
+      font-size: 11px;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+    .popover {
+      position: absolute;
+      z-index: 4;
+      right: 17px;
+      top: 321px;
+      display: none;
+      width: 147px;
+      padding: 5px;
+      border: 1px solid rgba(255,255,255,.95);
+      border-radius: 14px;
+      background: white;
+      box-shadow: 0 9px 28px rgba(18,59,67,.18);
+    }
+    .popover.open { display: grid; }
+    .popover button { padding: 9px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); text-align: left; font-size: 10px; cursor: pointer; }
+    .popover button:hover { background: #eff6f5; }
+    .popover .danger { color: #a63c51; }
+
+    .modal-backdrop { position: absolute; z-index: 6; inset: 0; display: none; place-items: center; padding: 24px; background: rgba(13,42,47,.34); backdrop-filter: blur(4px); }
+    .modal-backdrop.open { display: grid; }
+    .modal { width: 100%; padding: 19px; border: 1px solid rgba(255,255,255,.9); border-radius: 23px; background: #fbfdfc; box-shadow: 0 20px 60px rgba(18,59,67,.24); }
+    .modal h2 { margin: 0; font-size: 18px; letter-spacing: -.03em; }
+    .modal p { margin: 7px 0 14px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .modal input { width: 100%; padding: 11px 12px; border: 1px solid #c9dedd; border-radius: 12px; outline-color: var(--teal); background: white; font-size: 12px; }
+    .modal-actions { display: flex; justify-content: end; gap: 8px; margin-top: 15px; }
+    .modal-actions button { padding: 9px 13px; border: 1px solid #d7e7e6; border-radius: 11px; background: white; color: #45676c; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .modal-actions .primary { border-color: var(--teal); background: var(--teal); color: white; }
+
+    @media (max-width: 760px) {
+      .layout { width: 100%; min-height: 100vh; display: block; padding: 0; }
+      .phone { width: 100%; max-width: 430px; height: min(920px, 100dvh); min-height: 760px; margin: 0 auto; border: 0; border-radius: 0; }
+      .screen-scroll { height: calc(100% - 122px); padding: 13px 20px 24px; }
+      .rationale { max-width: 430px; margin: 36px auto 0; padding: 0 22px 40px; }
+      .rationale h2 { font-size: 32px; }
+    }
+    @media (max-width: 390px) {
+      .screen-scroll { padding-right: 15px; padding-left: 15px; }
+      .private-note { font-size: 9px; }
+      .layout { overflow: hidden; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="phone" aria-label="Interactive BorrowAI speaker library mockup">
+      <div class="status" aria-hidden="true">
+        <span>9:41</span>
+        <span class="status-right"><span class="signal"><i></i><i></i><i></i><i></i></span><span>◉</span><span class="battery"></span></span>
+      </div>
+      <div class="screen-scroll">
+        <header>
+          <div class="topline">
+            <span class="eyebrow">VOICE LIBRARY</span>
+            <button class="round-button" type="button" aria-label="Recognition settings" data-toast="Recognition settings stay in Settings.">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" stroke="currentColor" stroke-width="1.7"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 0 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 0 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 0 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 0 1 3.6 0v.2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 0 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 0 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <h1>Speakers</h1>
+          <p class="subtitle">The voices you’ve named across your memories.</p>
+        </header>
+
+        <div class="overview">
+          <div class="count"><strong id="speaker-count">4</strong><span>named voices</span></div>
+          <div class="private-note">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 10V7a6 6 0 0 1 12 0v3M5 10h14v11H5V10Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 14v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            On-device voice samples
+          </div>
+        </div>
+
+        <div class="search-row">
+          <label class="search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.4" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input id="speaker-search" type="search" placeholder="Find a speaker" aria-label="Find a speaker">
+          </label>
+          <button class="add-button" type="button" id="add-speaker"><span aria-hidden="true">＋</span> Add</button>
+        </div>
+
+        <div class="section-label"><span>People</span><small>Tap a voice to manage</small></div>
+        <div class="speaker-list" id="speaker-list">
+          <button class="speaker-row" type="button" data-name="Maya Chen" data-id="maya" aria-pressed="true">
+            <span class="avatar maya">MC</span>
+            <span class="speaker-info"><strong>Maya Chen</strong><span>7 linked memories</span></span>
+            <span class="speaker-last">Today</span>
+            <span class="selected-check" aria-label="Selected"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="m3.3 8.2 3 3 6.4-6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </button>
+          <button class="speaker-row" type="button" data-name="Daniel Brooks" data-id="daniel" aria-pressed="false">
+            <span class="avatar daniel">DB</span>
+            <span class="speaker-info"><strong>Daniel Brooks</strong><span>4 linked memories</span></span>
+            <span class="speaker-last">Yesterday</span>
+            <span class="selected-check" aria-label="Selected" hidden></span>
+          </button>
+          <button class="speaker-row" type="button" data-name="Sofia Reyes" data-id="sofia" aria-pressed="false">
+            <span class="avatar sofia">SR</span>
+            <span class="speaker-info"><strong>Sofia Reyes</strong><span>2 linked memories</span></span>
+            <span class="speaker-last">Oct 30</span>
+            <span class="selected-check" aria-label="Selected" hidden></span>
+          </button>
+          <button class="speaker-row" type="button" data-name="Noah Kim" data-id="noah" aria-pressed="false">
+            <span class="avatar noah">NK</span>
+            <span class="speaker-info"><strong>Noah Kim</strong><span>1 linked memory</span></span>
+            <span class="speaker-last">Oct 22</span>
+            <span class="selected-check" aria-label="Selected" hidden></span>
+          </button>
+          <div class="empty-search" id="empty-search">No speakers match that name.</div>
+        </div>
+
+        <section class="detail-card" aria-live="polite">
+          <div class="detail-heading">
+            <span class="avatar maya" id="detail-avatar">MC</span>
+            <div class="detail-name"><h2 id="detail-name">Maya Chen</h2><p id="detail-caption">Matched in your memories</p></div>
+            <button class="more-button" id="more-button" type="button" aria-label="More actions">•••</button>
+          </div>
+          <div class="detail-stats">
+            <span class="stat-pill"><strong id="detail-memory-count">7</strong> memories</span>
+            <span class="stat-pill">Last heard <strong id="detail-last-heard">today</strong></span>
+          </div>
+          <button class="sample-button" id="sample-button" type="button" aria-pressed="false">
+            <span class="play-circle" id="play-symbol"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.1c0-.7.8-1.1 1.4-.7l6.1 4.1a.9.9 0 0 1 0 1.5l-6.1 4.1c-.6.4-1.4 0-1.4-.7V3.1Z"/></svg></span>
+            <span class="sample-copy"><strong>Listen to voice sample</strong><span>Preview a clip from a linked memory</span></span>
+            <span class="wave" id="wave" aria-hidden="true"><i style="--h:6px;--i:1"></i><i style="--h:13px;--i:2"></i><i style="--h:8px;--i:3"></i><i style="--h:17px;--i:4"></i><i style="--h:10px;--i:5"></i><i style="--h:14px;--i:6"></i><i style="--h:7px;--i:7"></i><i style="--h:12px;--i:8"></i></span>
+          </button>
+          <div class="detail-actions">
+            <button class="action" type="button" data-action="Rename">Rename</button>
+            <button class="action" type="button" data-action="Merge into…">Merge</button>
+            <button class="action" type="button" data-action="More actions">More</button>
+          </div>
+          <div class="recent-head"><strong>Recent memories</strong><button type="button" data-toast="Opening Maya’s memories in Saved Memories.">See all →</button></div>
+          <div class="memory-row">
+            <span class="memory-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 7.5h15v12h-15zM8 4.5v3M16 4.5v3M4.5 11h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="memory-copy"><strong>Sunday market walk</strong><span>Today · Speaker 1 · 0:08 sample</span></span>
+            <button class="tiny-play" type="button" aria-label="Play sample from Sunday market walk" data-sample>▶</button>
+          </div>
+          <div class="memory-row">
+            <span class="memory-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 7.5h15v12h-15zM8 4.5v3M16 4.5v3M4.5 11h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="memory-copy"><strong>Planning the garden</strong><span>Nov 3 · Speaker 2 · 0:11 sample</span></span>
+            <button class="tiny-play" type="button" aria-label="Play sample from Planning the garden" data-sample>▶</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="dock" role="navigation" aria-label="Main navigation">
+        <button class="dock-item" type="button" data-destination="Capture" aria-label="Record">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.7" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.1" fill="currentColor"/></svg><span>Record</span>
+        </button>
+        <button class="dock-item" type="button" data-destination="Memories">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="6" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="18" r="1.2" fill="currentColor"/><path d="M9 6h10M9 12h10M9 18h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Memories</span>
+        </button>
+        <button class="dock-item" type="button" data-destination="Speakers" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 19c.6-3 2.4-4.5 5.5-4.5s4.9 1.5 5.5 4.5M16 5.5a3 3 0 0 1 0 5.8M16.5 14.5c2.4.4 3.8 1.9 4.2 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Speakers</span>
+        </button>
+        <button class="dock-item" type="button" data-destination="Settings">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.7"/><path d="M19.2 13.8a1.5 1.5 0 0 0 .3 1.7l.1.1-1.8 1.8-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2h-2.6v-.2a1.5 1.5 0 0 0-.9-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1L8 15.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9h-.2v-2.6H7a1.5 1.5 0 0 0 1.4-.9A1.5 1.5 0 0 0 8.1 7l-.1-.1L9.8 5l.1.1a1.5 1.5 0 0 0 1.7.3 1.5 1.5 0 0 0 .9-1.4v-.2h2.6V4a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1 1.8 1.8-.1.1a1.5 1.5 0 0 0-.3 1.7 1.5 1.5 0 0 0 1.4.9h.2v2.6h-.2a1.5 1.5 0 0 0-1.4 1.7Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span>Settings</span>
+        </button>
+      </div>
+
+      <div class="popover" id="speaker-menu" role="menu" aria-label="Speaker actions">
+        <button type="button" data-action="Rename">Rename speaker</button>
+        <button type="button" data-action="Merge into…">Merge into…</button>
+        <button class="danger" type="button" data-action="Delete">Delete speaker</button>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <form class="modal" id="speaker-form">
+          <h2 id="modal-title">Add a speaker</h2>
+          <p id="modal-copy">Give this voice a name. You can rename, merge, or remove it later.</p>
+          <input id="speaker-name" maxlength="40" autocomplete="off" placeholder="Speaker name" aria-label="Speaker name">
+          <div class="modal-actions"><button type="button" id="cancel-modal">Cancel</button><button type="submit" class="primary" id="save-speaker">Save</button></div>
+        </form>
+      </div>
+    </section>
+
+    <aside class="rationale">
+      <div class="eyebrow">BorrowAI · navigation concept</div>
+      <h2>Make voices as easy to revisit as memories.</h2>
+      <p class="rationale-intro">A dedicated Speakers destination gives voice identity a clear home without interrupting recording or burying everyday management inside Settings.</p>
+      <div class="decision-list">
+        <article class="decision">
+          <span class="decision-number">01</span>
+          <div><h3>Four peer destinations</h3><p>Keep Record and Memories in their current dock positions; add Speakers beside them, with Settings remaining the home for consent, availability, and model setup.</p></div>
+        </article>
+        <article class="decision">
+          <span class="decision-number">02</span>
+          <div><h3>Library first, detail in context</h3><p>Search and select a named voice in place. Its sample, linked-memory count, recent recordings, rename, and merge actions are immediately visible—no hidden settings route.</p></div>
+        </article>
+        <article class="decision">
+          <span class="decision-number">03</span>
+          <div><h3>Make voice data legible</h3><p>Show local-only sample handling near the library, and use linked memories as the path back to context. Naming a voice remains a label, not a claim of verified identity.</p></div>
+        </article>
+      </div>
+      <p class="concept-note">Visual direction follows the existing BorrowAI light palette, teal accent, soft translucent panels, rounded floating dock, and the current speaker color family. The prototype is interactive; actions are illustrative and do not modify app data.</p>
+    </aside>
+  </main>
+  <script>
+    const speakerData = {
+      maya: { name: "Maya Chen", initials: "MC", count: 7, last: "today", caption: "Matched in your memories" },
+      daniel: { name: "Daniel Brooks", initials: "DB", count: 4, last: "yesterday", caption: "Assigned by you" },
+      sofia: { name: "Sofia Reyes", initials: "SR", count: 2, last: "Oct 30", caption: "Matched in your memories" },
+      noah: { name: "Noah Kim", initials: "NK", count: 1, last: "Oct 22", caption: "Assigned by you" }
+    };
+    const rows = [...document.querySelectorAll(".speaker-row")];
+    const toast = document.getElementById("toast");
+    const menu = document.getElementById("speaker-menu");
+    let toastTimer;
+    let selectedId = "maya";
+    let editingName = false;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("visible");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("visible"), 2100);
+    }
+
+    function selectSpeaker(row) {
+      selectedId = row.dataset.id;
+      const speaker = speakerData[selectedId];
+      rows.forEach(item => {
+        const selected = item === row;
+        item.setAttribute("aria-pressed", String(selected));
+        item.querySelector(".selected-check").hidden = !selected;
+      });
+      const avatar = document.getElementById("detail-avatar");
+      avatar.className = `avatar ${selectedId}`;
+      avatar.textContent = speaker.initials;
+      document.getElementById("detail-name").textContent = speaker.name;
+      document.getElementById("detail-caption").textContent = speaker.caption;
+      document.getElementById("detail-memory-count").textContent = speaker.count;
+      document.getElementById("detail-last-heard").textContent = speaker.last;
+      document.querySelectorAll(".memory-copy strong").forEach((item, index) => {
+        item.textContent = index === 0 ? `${speaker.name.split(" ")[0]} · Sunday market walk` : "Planning the garden";
+      });
+      stopSample();
+    }
+
+    rows.forEach(row => row.addEventListener("click", () => selectSpeaker(row)));
+    document.getElementById("speaker-search").addEventListener("input", event => {
+      const query = event.target.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach(row => {
+        const matches = row.dataset.name.toLowerCase().includes(query);
+        row.hidden = !matches;
+        if (matches) shown++;
+      });
+      document.getElementById("empty-search").style.display = shown ? "none" : "block";
+    });
+
+    function stopSample() {
+      const button = document.getElementById("sample-button");
+      button.setAttribute("aria-pressed", "false");
+      document.getElementById("wave").classList.remove("playing");
+      document.getElementById("play-symbol").innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.1c0-.7.8-1.1 1.4-.7l6.1 4.1a.9.9 0 0 1 0 1.5l-6.1 4.1c-.6.4-1.4 0-1.4-.7V3.1Z"/></svg>';
+    }
+    document.getElementById("sample-button").addEventListener("click", () => {
+      const button = document.getElementById("sample-button");
+      const playing = button.getAttribute("aria-pressed") !== "true";
+      button.setAttribute("aria-pressed", String(playing));
+      document.getElementById("wave").classList.toggle("playing", playing);
+      document.getElementById("play-symbol").innerHTML = playing ? "Ⅱ" : '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.1c0-.7.8-1.1 1.4-.7l6.1 4.1a.9.9 0 0 1 0 1.5l-6.1 4.1c-.6.4-1.4 0-1.4-.7V3.1Z"/></svg>';
+    });
+    document.querySelectorAll("[data-sample]").forEach(button => button.addEventListener("click", () => showToast("Playing a sample from this memory.")));
+
+    const backdrop = document.getElementById("modal-backdrop");
+    const nameInput = document.getElementById("speaker-name");
+    function openModal(edit = false) {
+      editingName = edit;
+      document.getElementById("modal-title").textContent = edit ? "Rename speaker" : "Add a speaker";
+      document.getElementById("modal-copy").textContent = edit
+        ? "This name labels a voice in your memories; it is not verified identity."
+        : "Give this voice a name. You can rename, merge, or remove it later.";
+      nameInput.value = edit ? speakerData[selectedId].name : "";
+      backdrop.classList.add("open");
+      nameInput.focus();
+    }
+    function closeModal() { backdrop.classList.remove("open"); }
+    document.getElementById("add-speaker").addEventListener("click", () => openModal());
+    document.getElementById("cancel-modal").addEventListener("click", closeModal);
+    backdrop.addEventListener("click", event => { if (event.target === backdrop) closeModal(); });
+    document.getElementById("speaker-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const value = nameInput.value.trim();
+      if (!value) return;
+      if (editingName) {
+        const speaker = speakerData[selectedId];
+        speaker.name = value;
+        const row = rows.find(item => item.dataset.id === selectedId);
+        row.dataset.name = value;
+        row.querySelector(".speaker-info strong").textContent = value;
+        document.getElementById("detail-name").textContent = value;
+        showToast("Speaker renamed.");
+      } else {
+        const id = `new-${Date.now()}`;
+        const row = document.createElement("button");
+        row.className = "speaker-row";
+        row.type = "button";
+        row.dataset.name = value;
+        row.dataset.id = id;
+        row.setAttribute("aria-pressed", "false");
+        const initials = value.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+        const avatar = document.createElement("span");
+        avatar.className = "avatar maya";
+        avatar.textContent = initials;
+        const info = document.createElement("span");
+        info.className = "speaker-info";
+        const speakerName = document.createElement("strong");
+        speakerName.textContent = value;
+        const speakerStatus = document.createElement("span");
+        speakerStatus.textContent = "New speaker";
+        info.append(speakerName, speakerStatus);
+        const lastHeard = document.createElement("span");
+        lastHeard.className = "speaker-last";
+        lastHeard.textContent = "Just now";
+        const selectedMark = document.createElement("span");
+        selectedMark.className = "selected-check";
+        selectedMark.hidden = true;
+        selectedMark.setAttribute("aria-label", "Selected");
+        selectedMark.textContent = "✓";
+        row.append(avatar, info, lastHeard, selectedMark);
+        row.addEventListener("click", () => selectSpeaker(row));
+        document.getElementById("speaker-list").insertBefore(row, document.getElementById("empty-search"));
+        rows.push(row);
+        speakerData[id] = { name: value, initials, count: 0, last: "not yet", caption: "New speaker" };
+        selectSpeaker(row);
+        document.getElementById("speaker-count").textContent = rows.length;
+        showToast("Speaker added.");
+      }
+      closeModal();
+    });
+
+    function doAction(action) {
+      menu.classList.remove("open");
+      if (action === "Rename") return openModal(true);
+      if (action === "Delete") return showToast("Delete would make linked voices unknown; memories stay.");
+      if (action === "Merge into…") return showToast("Choose a destination speaker to merge into.");
+      showToast(`${action} for ${speakerData[selectedId].name}.`);
+    }
+    document.getElementById("more-button").addEventListener("click", () => menu.classList.toggle("open"));
+    document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => doAction(button.dataset.action)));
+    document.querySelectorAll("[data-toast]").forEach(button => button.addEventListener("click", () => showToast(button.dataset.toast)));
+    document.querySelectorAll(".dock-item").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll(".dock-item").forEach(item => item.removeAttribute("aria-current"));
+      button.setAttribute("aria-current", "page");
+      const destination = button.dataset.destination;
+      if (destination !== "Speakers") showToast(`${destination} remains a peer destination in the dock.`);
+    }));
+    document.addEventListener("click", event => {
+      if (!menu.contains(event.target) && event.target.id !== "more-button" && !event.target.matches(".action")) menu.classList.remove("open");
+    });
+  </script>
+</body>
+</html>
