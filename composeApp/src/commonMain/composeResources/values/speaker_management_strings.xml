@@ -1,5 +1,4 @@
 <resources>
-    <string name="settings_speaker_manage_speakers">Manage speakers</string>
     <string name="speaker_management_title">Speakers</string>
     <string name="speaker_management_close">Close speakers</string>
     <string name="speaker_management_back">Back to speakers</string>

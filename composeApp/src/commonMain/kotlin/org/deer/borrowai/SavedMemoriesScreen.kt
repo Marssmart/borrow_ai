@@ -131,6 +131,7 @@ internal fun SavedMemoriesScreen(
     onGoToRecord: () -> Unit,
     onEditingChanged: (Boolean) -> Unit,
     onOpenSettings: () -> Unit,
+    speakerFeatureEnabled: Boolean,
     speakerManagementRequest: SpeakerManagementRequest?,
     onOpenSpeakerManagement: (SpeakerManagementRequest) -> Unit,
     onCloseSpeakerManagement: () -> Unit,
@@ -260,6 +261,7 @@ internal fun SavedMemoriesScreen(
                     onToggleCategory = stateHolder::toggleCategory,
                     onClearCategoryFilters = stateHolder::clearCategoryFilters,
                     showEmptyState = uiState.showsEmptyMemories,
+                    speakerFeatureEnabled = speakerFeatureEnabled,
                     headingFocus = headingFocus,
                     onGoToRecord = onGoToRecord,
                 )
@@ -291,6 +293,7 @@ internal fun SavedMemoriesScreen(
                         onDelete = { stateHolder.deleteFromDetail(memory.id) },
                         onEdit = { editingMemoryId = memory.id },
                         showTranscriptBanner = uiState.transcriptChangedMemoryId == memory.id,
+                        speakerFeatureEnabled = speakerFeatureEnabled,
                         summaryWrittenByUser = memory.summaryEditedByUser,
                         categoriesChosenByUser = memory.categoriesEditedByUser,
                         onWriteSummary = { stateHolder.requestNewSummary(memory.id) },
@@ -334,7 +337,7 @@ internal fun SavedMemoriesScreen(
         val speakerUndoLabel = stringResource(Res.string.speaker_management_undo)
         val speakerUndoFailedMessage = stringResource(Res.string.speaker_management_undo_failed)
         val speakerOccurrenceUnavailableMessage = stringResource(Res.string.speaker_management_missing_occurrence)
-        speakerManagementRequest?.let { request ->
+        if (speakerFeatureEnabled) speakerManagementRequest?.let { request ->
             SpeakerManagementScreen(
                 speakers = services.speakers,
                 memories = services.memories,
@@ -455,6 +458,7 @@ private fun MemoryListScreen(
     onToggleCategory: (Int) -> Unit,
     onClearCategoryFilters: () -> Unit,
     showEmptyState: Boolean,
+    speakerFeatureEnabled: Boolean,
     headingFocus: FocusRequester,
     onGoToRecord: () -> Unit,
     noResults: MemoryNoResults?,
@@ -475,7 +479,7 @@ private fun MemoryListScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
-            if (speakerRecognitionSupported) {
+            if (speakerFeatureEnabled) {
                 TextButton(onClick = onOpenSpeakerManagement) {
                     Text(stringResource(Res.string.speaker_management_title))
                 }
@@ -541,6 +545,7 @@ private fun MemoryListScreen(
                     playingContent = playingTarget?.takeIf { it.memoryId == memory.id }?.content,
                     playbackControlsAvailable = playbackControlsAvailable,
                     speakerChips = speakerChips[memory.id],
+                    speakerFeatureEnabled = speakerFeatureEnabled,
                     onOpen = { onOpenMemory(memory.id) },
                     onOpenSpeaker = { ordinal -> onOpenMemoryAtSpeaker(memory.id, ordinal) },
                     onPlayRecording = { onPlayRecording(memory.id) },
@@ -561,6 +566,7 @@ private fun MemoryCard(
     playingContent: PlaybackContent?,
     playbackControlsAvailable: Boolean,
     speakerChips: SpeakerChipsState?,
+    speakerFeatureEnabled: Boolean,
     onOpen: () -> Unit,
     onOpenSpeaker: (Int?) -> Unit,
     onPlayRecording: () -> Unit,
@@ -671,7 +677,7 @@ private fun MemoryCard(
                     showIcon = true,
                 )
             }
-            if (speakerRecognitionSupported) {
+            if (speakerFeatureEnabled) {
                 speakerChips?.let { SpeakerChipsRow(state = it, onOpenSpeaker = onOpenSpeaker) }
             }
             if (memory.transcription.isNotBlank()) {
@@ -714,6 +720,7 @@ private fun MemoryDetailScreen(
     showTranscriptBanner: Boolean,
     summaryWrittenByUser: Boolean,
     categoriesChosenByUser: Boolean,
+    speakerFeatureEnabled: Boolean,
     onWriteSummary: () -> Unit,
     onSuggestCategories: () -> Unit,
     onDismissTranscriptBanner: () -> Unit,
@@ -821,7 +828,7 @@ private fun MemoryDetailScreen(
                     )
                 }
             }
-            if (speakerRecognitionSupported) {
+            if (speakerFeatureEnabled) {
                 SpeakersSection(
                     memory = memory,
                     speakers = services.speakers,

@@ -4,6 +4,12 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.26.3]
+
+- Added a conditional Speakers destination to the bottom dock, with speaker recognition controls remaining in Settings.
+- Hid speaker controls, chips, and memory detail sections when speaker recognition is disabled.
+- Updated Android and iOS versioning to 1.26.3 (build 94).
+
 ## [1.26.2]
 
 - Added a standalone visual proposal for a first-class Speakers destination in the bottom dock.
