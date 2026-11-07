@@ -368,6 +368,24 @@ fun Memory.requeuedForSpeakerAnalysis(): Memory {
     )
 }
 
+/** Requeues a completed analysis written by an older version, preserving its occurrences for link-history matching. */
+fun Memory.requeuedForSpeakerAnalysisUpdate(analysisVersion: Int): Memory =
+    if (
+        deleted ||
+        recordingPath == null ||
+        speakerStatus != SpeakerStatus.DONE ||
+        (speakerAnalysisVersion != null && speakerAnalysisVersion >= analysisVersion)
+    ) {
+        this
+    } else {
+        copy(
+            speakerStatus = SpeakerStatus.PENDING,
+            speakerAttempts = 0,
+            lastSpeakerError = null,
+            speakerSkipReason = null,
+        )
+    }
+
 /** Returns a live analysis claim to PENDING when it yields to recording, without charging an attempt. */
 fun Memory.yieldedForSpeakerAnalysis(): Memory =
     if (speakerStatus != SpeakerStatus.ANALYZING) this else copy(

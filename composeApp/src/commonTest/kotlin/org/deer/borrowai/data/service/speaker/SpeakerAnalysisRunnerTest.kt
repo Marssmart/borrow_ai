@@ -95,6 +95,63 @@ class SpeakerAnalysisRunnerTest {
     }
 
     @Test
+    fun outdatedCompletedAnalysisIsRebuiltAndCombinesRepeatedSpeakerOccurrences() = runTest {
+        val memories = memories()
+        val speakers = FakeSpeakerService(enabled = true)
+        val alice = speakers.createSpeaker("Alice").getOrNull()!!
+        val memory = memories.addAudioMemory("legacy")
+        memories.completeSpeakerAnalysis(memory.id, analysisVersion = 1)
+        speakers.replaceOccurrences(
+            memoryId = memory.id,
+            modelVersion = 1,
+            drafts = listOf(
+                OccurrenceDraft(
+                    ordinal = 1,
+                    speakerId = alice.id,
+                    link = SpeakerLink.MANUAL,
+                    totalSpeechMs = 4_000L,
+                    sampleStartMs = 0L,
+                    sampleEndMs = 4_000L,
+                    centroid = floatArrayOf(1f, 0f, 0f, 0f),
+                ),
+                OccurrenceDraft(
+                    ordinal = 2,
+                    speakerId = alice.id,
+                    link = SpeakerLink.MANUAL,
+                    totalSpeechMs = 4_000L,
+                    sampleStartMs = 6_000L,
+                    sampleEndMs = 10_000L,
+                    centroid = floatArrayOf(1f, 0f, 0f, 0f),
+                ),
+            ),
+        )
+        val analyzer = ScriptedAnalyzer(
+            script = {
+                listOf(
+                    turn(0L, 4_000L, 1f, 0f, 0f, 0f),
+                    turn(6_000L, 10_000L, 1f, 0f, 0f, 0f),
+                )
+            },
+        )
+
+        assertTrue(runner(memories, speakers, analyzer, this).drain())
+
+        val rebuilt = memories.get(memory.id)
+        val occurrence = speakers.findOccurrences(memory.id).getOrNull()!!.single()
+        assertEquals(SPEAKER_ANALYSIS_VERSION, rebuilt.speakerAnalysisVersion)
+        assertEquals(alice.id, occurrence.speakerId)
+        assertEquals(SpeakerLink.MANUAL, occurrence.link)
+        assertEquals(8_000L, occurrence.totalSpeechMs)
+        assertEquals(
+            listOf(
+                org.deer.borrowai.data.domain.SpeakerSampleRange(0L, 4_000L),
+                org.deer.borrowai.data.domain.SpeakerSampleRange(6_000L, 10_000L),
+            ),
+            occurrence.sampleRanges,
+        )
+    }
+
+    @Test
     fun speakerLibraryChangesRelinkUnknownMemoriesWithoutReanalyzingAudio() = runTest {
         val memories = memories()
         memories.addAudioMemory("known")

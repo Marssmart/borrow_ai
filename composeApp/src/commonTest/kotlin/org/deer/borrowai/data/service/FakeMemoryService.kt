@@ -24,6 +24,7 @@ import org.deer.borrowai.data.domain.requeuedForTranscription
 import org.deer.borrowai.data.domain.SpeakerStatus
 import org.deer.borrowai.data.domain.claimedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysis
+import org.deer.borrowai.data.domain.requeuedForSpeakerAnalysisUpdate
 import org.deer.borrowai.data.domain.yieldedForSpeakerAnalysis
 import org.deer.borrowai.data.domain.requeuedAfterSpeakerSkip
 import org.deer.borrowai.data.domain.speakerStatusFor
@@ -298,6 +299,18 @@ class FakeMemoryService(
         publishMemories()
         requeued.right()
     }
+
+    override suspend fun requeueOutdatedSpeakerAnalyses(analysisVersion: Int): Either<MemoryError, Int> =
+        mutex.withLock {
+            var requeued = 0
+            records.replaceAll { _, memory ->
+                val updated = memory.requeuedForSpeakerAnalysisUpdate(analysisVersion)
+                if (updated != memory) requeued++
+                updated
+            }
+            publishMemories()
+            requeued.right()
+        }
 
     override suspend fun skipPendingSpeakerAnalyses(): Either<MemoryError, Int> = mutex.withLock {
         var skipped = 0
