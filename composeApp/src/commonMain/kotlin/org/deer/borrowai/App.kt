@@ -85,6 +85,10 @@ fun App(services: AppServices) {
         )
     }
     val speakerSettings by speakerSettingsHolder.uiState.collectAsState()
+    val speakerFeatureEnabled = speakerRecognitionSupported && speakerSettings.enabled
+    LaunchedEffect(speakerFeatureEnabled) {
+        if (!speakerFeatureEnabled) speakerManagementRequest = null
+    }
     val indicatorState = backgroundActivityIndicatorState(
         activities = backgroundActivities,
         showIndicator = appSettings.showBackgroundActivityIndicator,
@@ -159,8 +163,14 @@ fun App(services: AppServices) {
                             onGoToRecord = { appStateHolder.navigateToPage(AppShellStateHolder.CAPTURE_PAGE) },
                             onEditingChanged = appStateHolder::setMemoryEditing,
                             onOpenSettings = { appStateHolder.navigateToPage(AppShellStateHolder.SETTINGS_PAGE) },
+                            speakerFeatureEnabled = speakerFeatureEnabled,
                             speakerManagementRequest = speakerManagementRequest,
-                            onOpenSpeakerManagement = { speakerManagementRequest = it },
+                            onOpenSpeakerManagement = { request ->
+                                if (speakerFeatureEnabled) {
+                                    appStateHolder.navigateToPage(AppShellStateHolder.MEMORIES_PAGE)
+                                    speakerManagementRequest = request
+                                }
+                            },
                             onCloseSpeakerManagement = { speakerManagementRequest = null },
                         )
 
@@ -183,10 +193,6 @@ fun App(services: AppServices) {
                             onRequestSpeakerWithdrawal = speakerSettingsHolder::requestWithdrawal,
                             onConfirmSpeakerWithdrawal = speakerSettingsHolder::confirmWithdrawal,
                             onCancelSpeakerWithdrawal = speakerSettingsHolder::cancelWithdrawal,
-                            onManageSpeakers = {
-                                appStateHolder.navigateToPage(AppShellStateHolder.MEMORIES_PAGE)
-                                speakerManagementRequest = SpeakerManagementRequest()
-                            },
                         )
                     }
                 }
@@ -207,7 +213,17 @@ fun App(services: AppServices) {
                 } else {
                     BottomNavBar(
                         selectedPage = appStateHolder.mainPagerState.targetPage,
-                        onSelect = appStateHolder::navigateToPage,
+                        speakerFeatureEnabled = speakerFeatureEnabled,
+                        speakerManagementVisible = speakerManagementRequest != null,
+                        onSelect = { item ->
+                            if (item == BottomNavItem.SPEAKERS) {
+                                appStateHolder.navigateToPage(AppShellStateHolder.MEMORIES_PAGE)
+                                speakerManagementRequest = SpeakerManagementRequest()
+                            } else {
+                                speakerManagementRequest = null
+                                appStateHolder.navigateToPage(item.page)
+                            }
+                        },
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }

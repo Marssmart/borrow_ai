@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -42,6 +43,7 @@ import borrowai.composeapp.generated.resources.nav_back
 import borrowai.composeapp.generated.resources.nav_memories
 import borrowai.composeapp.generated.resources.nav_record
 import borrowai.composeapp.generated.resources.nav_settings
+import borrowai.composeapp.generated.resources.nav_speakers
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.PI
@@ -51,8 +53,12 @@ import kotlin.math.sin
 internal enum class BottomNavItem(val page: Int, val label: StringResource) {
     RECORD(AppShellStateHolder.CAPTURE_PAGE, Res.string.nav_record),
     MEMORIES(AppShellStateHolder.MEMORIES_PAGE, Res.string.nav_memories),
+    SPEAKERS(AppShellStateHolder.MEMORIES_PAGE, Res.string.nav_speakers),
     SETTINGS(AppShellStateHolder.SETTINGS_PAGE, Res.string.nav_settings),
 }
+
+internal fun visibleBottomNavItems(speakerFeatureEnabled: Boolean): List<BottomNavItem> =
+    BottomNavItem.entries.filter { speakerFeatureEnabled || it != BottomNavItem.SPEAKERS }
 
 internal val BottomNavDockReserve = 74.dp
 
@@ -61,16 +67,23 @@ private val DockSelectedBackground = Color(0xFFE4F2F3)
 @Composable
 internal fun BottomNavBar(
     selectedPage: Int,
-    onSelect: (Int) -> Unit,
+    speakerFeatureEnabled: Boolean,
+    speakerManagementVisible: Boolean,
+    onSelect: (BottomNavItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val visibleItems = visibleBottomNavItems(speakerFeatureEnabled)
     BottomNavDock(modifier = modifier) {
-        BottomNavItem.entries.forEach { item ->
-            val selected = item.page == selectedPage
+        visibleItems.forEach { item ->
+            val selected = if (item == BottomNavItem.SPEAKERS) {
+                speakerManagementVisible
+            } else {
+                !speakerManagementVisible && item.page == selectedPage
+            }
             BottomNavButton(
                 item = item,
                 selected = selected,
-                onClick = { onSelect(item.page) },
+                onClick = { onSelect(item) },
                 modifier = if (selected) Modifier.weight(1f) else Modifier.width(44.dp),
             )
         }
@@ -221,6 +234,39 @@ private fun DrawScope.drawNavIcon(item: BottomNavItem, color: Color) {
                     cap = StrokeCap.Round,
                 )
             }
+        }
+
+        BottomNavItem.SPEAKERS -> {
+            drawCircle(
+                color = color,
+                radius = w * 0.15f,
+                center = Offset(w * 0.38f, h * 0.34f),
+                style = stroke,
+            )
+            drawCircle(
+                color = color,
+                radius = w * 0.11f,
+                center = Offset(w * 0.7f, h * 0.4f),
+                style = stroke,
+            )
+            drawArc(
+                color = color,
+                startAngle = 180f,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(w * 0.1f, h * 0.43f),
+                size = Size(w * 0.58f, h * 0.43f),
+                style = stroke,
+            )
+            drawArc(
+                color = color,
+                startAngle = 180f,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(w * 0.48f, h * 0.52f),
+                size = Size(w * 0.4f, h * 0.33f),
+                style = stroke,
+            )
         }
 
         BottomNavItem.SETTINGS -> {

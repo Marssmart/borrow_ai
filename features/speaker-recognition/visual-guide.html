@@ -608,7 +608,7 @@
     <section class="section">
       <p class="eyebrow">Shipped · 9 · Speaker data layer</p>
       <h2>Speaker recognition foundations <span class="tag tag-live">Shipped</span> <span class="tag tag-mock">Library and assignment UI are mockups</span></h2>
-      <p class="section-note">The data layer provides a local speaker library, per-memory occurrences, embeddings, clustering, sample playback, and purge cleanup. This release adds the optional Android segmentation and embedding models, on-device analysis, consent, and withdrawal. Models are requested from Settings and are not part of normal setup. The switch is off until both verified models and explicit consent are available. iOS hides the feature. Detected unknown speakers can appear in chips and detail cards; library management and manual assignment remain mockups.</p>
+      <p class="section-note">The data layer provides a local speaker library, per-memory occurrences, embeddings, clustering, sample playback, and purge cleanup. Speaker recognition is optional and available on supported Android devices after model setup and explicit consent. While enabled, the Speakers destination appears in the bottom dock, and detected speakers appear in memory chips and detail cards. Turning recognition off hides the destination, chips, and detail section. iOS hides the feature.</p>
     </section>
 
     <section class="section">
@@ -817,9 +817,9 @@
     </section>
 
     <section class="section">
-      <p class="eyebrow">Mockup · 2 · Speaker library</p>
+      <p class="eyebrow">Shipped · 2 · Speaker library</p>
       <h2>Rename, merge, delete</h2>
-      <p class="section-note">Reached from “Speakers ›” in the memory list header (to confirm). Deleting a speaker never deletes memories. Their chips become “Speaker N” again. Merging combines voice samples, and memories keep their names.</p>
+      <p class="section-note">Reached from Speakers in the bottom dock while recognition is enabled. Deleting a speaker never deletes memories. Their chips become “Speaker N” again. Merging combines voice samples, and memories keep their names.</p>
       <div class="mock-grid">
         <figure class="screen-preview">
           <div class="device"><div class="screen">
