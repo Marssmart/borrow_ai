@@ -4,6 +4,11 @@ Notable changes to BorrowAI are recorded here. Releases follow Semantic Versioni
 
 ## [Unreleased]
 
+## [1.26.2]
+
+- Added a standalone visual proposal for a first-class Speakers destination in the bottom dock.
+- Updated Android and iOS versioning to 1.26.2 (build 93).
+
 ## [1.26.1]
 
 - Reanalyzed saved speaker results from older analysis versions in the background, consolidating legacy repeated speaker occurrences into multi-sample occurrences while preserving manual links.
